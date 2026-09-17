@@ -1,5 +1,5 @@
 (() => {
-  /** @type {{src:string,thumb?:string,medium?:string,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
+  /** @type {{src:string,thumb?:string,thumbSrcset?:string,medium?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -65,6 +65,18 @@
     renderHeroCarousel();
   }
 
+  function preloadImage(href) {
+    if (!href || document.head.querySelector(`link[rel="preload"][href="${href}"]`)) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = href;
+    link.setAttribute("fetchpriority", "high");
+    document.head.appendChild(link);
+  }
+
   function collectFilters(list) {
     const keys = [];
     list.forEach((p) => {
@@ -87,7 +99,45 @@
   let heroPos = 0;
   let heroTimer = 0;
   let heroSlides = [];
+  let heroList = [];
   let heroSwiped = false;
+
+  function heroSrc(photo) {
+    // 动图在轮播只用静态缩略图，避免首屏拉原文件
+    if (photo?.animated) return photo.thumb || photo.src || "";
+    return photo?.medium || photo?.thumb || photo?.src || "";
+  }
+
+  /** 只给当前/前后一张挂 src——绝对定位会让 loading=lazy 全部失效 */
+  function applyHeroSources() {
+    const n = heroSlides.length;
+    if (!n) return;
+    const near = new Set([
+      heroPos,
+      (heroPos + 1) % n,
+      (heroPos - 1 + n) % n,
+    ]);
+    heroSlides.forEach((slide, i) => {
+      const img = slide.querySelector("img");
+      const photo = heroList[i];
+      if (!img || !photo) return;
+      const src = heroSrc(photo);
+      if (near.has(i)) {
+        if (img.getAttribute("src") !== src) {
+          img.src = src;
+        }
+        if (i === heroPos) {
+          img.loading = "eager";
+          img.fetchPriority = "high";
+        } else {
+          img.loading = "lazy";
+          img.fetchPriority = "low";
+        }
+      } else if (img.getAttribute("src")) {
+        img.removeAttribute("src");
+      }
+    });
+  }
 
   function stopHeroAuto() {
     if (heroTimer) {
@@ -117,12 +167,14 @@
         dot.setAttribute("aria-selected", i === heroPos ? "true" : "false");
       });
     }
+    applyHeroSources();
   }
 
   function renderHeroCarousel() {
     if (!heroTrack || !heroCarousel) return;
     stopHeroAuto();
     heroSlides = [];
+    heroList = [];
     heroPos = 0;
     heroTrack.innerHTML = "";
     if (heroDots) heroDots.innerHTML = "";
@@ -133,6 +185,7 @@
       return;
     }
     heroCarousel.classList.remove("is-empty");
+    heroList = list;
 
     list.forEach((photo, i) => {
       const slide = document.createElement("div");
@@ -142,16 +195,10 @@
       slide.setAttribute("aria-label", `${i + 1} / ${list.length}`);
 
       const img = document.createElement("img");
-      img.src = photo.medium || photo.thumb || photo.src;
       img.alt = photo.title;
       img.decoding = "async";
-      if (i === 0) {
-        img.loading = "eager";
-        img.fetchPriority = "high";
-      } else {
-        img.loading = "lazy";
-        img.fetchPriority = "low";
-      }
+      img.loading = "lazy";
+      img.fetchPriority = "low";
       if (photo.width && photo.height) {
         img.width = photo.width;
         img.height = photo.height;
@@ -198,6 +245,7 @@
       }
     });
 
+    applyHeroSources();
     startHeroAuto();
   }
 
@@ -297,7 +345,9 @@
       folderPhotos = list.map((item, i) => ({
         src: item.src || item.file || `photos/${item}`,
         thumb: item.thumb || item.src || item.file || `photos/${item}`,
+        thumbSrcset: item.thumbSrcset || "",
         medium: item.medium || "",
+        animated: Boolean(item.animated),
         title: item.title || "未命名",
         caption: item.caption || "",
         date: item.date || "",
@@ -305,6 +355,9 @@
         width: Number(item.width) || 0,
         height: Number(item.height) || 0,
       }));
+      if (folderPhotos[0]) {
+        preloadImage(heroSrc(folderPhotos[0]));
+      }
     } catch {
       folderPhotos = [];
     }
@@ -429,6 +482,8 @@
   }
 
   function lightboxSrc(photo) {
+    // 动图灯箱用原文件，保证能播
+    if (photo?.animated) return photo.src || "";
     return photo?.medium || photo?.src || "";
   }
 
@@ -480,6 +535,11 @@
 
       const img = document.createElement("img");
       img.src = photo.thumb || photo.src;
+      if (photo.thumbSrcset) {
+        img.srcset = photo.thumbSrcset;
+        img.sizes =
+          "(max-width: 560px) 44vw, (max-width: 834px) 30vw, 220px";
+      }
       img.alt = photo.title;
       img.decoding = "async";
       if (i < 2) {
@@ -503,6 +563,13 @@
         );
       }
       media.appendChild(img);
+      if (photo.animated) {
+        const badge = document.createElement("span");
+        badge.className = "card-badge";
+        badge.textContent = "GIF";
+        badge.setAttribute("aria-hidden", "true");
+        media.appendChild(badge);
+      }
 
       const meta = document.createElement("div");
       meta.className = "card-meta";
@@ -539,9 +606,11 @@
     return `${stamp}-${base || "photo.jpg"}`;
   }
 
-  /** 上传前压缩：最长边 ≤2048px WebP，体积不降则退回原文件 */
+  /** 上传前压缩：最长边 ≤2048px WebP；GIF/动图跳过压缩以免丢帧 */
   async function compressImage(file, maxEdge = 2048, quality = 0.82) {
     if (!file.type.startsWith("image/")) return file;
+    // GIF 直接保留，灯箱可播放
+    if (file.type === "image/gif") return file;
     try {
       const bitmap = await createImageBitmap(file, {
         imageOrientation: "from-image",
@@ -789,6 +858,7 @@
           caption: "",
           date,
           custom: true,
+          animated: working.type === "image/gif" || file.type === "image/gif",
           width: dims.width,
           height: dims.height,
         });

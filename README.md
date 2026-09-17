@@ -68,10 +68,11 @@ tools/sync_photos.py    生成 manifest + 缩略图 + 中尺寸（Actions 使用
 ## 功能
 
 - 单行 sticky 顶栏
-- 全屏轮播（不拉伸，medium 图）+ 等高 justified 图库 + 沉浸灯箱
+- 全屏轮播（不拉伸，仅预载当前/前后张 medium）+ 等高 justified 图库 + 沉浸灯箱
 - 指针事件统一滑动（触控 / 鼠标拖拽）
-- WebP 缩略图 + 中尺寸灯箱图（~1600px，避免加载原图）+ 懒加载 + View Transitions
+- WebP 响应式缩略图（400/800/1200 srcset）+ 中尺寸灯箱图（~1600px）+ 懒加载 + View Transitions
 - Service Worker 离线缓存（媒体 LRU 上限）+ Priority Hints（fetchpriority）
 - `photos/` 自动上墙（本地 serve / GitHub Actions，日期优先取 EXIF）
-- 页面内本地上传（上传前客户端压缩为 ≤2048px WebP）
+- 支持 GIF / 动图：列表显示静帧 + 角标，灯箱播放原文件
+- 页面内本地上传（上传前客户端压缩为 ≤2048px WebP；GIF 保留原文件）
 - 支持 `prefers-reduced-motion`

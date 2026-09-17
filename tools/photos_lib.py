@@ -12,6 +12,8 @@ MEDIUM = PHOTOS / "medium"
 META = PHOTOS / "meta.json"
 MANIFEST = PHOTOS / "manifest.json"
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
+# 列表用多档缩略图：小屏 400、常规 800、回退 1200
+THUMB_STEPS = (400, 800, 1200)
 THUMB_MAX_EDGE = 1200
 THUMB_QUALITY = 82
 MEDIUM_MAX_EDGE = 1600
@@ -64,6 +66,20 @@ def image_size(path: Path) -> tuple[int, int] | None:
         return None
 
 
+def is_animated(path: Path) -> bool:
+    """GIF / 动图 WebP / APNG 等多帧图。"""
+    try:
+        from PIL import Image
+    except ImportError:
+        return path.suffix.lower() == ".gif"
+    try:
+        with Image.open(path) as im:
+            n = getattr(im, "n_frames", 1)
+            return int(n) > 1
+    except Exception:
+        return path.suffix.lower() == ".gif"
+
+
 def _write_webp_variant(src: Path, out_dir: Path, max_edge: int, quality: int) -> str | None:
     """Generate out_dir/<stem>.webp capped at max_edge; return web path or None."""
     try:
@@ -92,6 +108,36 @@ def _write_webp_variant(src: Path, out_dir: Path, max_edge: int, quality: int) -
 def ensure_thumb(src: Path) -> str | None:
     """Generate photos/thumbs/<stem>.webp if missing; return web path or None."""
     return _write_webp_variant(src, THUMBS, THUMB_MAX_EDGE, THUMB_QUALITY)
+
+
+def ensure_thumb_set(src: Path) -> dict[str, str]:
+    """生成 400/800/1200 档缩略图；小档文件名 <stem>-<edge>.webp。"""
+    out: dict[str, str] = {}
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        path = ensure_thumb(src)
+        if path:
+            out["1200"] = path
+        return out
+
+    THUMBS.mkdir(parents=True, exist_ok=True)
+    for edge in THUMB_STEPS:
+        name = f"{src.stem}.webp" if edge == THUMB_MAX_EDGE else f"{src.stem}-{edge}.webp"
+        out_path = THUMBS / name
+        try:
+            if not (out_path.exists() and out_path.stat().st_mtime >= src.stat().st_mtime):
+                with Image.open(src) as im:
+                    im = ImageOps.exif_transpose(im)
+                    if max(im.size) > edge:
+                        im.thumbnail((edge, edge), Image.Resampling.LANCZOS)
+                    if im.mode not in ("RGB", "RGBA"):
+                        im = im.convert("RGB")
+                    im.save(out_path, "WEBP", quality=THUMB_QUALITY, method=6)
+            out[str(edge)] = out_path.relative_to(ROOT).as_posix()
+        except Exception:
+            continue
+    return out
 
 
 def ensure_medium(src: Path) -> str | None:
@@ -135,8 +181,10 @@ def photo_item(path: Path, meta: dict) -> dict:
     name = path.name
     info = meta.get(name) or {}
     size = image_size(path)
-    thumb = ensure_thumb(path)
-    medium = ensure_medium(path)
+    animated = is_animated(path)
+    thumbs = ensure_thumb_set(path)
+    # 动图不生成 medium：灯箱直接用原文件，避免冻成静帧
+    medium = None if animated else ensure_medium(path)
     item = {
         "src": f"photos/{name}",
         "file": name,
@@ -144,8 +192,14 @@ def photo_item(path: Path, meta: dict) -> dict:
         "caption": info.get("caption") or "",
         "date": info.get("date") or photo_date(path),
     }
-    if thumb:
-        item["thumb"] = thumb
+    if animated:
+        item["animated"] = True
+    if thumbs.get("1200"):
+        item["thumb"] = thumbs["1200"]
+    if thumbs.get("400") and thumbs.get("800") and thumbs.get("1200"):
+        item["thumbSrcset"] = ", ".join(
+            f"{thumbs[edge]} {edge}w" for edge in ("400", "800", "1200")
+        )
     if medium:
         item["medium"] = medium
     if size:

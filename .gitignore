@@ -1,0 +1,17 @@
+# Godot
+.godot/
+*.translation
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Local
+*.local
+.playwright-cli/
+output/
+.DS_Store

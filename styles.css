@@ -758,26 +758,29 @@ strong {
   flex-shrink: 0;
 }
 
-.lb-text-btn {
+.lb-close {
   appearance: none;
   border: 0;
-  background: transparent;
-  color: var(--blue-bright);
-  font-family: var(--font);
-  font-size: 17px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.14);
+  color: #f5f5f7;
   cursor: pointer;
-  padding: 8px 10px;
-  min-height: 44px;
+  touch-action: manipulation;
+  padding: 0;
 }
 
-.lb-text-btn:hover {
-  text-decoration: underline;
+.lb-close:hover {
+  background: rgba(255, 255, 255, 0.24);
 }
 
-.lb-text-btn:focus-visible {
+.lb-close:focus-visible {
   outline: 2px solid var(--blue-bright);
   outline-offset: 2px;
-  border-radius: 6px;
 }
 
 .lightbox-stage {
@@ -1007,11 +1010,6 @@ body.lb-open {
 
   .lb-caption {
     font-size: 13px;
-  }
-
-  .lb-text-btn {
-    font-size: 16px;
-    min-height: 44px;
   }
 
   .btn {

@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="description" content="米兰 · 照片墙" />
   <title>米兰</title>
   <link rel="stylesheet" href="styles.css" />
@@ -13,6 +13,13 @@
       <a class="site-nav-logo" href="#">米兰</a>
     </div>
   </header>
+
+  <section class="hero-carousel" id="heroCarousel" aria-label="精选轮播" aria-roledescription="carousel">
+    <div class="hero-carousel-track" id="heroCarouselTrack"></div>
+    <button class="hero-carousel-arrow hero-carousel-prev" id="heroPrev" type="button" aria-label="上一张">‹</button>
+    <button class="hero-carousel-arrow hero-carousel-next" id="heroNext" type="button" aria-label="下一张">›</button>
+    <div class="hero-carousel-dots" id="heroCarouselDots" role="tablist" aria-label="轮播页码"></div>
+  </section>
 
   <main>
     <section class="gallery-section chapter-light" id="gallery">

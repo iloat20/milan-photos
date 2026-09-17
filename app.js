@@ -1,5 +1,5 @@
 (() => {
-  /** @type {{src:string,thumb?:string,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
+  /** @type {{src:string,thumb?:string,medium?:string,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -87,6 +87,7 @@
   let heroPos = 0;
   let heroTimer = 0;
   let heroSlides = [];
+  let heroSwiped = false;
 
   function stopHeroAuto() {
     if (heroTimer) {
@@ -141,7 +142,7 @@
       slide.setAttribute("aria-label", `${i + 1} / ${list.length}`);
 
       const img = document.createElement("img");
-      img.src = photo.thumb || photo.src;
+      img.src = photo.medium || photo.thumb || photo.src;
       img.alt = photo.title;
       img.decoding = "async";
       if (i === 0) {
@@ -170,6 +171,10 @@
       slide.appendChild(caption);
 
       slide.addEventListener("click", () => {
+        if (heroSwiped) {
+          heroSwiped = false;
+          return;
+        }
         const idx = visible.findIndex((p) => p.id === photo.id);
         if (idx >= 0) openLightbox(idx);
       });
@@ -214,29 +219,31 @@
   if (heroCarousel) {
     let hx = 0;
     let hy = 0;
-    heroCarousel.addEventListener(
-      "touchstart",
-      (e) => {
-        if (e.touches.length !== 1) return;
-        hx = e.touches[0].clientX;
-        hy = e.touches[0].clientY;
-        stopHeroAuto();
-      },
-      { passive: true }
-    );
-    heroCarousel.addEventListener(
-      "touchend",
-      (e) => {
-        if (e.changedTouches.length !== 1) return;
-        const dx = e.changedTouches[0].clientX - hx;
-        const dy = e.changedTouches[0].clientY - hy;
-        if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
-          setHeroIndex(heroPos + (dx < 0 ? 1 : -1));
-        }
-        startHeroAuto();
-      },
-      { passive: true }
-    );
+    let heroPointer = null;
+    heroCarousel.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (e.isPrimary === false) return;
+      heroPointer = e.pointerId;
+      hx = e.clientX;
+      hy = e.clientY;
+      heroSwiped = false;
+      stopHeroAuto();
+    });
+    heroCarousel.addEventListener("pointerup", (e) => {
+      if (heroPointer !== e.pointerId) return;
+      heroPointer = null;
+      const dx = e.clientX - hx;
+      const dy = e.clientY - hy;
+      if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
+        heroSwiped = true;
+        setHeroIndex(heroPos + (dx < 0 ? 1 : -1));
+      }
+      startHeroAuto();
+    });
+    heroCarousel.addEventListener("pointercancel", () => {
+      heroPointer = null;
+      startHeroAuto();
+    });
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -290,6 +297,7 @@
       folderPhotos = list.map((item, i) => ({
         src: item.src || item.file || `photos/${item}`,
         thumb: item.thumb || item.src || item.file || `photos/${item}`,
+        medium: item.medium || "",
         title: item.title || "未命名",
         caption: item.caption || "",
         date: item.date || "",
@@ -397,6 +405,9 @@
 
   function closeLightbox() {
     const sourceImg = cardImageAt(lbPos);
+    const restoreFocus = () => {
+      sourceImg?.closest(".card")?.focus({ preventScroll: true });
+    };
     const closeUpdate = () => {
       lbImg.style.viewTransitionName = "";
       lightbox.hidden = true;
@@ -408,27 +419,34 @@
       const t = document.startViewTransition(closeUpdate);
       t.finished.finally(() => {
         if (sourceImg) sourceImg.style.viewTransitionName = "";
+        restoreFocus();
       });
     } else {
       closeUpdate();
       if (sourceImg) sourceImg.style.viewTransitionName = "";
+      restoreFocus();
     }
+  }
+
+  function lightboxSrc(photo) {
+    return photo?.medium || photo?.src || "";
   }
 
   function preloadLightboxNeighbor(delta) {
     if (!visible.length) return;
     const next = visible[(lbPos + delta + visible.length) % visible.length];
-    if (!next?.src) return;
+    const src = lightboxSrc(next);
+    if (!src) return;
     const img = new Image();
     img.decoding = "async";
     if ("fetchPriority" in img) img.fetchPriority = "low";
-    img.src = next.src;
+    img.src = src;
   }
 
   function syncLightbox() {
     const photo = visible[lbPos];
     if (!photo) return;
-    lbImg.src = photo.src;
+    lbImg.src = lightboxSrc(photo);
     lbImg.alt = photo.title;
     lbTitle.textContent = photo.title;
     lbCaption.textContent = photo.caption || photo.date || "";
@@ -519,6 +537,41 @@
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
     return `${stamp}-${base || "photo.jpg"}`;
+  }
+
+  /** 上传前压缩：最长边 ≤2048px WebP，体积不降则退回原文件 */
+  async function compressImage(file, maxEdge = 2048, quality = 0.82) {
+    if (!file.type.startsWith("image/")) return file;
+    try {
+      const bitmap = await createImageBitmap(file, {
+        imageOrientation: "from-image",
+      });
+      const { width, height } = bitmap;
+      const scale = Math.min(1, maxEdge / Math.max(width, height));
+      if (scale >= 1 && file.size < 600 * 1024) {
+        bitmap.close();
+        return file;
+      }
+      const w = Math.max(1, Math.round(width * scale));
+      const h = Math.max(1, Math.round(height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      bitmap.close();
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, "image/webp", quality)
+      );
+      if (!blob || blob.size >= file.size) return file;
+      const name = `${stripExt(file.name || "photo")}.webp`;
+      return new File([blob], name, {
+        type: "image/webp",
+        lastModified: file.lastModified || Date.now(),
+      });
+    } catch {
+      return file;
+    }
   }
 
   /* —— GitHub Contents API —— */
@@ -695,15 +748,21 @@
 
     for (const file of files) {
       try {
-        if (file.size > 8 * 1024 * 1024) {
+        if (file.size > 25 * 1024 * 1024) {
+          fail += 1;
+          continue;
+        }
+        setStatus(`正在压缩：${file.name}…`);
+        const working = await compressImage(file);
+        if (working.size > 8 * 1024 * 1024) {
           fail += 1;
           continue;
         }
         const id = uid();
-        const date = toLocalDate(file.lastModified || Date.now());
+        const date = toLocalDate(working.lastModified || file.lastModified || Date.now());
         const title = stripExt(file.name) || "新照片";
-        const fileName = safeFileName(file);
-        const objectUrl = URL.createObjectURL(file);
+        const fileName = safeFileName(working);
+        const objectUrl = URL.createObjectURL(working);
         const dims = await new Promise((resolve) => {
           const probe = new Image();
           probe.onload = () =>
@@ -713,11 +772,11 @@
         });
         const record = {
           id,
-          blob: file,
+          blob: working,
           title,
           caption: "",
           date,
-          createdAt: file.lastModified || Date.now(),
+          createdAt: working.lastModified || file.lastModified || Date.now(),
           width: dims.width,
           height: dims.height,
         };
@@ -737,7 +796,7 @@
 
         if (ghReady) {
           setStatus(`正在同步到 GitHub：${file.name}…`);
-          await uploadToGitHub(file, {
+          await uploadToGitHub(working, {
             fileName,
             title,
             caption: "",
@@ -814,6 +873,7 @@
   let swipeX = 0;
   let swipeY = 0;
   let swiping = false;
+  let lbPointer = null;
 
   lbImg.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -826,29 +886,29 @@
 
   const stage = lightbox.querySelector(".lightbox-stage");
 
-  stage.addEventListener(
-    "touchstart",
-    (e) => {
-      if (e.touches.length !== 1) return;
-      swipeX = e.touches[0].clientX;
-      swipeY = e.touches[0].clientY;
-      swiping = false;
-    },
-    { passive: true }
-  );
+  stage.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (e.isPrimary === false) return;
+    lbPointer = e.pointerId;
+    swipeX = e.clientX;
+    swipeY = e.clientY;
+    swiping = false;
+  });
 
-  stage.addEventListener(
-    "touchend",
-    (e) => {
-      if (e.changedTouches.length !== 1) return;
-      const dx = e.changedTouches[0].clientX - swipeX;
-      const dy = e.changedTouches[0].clientY - swipeY;
-      if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-      swiping = true;
-      step(dx < 0 ? 1 : -1);
-    },
-    { passive: true }
-  );
+  stage.addEventListener("pointerup", (e) => {
+    if (lbPointer !== e.pointerId) return;
+    lbPointer = null;
+    const dx = e.clientX - swipeX;
+    const dy = e.clientY - swipeY;
+    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    swiping = true;
+    step(dx < 0 ? 1 : -1);
+  });
+
+  stage.addEventListener("pointercancel", () => {
+    lbPointer = null;
+    swiping = false;
+  });
 
   document.addEventListener("keydown", (e) => {
     if (lightbox.hidden) return;

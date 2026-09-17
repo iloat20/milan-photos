@@ -335,17 +335,26 @@ strong {
   background: #0077ed;
 }
 
-.btn-ghost {
-  color: var(--blue-bright);
-  border: 1px solid transparent;
+.btn-ghost-dark {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  border-radius: 980px;
+  padding: 10px 18px;
+  min-height: 40px;
+  cursor: pointer;
 }
 
-.btn-ghost:hover {
-  text-decoration: underline;
+.btn-ghost-dark:hover {
+  border-color: rgba(0, 0, 0, 0.24);
 }
 
-.chapter-dark .btn-ghost {
-  color: var(--blue-bright);
+.btn-ghost-dark:focus-visible {
+  outline: 3px solid rgba(0, 113, 227, 0.45);
+  outline-offset: 2px;
 }
 
 .btn:focus-visible {
@@ -395,253 +404,6 @@ strong {
   margin: 14px 0 0;
   font-size: 19px;
   color: var(--ink-secondary);
-}
-
-/* —— Hero —— */
-.hero {
-  padding: 72px 22px 0;
-  text-align: center;
-  overflow: hidden;
-}
-
-.hero-copy {
-  max-width: var(--max);
-  margin: 0 auto 48px;
-}
-
-.hero-eyebrow {
-  margin: 0 0 10px;
-  font-size: 21px;
-  font-weight: 600;
-  color: var(--ink-on-dark-secondary);
-}
-
-.hero-title {
-  margin: 0;
-  font-size: clamp(64px, 12vw, 96px);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
-}
-
-.hero-tagline {
-  margin: 16px 0 0;
-  font-size: clamp(28px, 5vw, 48px);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  color: var(--ink-on-dark);
-}
-
-.hero-media {
-  max-width: var(--max-wide);
-  margin: 0 auto;
-  border-radius: var(--radius) var(--radius) 0 0;
-  overflow: hidden;
-  aspect-ratio: 16 / 10;
-  background: #111;
-}
-
-.hero-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* —— Highlights horizontal track —— */
-.highlights {
-  padding: 96px 0 80px;
-  background: var(--bg-elevated);
-}
-
-.highlights .chapter-head {
-  margin-bottom: 36px;
-}
-
-.hl-track {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding: 4px 22px 16px;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-}
-
-.hl-track:focus-visible {
-  outline: 3px solid rgba(0, 113, 227, 0.45);
-  outline-offset: -3px;
-}
-
-.hl-card {
-  flex: 0 0 min(78vw, 340px);
-  scroll-snap-align: start;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  border-radius: var(--radius);
-}
-
-.hl-card:focus-visible {
-  outline: 3px solid rgba(0, 113, 227, 0.55);
-  outline-offset: 3px;
-}
-
-.hl-media {
-  border-radius: var(--radius);
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-  background: #e8e8ed;
-}
-
-.hl-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.hl-body {
-  padding: 16px 4px 0;
-}
-
-.hl-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-
-.hl-desc {
-  margin: 6px 0 0;
-  font-size: 14px;
-  color: var(--ink-secondary);
-  line-height: 1.4;
-}
-
-/* —— Story intro —— */
-.story {
-  padding: 120px 22px 80px;
-  text-align: center;
-}
-
-.story-intro {
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.story-title {
-  margin: 0;
-  font-size: clamp(40px, 8vw, 80px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-}
-
-.story-lead {
-  margin: 24px auto 0;
-  max-width: 34em;
-  font-size: 21px;
-  line-height: 1.4;
-  color: var(--ink-on-dark-secondary);
-}
-
-.story-lead strong {
-  color: var(--ink-on-dark);
-}
-
-/* —— Full-bleed chapters —— */
-.bleed {
-  position: relative;
-  min-height: 85vh;
-  display: grid;
-  place-items: end stretch;
-  background: var(--black);
-  color: var(--ink-on-dark);
-  overflow: hidden;
-}
-
-.bleed-frame {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-}
-
-.bleed-frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.bleed-a .bleed-frame::after,
-.bleed-b .bleed-frame::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0.15) 0%,
-    rgba(0, 0, 0, 0.55) 100%
-  );
-}
-
-.bleed-caption {
-  position: relative;
-  z-index: 1;
-  max-width: var(--max);
-  width: 100%;
-  margin: 0 auto;
-  padding: 48px 22px 56px;
-}
-
-.bleed-caption h3 {
-  margin: 0;
-  font-size: clamp(32px, 5vw, 56px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.08;
-}
-
-.bleed-caption p {
-  margin: 10px 0 0;
-  font-size: 17px;
-  color: rgba(245, 245, 247, 0.78);
-  max-width: 28em;
-}
-
-/* —— Stats —— */
-.stats {
-  padding: 88px 22px;
-  border-bottom: 1px solid var(--line);
-}
-
-.stats-inner {
-  max-width: var(--max);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  text-align: center;
-}
-
-.stat-num {
-  margin: 0;
-  font-size: clamp(48px, 8vw, 72px);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 1;
-}
-
-.stat-label {
-  margin: 8px 0 0;
-  font-size: 14px;
-  color: var(--ink-secondary);
-  font-weight: 500;
 }
 
 /* —— Gallery：等高 justified，行内整齐 —— */
@@ -1126,37 +888,8 @@ body.lb-open {
   touch-action: none;
 }
 
-/* —— Reveal —— */
-.reveal {
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.65s var(--ease), transform 0.65s var(--ease);
-}
-
-.reveal.is-in {
-  opacity: 1;
-  transform: none;
-}
-
 /* —— Responsive —— */
 @media (max-width: 834px) {
-  .stats-inner {
-    grid-template-columns: 1fr;
-    gap: 36px;
-  }
-
-  .story {
-    padding: 88px 22px 56px;
-  }
-
-  .bleed {
-    min-height: 70vh;
-  }
-
-  .highlights {
-    padding: 72px 0 56px;
-  }
-
   .gallery-section {
     padding: 72px 0 56px;
   }
@@ -1240,14 +973,6 @@ body.lb-open {
     min-height: 40px;
   }
 
-  .hero {
-    padding-top: 48px;
-  }
-
-  .hero-media {
-    aspect-ratio: 4 / 3;
-  }
-
   .about-title,
   .upload-title {
     font-size: clamp(28px, 8vw, 36px);
@@ -1310,14 +1035,7 @@ body.lb-open {
     scroll-behavior: auto;
   }
 
-  .reveal {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-
   .card-media img,
-  .hl-media img,
   .lightbox-img {
     animation: none !important;
     transition: none !important;

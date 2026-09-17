@@ -68,14 +68,13 @@ strong {
   color: inherit;
 }
 
-/* —— 顶栏下方全宽半屏轮播 —— */
+/* —— 顶栏下方全宽全屏轮播 —— */
 .hero-carousel {
   position: relative;
   width: 100%;
-  height: 50vh;
-  height: 50dvh;
-  min-height: 280px;
-  max-height: 720px;
+  height: calc(100vh - var(--nav-h));
+  height: calc(100dvh - var(--nav-h));
+  min-height: 320px;
   overflow: hidden;
   background: #0a0a0a;
   touch-action: pan-y;
@@ -106,7 +105,9 @@ strong {
 .hero-carousel-slide img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  background: #0a0a0a;
 }
 
 .hero-carousel-caption {
@@ -214,8 +215,8 @@ strong {
 
 @media (max-width: 560px) {
   .hero-carousel {
-    height: 50vh;
-    height: 50dvh;
+    height: calc(100vh - var(--nav-h));
+    height: calc(100dvh - var(--nav-h));
     min-height: 240px;
   }
 
@@ -227,6 +228,26 @@ strong {
     width: 38px;
     height: 38px;
     font-size: 24px;
+  }
+}
+
+/* —— View Transitions —— */
+::view-transition-old(milan-lightbox-img),
+::view-transition-new(milan-lightbox-img) {
+  animation-duration: 0.28s;
+  animation-timing-function: var(--ease);
+  mix-blend-mode: normal;
+}
+
+::view-transition-group(milan-lightbox-img) {
+  z-index: 1001;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 
@@ -636,6 +657,8 @@ strong {
   color: inherit;
   width: 100%;
   touch-action: manipulation;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
 }
 
 .card:focus-visible {
@@ -650,6 +673,7 @@ strong {
   overflow: hidden;
   background: #e8e8ed;
   aspect-ratio: 4 / 3;
+  contain: layout paint;
 }
 
 .card-media img {

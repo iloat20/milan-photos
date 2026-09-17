@@ -67,6 +67,7 @@ tools/sync_photos.py    生成 manifest（Actions 使用）
 
 - 单行 sticky 顶栏
 - 双列图库 + 悬停轻放大 + 沉浸灯箱
+- 像素尺寸较大的照片自动占满整行
 - `photos/` 自动上墙（本地 serve / GitHub Actions）
 - 页面内本地上传
 - 支持 `prefers-reduced-motion`

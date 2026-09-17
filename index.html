@@ -39,10 +39,37 @@
       <div class="upload-inner">
         <p class="chapter-kicker">Upload</p>
         <h2 class="upload-title">添加你的照片</h2>
-        <p class="upload-sub">选择本地图片，立即展示在页面上。照片保存在本机浏览器，不会上传到服务器。</p>
+        <p class="upload-sub">先在本机预览；配置 GitHub 后会一并写入仓库，Pages 站点同步更新。</p>
         <button class="btn btn-primary" type="button" id="addPhotoBtn">选择图片</button>
         <input type="file" id="photoInput" accept="image/*" multiple hidden />
         <p class="upload-status" id="uploadStatus" role="status" aria-live="polite"></p>
+
+        <details class="gh-panel" id="ghPanel">
+          <summary>同步到 GitHub</summary>
+          <div class="gh-fields">
+            <label class="gh-field">
+              <span>仓库</span>
+              <input type="text" id="ghRepo" value="iloat20/milan-photos" spellcheck="false" autocomplete="off" />
+            </label>
+            <label class="gh-field">
+              <span>分支</span>
+              <input type="text" id="ghBranch" value="main" spellcheck="false" autocomplete="off" />
+            </label>
+            <label class="gh-field">
+              <span>Token（contents 写权限）</span>
+              <input type="password" id="ghToken" placeholder="ghp_… 或 fine-grained PAT" autocomplete="off" spellcheck="false" />
+            </label>
+            <div class="gh-actions">
+              <button class="btn btn-ghost-dark" type="button" id="ghSaveBtn">保存设置</button>
+              <button class="btn btn-ghost-dark" type="button" id="ghClearBtn">清除</button>
+            </div>
+            <p class="gh-hint">
+              在 GitHub → Settings → Developer settings → Personal access tokens 创建，
+              勾选 <code>repo</code>（classic）或本仓库 <code>Contents: Read and write</code>（fine-grained）。
+              Token 只存在这台设备的浏览器里。
+            </p>
+          </div>
+        </details>
       </div>
     </section>
   </main>

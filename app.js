@@ -249,6 +249,171 @@
     return name.replace(/\.[^.]+$/, "");
   }
 
+  function safeFileName(file) {
+    const stamp = Date.now().toString(36);
+    const base = (file.name || "photo")
+      .replace(/[^\w.\-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    return `${stamp}-${base || "photo.jpg"}`;
+  }
+
+  /* —— GitHub Contents API —— */
+  const GH_KEY = "milan-gh-sync";
+
+  function loadGhConfig() {
+    try {
+      return JSON.parse(localStorage.getItem(GH_KEY) || "null") || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveGhConfig(cfg) {
+    localStorage.setItem(GH_KEY, JSON.stringify(cfg));
+  }
+
+  function clearGhConfig() {
+    localStorage.removeItem(GH_KEY);
+  }
+
+  function fillGhForm() {
+    const cfg = loadGhConfig() || {
+      repo: "iloat20/milan-photos",
+      branch: "main",
+      token: "",
+    };
+    const repoEl = document.getElementById("ghRepo");
+    const branchEl = document.getElementById("ghBranch");
+    const tokenEl = document.getElementById("ghToken");
+    if (repoEl) repoEl.value = cfg.repo || "iloat20/milan-photos";
+    if (branchEl) branchEl.value = cfg.branch || "main";
+    if (tokenEl) tokenEl.value = cfg.token || "";
+  }
+
+  function readGhForm() {
+    const repo = (document.getElementById("ghRepo")?.value || "").trim();
+    const branch = (document.getElementById("ghBranch")?.value || "main").trim() || "main";
+    const token = (document.getElementById("ghToken")?.value || "").trim();
+    if (!repo.includes("/")) throw new Error("仓库格式应为 owner/repo");
+    if (!token) throw new Error("请先填写 GitHub Token");
+    return { repo, branch, token };
+  }
+
+  function b64FromBuffer(buf) {
+    const bytes = new Uint8Array(buf);
+    let bin = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+
+  async function ghGetFileSha(cfg, path) {
+    const url = `https://api.github.com/repos/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`读取远端文件失败 (${res.status})`);
+    const data = await res.json();
+    return data.sha || null;
+  }
+
+  async function ghPutFile(cfg, path, contentB64, message) {
+    const sha = await ghGetFileSha(cfg, path);
+    const res = await fetch(`https://api.github.com/repos/${cfg.repo}/contents/${path}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+        content: contentB64,
+        branch: cfg.branch,
+        ...(sha ? { sha } : {}),
+      }),
+    });
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const err = await res.json();
+        detail = err.message || "";
+      } catch {
+        /* ignore */
+      }
+      throw new Error(detail || `写入 GitHub 失败 (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async function ghUpdateManifest(cfg, newItems) {
+    const path = "photos/manifest.json";
+    let photosList = [];
+    try {
+      const sha = await ghGetFileSha(cfg, path);
+      if (sha) {
+        const res = await fetch(
+          `https://api.github.com/repos/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${cfg.token}`,
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+            },
+          }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const text = atob(String(data.content || "").replace(/\n/g, ""));
+          const parsed = JSON.parse(text);
+          photosList = Array.isArray(parsed) ? parsed : parsed.photos || [];
+        }
+      }
+    } catch {
+      photosList = [];
+    }
+
+    const existing = new Set(photosList.map((p) => p.src || p.file));
+    const merged = newItems
+      .filter((item) => !existing.has(item.src))
+      .concat(photosList);
+
+    const payload = JSON.stringify({ photos: merged }, null, 2);
+    const b64 = btoa(unescape(encodeURIComponent(payload)));
+    await ghPutFile(cfg, path, b64, "chore: update photos manifest");
+  }
+
+  async function uploadToGitHub(file, meta) {
+    const cfg = loadGhConfig();
+    if (!cfg?.token) return { skipped: true };
+
+    const path = `photos/${meta.fileName}`;
+    const buf = await file.arrayBuffer();
+    const contentB64 = b64FromBuffer(buf);
+    await ghPutFile(cfg, path, contentB64, `add photo: ${meta.fileName}`);
+
+    await ghUpdateManifest(cfg, [
+      {
+        src: `photos/${meta.fileName}`,
+        file: meta.fileName,
+        title: meta.title,
+        caption: meta.caption,
+        date: meta.date,
+      },
+    ]);
+
+    return { skipped: false };
+  }
+
   async function handleFiles(fileList) {
     const files = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
     if (!files.length) {
@@ -256,7 +421,9 @@
       return;
     }
 
-    let ok = 0;
+    const ghReady = Boolean(loadGhConfig()?.token);
+    let okLocal = 0;
+    let okGh = 0;
     let fail = 0;
 
     for (const file of files) {
@@ -267,10 +434,12 @@
         }
         const id = uid();
         const date = toLocalDate(file.lastModified || Date.now());
+        const title = stripExt(file.name) || "新照片";
+        const fileName = safeFileName(file);
         const record = {
           id,
           blob: file,
-          title: stripExt(file.name) || "新照片",
+          title,
           caption: "",
           date,
           createdAt: file.lastModified || Date.now(),
@@ -279,24 +448,45 @@
         customPhotos.push({
           id,
           src: URL.createObjectURL(file),
-          title: record.title,
+          title,
           caption: "",
           date,
           custom: true,
         });
-        ok += 1;
-      } catch {
+        okLocal += 1;
+
+        if (ghReady) {
+          setStatus(`正在同步到 GitHub：${file.name}…`);
+          await uploadToGitHub(file, {
+            fileName,
+            title,
+            caption: "",
+            date,
+          });
+          okGh += 1;
+        }
+      } catch (err) {
         fail += 1;
+        if (err && err.message) setStatus(err.message, true);
       }
     }
 
     rebuildPhotos();
-    if (ok && !fail) setStatus(`已添加 ${ok} 张。`);
-    else if (ok && fail) setStatus(`已添加 ${ok} 张，${fail} 张失败（过大或写入失败）。`, true);
-    else setStatus("添加失败，请重试或换较小的图片。", true);
+
+    if (ghReady && okGh) {
+      setStatus(
+        `本机 +${okLocal} 张，GitHub +${okGh} 张。Pages 会在 Actions 构建后更新（约 1 分钟）。`
+      );
+    } else if (okLocal && !fail) {
+      setStatus(`已在本机添加 ${okLocal} 张（未配置 GitHub Token，仅本机可见）。`);
+    } else if (okLocal && fail) {
+      setStatus(`本机 +${okLocal}，失败 ${fail} 张。`, true);
+    } else {
+      setStatus("添加失败，请重试或换较小的图片。", true);
+    }
 
     const target = document.getElementById("gallery");
-    if (target && ok) target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+    if (target && okLocal) target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   }
 
   if (addPhotoBtn && photoInput) {
@@ -306,6 +496,28 @@
       photoInput.value = "";
     });
   }
+
+  const ghSaveBtn = document.getElementById("ghSaveBtn");
+  const ghClearBtn = document.getElementById("ghClearBtn");
+  if (ghSaveBtn) {
+    ghSaveBtn.addEventListener("click", () => {
+      try {
+        const cfg = readGhForm();
+        saveGhConfig(cfg);
+        setStatus("GitHub 同步设置已保存。之后上传会写入仓库。");
+      } catch (err) {
+        setStatus(err.message || "保存失败", true);
+      }
+    });
+  }
+  if (ghClearBtn) {
+    ghClearBtn.addEventListener("click", () => {
+      clearGhConfig();
+      fillGhForm();
+      setStatus("已清除 GitHub 设置。");
+    });
+  }
+  fillGhForm();
 
   prevBtn.addEventListener("click", () => step(-1));
   nextBtn.addEventListener("click", () => step(1));

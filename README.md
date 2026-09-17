@@ -30,7 +30,11 @@ python tools/serve.py
 
 ### 页面底部「选择图片」
 
-即时上传，仅存在本机浏览器（IndexedDB）。
+1. 本机 IndexedDB 即时预览（默认）
+2. 展开「同步到 GitHub」：填写仓库、分支和有 `Contents: Read and write` 权限的 Token 并保存
+3. 之后上传会同时写入仓库的 `photos/` 并更新 `manifest.json`，Pages 构建后线上可见
+
+Token 只保存在当前浏览器的 localStorage，不会提交到仓库。
 
 ## 发布到 GitHub Pages
 

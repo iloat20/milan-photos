@@ -1,5 +1,5 @@
 (() => {
-  /** @type {{src:string,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
+  /** @type {{src:string,thumb?:string,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -153,10 +153,16 @@
       slide.setAttribute("aria-label", `${i + 1} / ${list.length}`);
 
       const img = document.createElement("img");
-      img.src = photo.src;
+      img.src = photo.thumb || photo.src;
       img.alt = photo.title;
-      img.loading = i === 0 ? "eager" : "lazy";
       img.decoding = "async";
+      if (i === 0) {
+        img.loading = "eager";
+        img.fetchPriority = "high";
+      } else {
+        img.loading = "lazy";
+        img.fetchPriority = "low";
+      }
       slide.appendChild(img);
 
       const caption = document.createElement("div");
@@ -291,6 +297,7 @@
       const list = Array.isArray(data) ? data : data.photos || [];
       folderPhotos = list.map((item, i) => ({
         src: item.src || item.file || `photos/${item}`,
+        thumb: item.thumb || item.src || item.file || `photos/${item}`,
         title: item.title || "未命名",
         caption: item.caption || "",
         date: item.date || "",
@@ -348,6 +355,7 @@
       customPhotos = rows.map((r) => ({
         id: r.id,
         src: URL.createObjectURL(r.blob),
+        thumb: URL.createObjectURL(r.blob),
         title: r.title || "未命名",
         caption: r.caption || "",
         date: r.date || toLocalDate(r.createdAt || Date.now()),
@@ -361,17 +369,68 @@
     rebuildPhotos();
   }
 
+  function prefersViewTransitions() {
+    return typeof document.startViewTransition === "function" && !reduceMotion;
+  }
+
+  function cardImageAt(index) {
+    return gallery?.querySelectorAll(".card")[index]?.querySelector("img") || null;
+  }
+
   function openLightbox(index) {
+    const sourceImg = cardImageAt(index);
+    if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
     lbPos = index;
-    syncLightbox();
-    lightbox.hidden = false;
-    document.body.classList.add("lb-open");
+
+    const finish = () => {
+      if (sourceImg) sourceImg.style.viewTransitionName = "";
+    };
+
+    if (prefersViewTransitions()) {
+      const t = document.startViewTransition(() => {
+        syncLightbox();
+        lightbox.hidden = false;
+        document.body.classList.add("lb-open");
+        lbImg.style.viewTransitionName = "milan-lightbox-img";
+      });
+      t.finished.finally(finish);
+    } else {
+      syncLightbox();
+      lightbox.hidden = false;
+      document.body.classList.add("lb-open");
+      finish();
+    }
     closeBtn.focus();
   }
 
   function closeLightbox() {
-    lightbox.hidden = true;
-    document.body.classList.remove("lb-open");
+    const sourceImg = cardImageAt(lbPos);
+    const closeUpdate = () => {
+      lbImg.style.viewTransitionName = "";
+      lightbox.hidden = true;
+      document.body.classList.remove("lb-open");
+      if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
+    };
+
+    if (prefersViewTransitions()) {
+      const t = document.startViewTransition(closeUpdate);
+      t.finished.finally(() => {
+        if (sourceImg) sourceImg.style.viewTransitionName = "";
+      });
+    } else {
+      closeUpdate();
+      if (sourceImg) sourceImg.style.viewTransitionName = "";
+    }
+  }
+
+  function preloadLightboxNeighbor(delta) {
+    if (!visible.length) return;
+    const next = visible[(lbPos + delta + visible.length) % visible.length];
+    if (!next?.src) return;
+    const img = new Image();
+    img.decoding = "async";
+    if ("fetchPriority" in img) img.fetchPriority = "low";
+    img.src = next.src;
   }
 
   function syncLightbox() {
@@ -385,6 +444,8 @@
     lbImg.style.animation = "none";
     void lbImg.offsetWidth;
     lbImg.style.animation = "";
+    preloadLightboxNeighbor(1);
+    preloadLightboxNeighbor(-1);
   }
 
   function step(delta) {
@@ -408,10 +469,16 @@
       media.className = "card-media";
 
       const img = document.createElement("img");
-      img.src = photo.src;
+      img.src = photo.thumb || photo.src;
       img.alt = photo.title;
-      img.loading = "eager";
       img.decoding = "async";
+      if (i < 2) {
+        img.loading = "eager";
+        img.fetchPriority = "high";
+      } else {
+        img.loading = "lazy";
+        img.fetchPriority = "low";
+      }
       if (photo.width && photo.height) {
         img.width = photo.width;
         img.height = photo.height;
@@ -666,6 +733,7 @@
         customPhotos.push({
           id,
           src: objectUrl,
+          thumb: objectUrl,
           title,
           caption: "",
           date,
@@ -801,4 +869,12 @@
   renderGallery();
   loadFolderPhotos();
   loadCustomPhotos();
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {
+        /* file:// or unsupported — ignore */
+      });
+    });
+  }
 })();

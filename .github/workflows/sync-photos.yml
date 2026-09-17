@@ -5,6 +5,7 @@ on:
     paths:
       - "photos/**"
       - "tools/sync_photos.py"
+      - "tools/photos_lib.py"
       - ".github/workflows/sync-photos.yml"
   workflow_dispatch:
 
@@ -21,16 +22,16 @@ jobs:
           python-version: "3.12"
       - name: Install deps
         run: pip install Pillow
-      - name: Generate manifest
+      - name: Generate manifest + thumbs
         run: python tools/sync_photos.py
       - name: Commit if changed
         run: |
-          if git diff --quiet -- photos/manifest.json; then
-            echo "manifest unchanged"
+          if git diff --quiet -- photos/manifest.json photos/thumbs; then
+            echo "manifest/thumbs unchanged"
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add photos/manifest.json
-            git commit -m "chore: sync photos manifest"
+            git add photos/manifest.json photos/thumbs
+            git commit -m "chore: sync photos manifest and thumbs"
             git push
           fi

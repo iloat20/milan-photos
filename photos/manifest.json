@@ -1,130 +1,166 @@
 {
   "photos": [
     {
-      "src": "photos/mmexport1788447848472.jpg",
-      "file": "mmexport1788447848472.jpg",
-      "title": "mmexport1788447848472",
-      "caption": "",
-      "date": "2026-09-17"
-    },
-    {
-      "src": "photos/IMG20260916193852.jpg",
-      "file": "IMG20260916193852.jpg",
-      "title": "IMG20260916193852",
-      "caption": "",
-      "date": "2026-09-17"
-    },
-    {
-      "src": "photos/IMG20260916193836.jpg",
-      "file": "IMG20260916193836.jpg",
-      "title": "IMG20260916193836",
-      "caption": "",
-      "date": "2026-09-17"
-    },
-    {
       "src": "photos/IMG20260916193647.jpg",
       "file": "IMG20260916193647.jpg",
       "title": "IMG20260916193647",
       "caption": "",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 3072,
+      "height": 4096
+    },
+    {
+      "src": "photos/mmexport1788447848472.jpg",
+      "file": "mmexport1788447848472.jpg",
+      "title": "mmexport1788447848472",
+      "caption": "",
+      "date": "2026-09-17",
+      "width": 1279,
+      "height": 1706
     },
     {
       "src": "photos/IMG20260817164949_01.jpg",
       "file": "IMG20260817164949_01.jpg",
       "title": "IMG20260817164949 01",
       "caption": "",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1536,
+      "height": 2048
     },
     {
       "src": "photos/IMG20260817164045.jpg",
       "file": "IMG20260817164045.jpg",
       "title": "IMG20260817164045",
       "caption": "",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1536,
+      "height": 2048
     },
     {
       "src": "photos/IMG20260817155446.jpg",
       "file": "IMG20260817155446.jpg",
       "title": "IMG20260817155446",
       "caption": "",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1536,
+      "height": 2048
+    },
+    {
+      "src": "photos/IMG20260916193852.jpg",
+      "file": "IMG20260916193852.jpg",
+      "title": "IMG20260916193852",
+      "caption": "",
+      "date": "2026-09-17",
+      "width": 4096,
+      "height": 3072
+    },
+    {
+      "src": "photos/IMG20260916193836.jpg",
+      "file": "IMG20260916193836.jpg",
+      "title": "IMG20260916193836",
+      "caption": "",
+      "date": "2026-09-17",
+      "width": 4096,
+      "height": 3072
     },
     {
       "src": "photos/IMG20260817155358.jpg",
       "file": "IMG20260817155358.jpg",
       "title": "IMG20260817155358",
       "caption": "",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 6144,
+      "height": 8192
     },
     {
       "src": "photos/IMG20260817155311.jpg",
       "file": "IMG20260817155311.jpg",
       "title": "IMG20260817155311",
       "caption": "",
-      "date": "2026-09-17"
-    },
-    {
-      "src": "photos/1700559942072.jpg",
-      "file": "1700559942072.jpg",
-      "title": "1700559942072",
-      "caption": "",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 6144,
+      "height": 8192
     },
     {
       "src": "photos/08-portrait-silhouette.jpg",
       "file": "08-portrait-silhouette.jpg",
       "title": "剪影",
       "caption": "人退成轮廓，空间开始说话。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
     },
     {
       "src": "photos/07-botanical.jpg",
       "file": "07-botanical.jpg",
       "title": "叶脉",
       "caption": "一束侧光，让植物变成雕塑。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
     },
     {
       "src": "photos/06-neon-window.jpg",
       "file": "06-neon-window.jpg",
       "title": "窗上霓虹",
       "caption": "雨珠把城市拆成散景。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
     },
     {
       "src": "photos/05-desert-dunes.jpg",
       "file": "05-desert-dunes.jpg",
       "title": "沙脊",
       "caption": "金色与阴影在地平线上对峙。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
     },
     {
       "src": "photos/04-mist-lake.jpg",
       "file": "04-mist-lake.jpg",
       "title": "雾湖",
       "caption": "水面把山影轻轻对折。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
     },
     {
       "src": "photos/03-light-trails.jpg",
       "file": "03-light-trails.jpg",
       "title": "光轨",
       "caption": "长曝光把速度写成一条条琥珀色笔迹。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
     },
     {
       "src": "photos/02-staircase.jpg",
       "file": "02-staircase.jpg",
       "title": "混凝土螺旋",
       "caption": "光从顶部漏下，台阶像悬空的年轮。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
     },
     {
       "src": "photos/01-city-rain.jpg",
       "file": "01-city-rain.jpg",
       "title": "雨夜俯瞰",
       "caption": "街道把灯光揉碎，再还给夜色。",
-      "date": "2026-09-17"
+      "date": "2026-09-17",
+      "width": 1024,
+      "height": 901
+    },
+    {
+      "src": "photos/1700559942072.jpg",
+      "file": "1700559942072.jpg",
+      "title": "1700559942072",
+      "caption": "",
+      "date": "2026-04-03",
+      "width": 360,
+      "height": 360
     }
   ]
 }

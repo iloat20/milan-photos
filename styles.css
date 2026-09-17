@@ -487,6 +487,11 @@ strong {
   transition: transform 0.55s var(--ease);
 }
 
+/* 像素尺寸较大的照片占满整行 */
+.card.is-large {
+  grid-column: 1 / -1;
+}
+
 .card:hover .card-media img,
 .card:focus-visible .card-media img {
   transform: scale(1.03);

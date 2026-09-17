@@ -26,6 +26,18 @@ def file_date(path: Path) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
 
 
+def image_size(path: Path) -> tuple[int, int] | None:
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as im:
+            return int(im.width), int(im.height)
+    except Exception:
+        return None
+
+
 def build_manifest() -> bytes:
     meta: dict = {}
     if META.exists():
@@ -44,15 +56,17 @@ def build_manifest() -> bytes:
     for path in files:
         name = path.name
         info = meta.get(name) or {}
-        photos.append(
-            {
-                "src": f"photos/{name}",
-                "file": name,
-                "title": info.get("title") or title_from_name(name),
-                "caption": info.get("caption") or "",
-                "date": info.get("date") or file_date(path),
-            }
-        )
+        size = image_size(path)
+        item = {
+            "src": f"photos/{name}",
+            "file": name,
+            "title": info.get("title") or title_from_name(name),
+            "caption": info.get("caption") or "",
+            "date": info.get("date") or file_date(path),
+        }
+        if size:
+            item["width"], item["height"] = size
+        photos.append(item)
     payload = json.dumps({"photos": photos}, ensure_ascii=False, indent=2)
     return payload.encode("utf-8")
 

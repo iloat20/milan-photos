@@ -1,7 +1,7 @@
 (() => {
-  /** @type {{src:string,title:string,caption:string,date?:string,id:string,custom?:boolean}[]} */
+  /** @type {{src:string,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
   let folderPhotos = [];
-  /** @type {{src:string,title:string,caption:string,date?:string,id:string,custom?:boolean}[]} */
+  /** @type {typeof folderPhotos} */
   let customPhotos = [];
   /** @type {typeof folderPhotos} */
   let photos = [];
@@ -28,6 +28,27 @@
 
   const pad = (n) => String(n).padStart(2, "0");
   const uid = () => `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
+  // 长边 ≥3000px 或面积 ≥800 万像素时视为「大图」，在网格中占满整行
+  function isLargePhoto(width, height) {
+    if (!width || !height) return false;
+    const longEdge = Math.max(width, height);
+    const area = width * height;
+    return longEdge >= 3000 || area >= 8_000_000;
+  }
+
+  function mediaAspect(width, height) {
+    const ar = width / height;
+    if (ar >= 1.2) return Math.min(Math.max(ar, 16 / 9), 2.05);
+    return Math.max(ar, 3 / 4);
+  }
+
+  function applyLargeLayout(card, media, width, height) {
+    if (!isLargePhoto(width, height)) return;
+    card.classList.add("is-large");
+    if (width < height) card.classList.add("is-portrait");
+    media.style.aspectRatio = String(mediaAspect(width, height));
+  }
 
   function toLocalDate(msOrDate) {
     const d = msOrDate instanceof Date ? msOrDate : new Date(msOrDate);
@@ -108,6 +129,8 @@
         caption: item.caption || "",
         date: item.date || "",
         id: item.file || item.src || `f${i}`,
+        width: Number(item.width) || 0,
+        height: Number(item.height) || 0,
       }));
     } catch {
       folderPhotos = [];
@@ -163,6 +186,8 @@
         caption: r.caption || "",
         date: r.date || toLocalDate(r.createdAt || Date.now()),
         custom: true,
+        width: Number(r.width) || 0,
+        height: Number(r.height) || 0,
       }));
     } catch {
       customPhotos = [];
@@ -221,6 +246,19 @@
       img.alt = photo.title;
       img.loading = "eager";
       img.decoding = "async";
+      if (photo.width && photo.height) {
+        img.width = photo.width;
+        img.height = photo.height;
+        applyLargeLayout(card, media, photo.width, photo.height);
+      } else {
+        img.addEventListener(
+          "load",
+          () => {
+            applyLargeLayout(card, media, img.naturalWidth, img.naturalHeight);
+          },
+          { once: true }
+        );
+      }
       media.appendChild(img);
 
       const meta = document.createElement("div");
@@ -401,15 +439,19 @@
     const contentB64 = b64FromBuffer(buf);
     await ghPutFile(cfg, path, contentB64, `add photo: ${meta.fileName}`);
 
-    await ghUpdateManifest(cfg, [
-      {
-        src: `photos/${meta.fileName}`,
-        file: meta.fileName,
-        title: meta.title,
-        caption: meta.caption,
-        date: meta.date,
-      },
-    ]);
+    const item = {
+      src: `photos/${meta.fileName}`,
+      file: meta.fileName,
+      title: meta.title,
+      caption: meta.caption,
+      date: meta.date,
+    };
+    if (meta.width && meta.height) {
+      item.width = meta.width;
+      item.height = meta.height;
+    }
+
+    await ghUpdateManifest(cfg, [item]);
 
     return { skipped: false };
   }
@@ -436,6 +478,14 @@
         const date = toLocalDate(file.lastModified || Date.now());
         const title = stripExt(file.name) || "新照片";
         const fileName = safeFileName(file);
+        const objectUrl = URL.createObjectURL(file);
+        const dims = await new Promise((resolve) => {
+          const probe = new Image();
+          probe.onload = () =>
+            resolve({ width: probe.naturalWidth, height: probe.naturalHeight });
+          probe.onerror = () => resolve({ width: 0, height: 0 });
+          probe.src = objectUrl;
+        });
         const record = {
           id,
           blob: file,
@@ -443,15 +493,19 @@
           caption: "",
           date,
           createdAt: file.lastModified || Date.now(),
+          width: dims.width,
+          height: dims.height,
         };
         await idbPut(record);
         customPhotos.push({
           id,
-          src: URL.createObjectURL(file),
+          src: objectUrl,
           title,
           caption: "",
           date,
           custom: true,
+          width: dims.width,
+          height: dims.height,
         });
         okLocal += 1;
 
@@ -462,6 +516,8 @@
             title,
             caption: "",
             date,
+            width: dims.width,
+            height: dims.height,
           });
           okGh += 1;
         }

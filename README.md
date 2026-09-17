@@ -30,9 +30,9 @@ python tools/serve.py
 
 ### 页面底部「选择图片」
 
-1. 本机 IndexedDB 即时预览（默认）
+1. 本机自动压缩（最长边 ≤2048px WebP）后写入 IndexedDB 预览（默认）
 2. 展开「同步到 GitHub」：填写仓库、分支和有 `Contents: Read and write` 权限的 Token 并保存
-3. 之后上传会同时写入仓库的 `photos/` 并更新 `manifest.json`，Pages 构建后线上可见
+3. 之后上传会把压缩图写入仓库的 `photos/` 并更新 `manifest.json`，Pages 构建后线上可见
 
 Token 只保存在当前浏览器的 localStorage，不会提交到仓库。
 
@@ -57,18 +57,21 @@ git push -u origin main
 index.html
 styles.css
 app.js
-photos/                 照片 + meta.json + manifest.json
+photos/                 原图 + meta.json + manifest.json
+photos/thumbs/          列表缩略图（WebP ≤1200px）
+photos/medium/          灯箱用中尺寸（WebP ≤1600px）
 tools/serve.py          本地自动扫描预览
-tools/sync_photos.py    生成 manifest（Actions 使用）
+tools/sync_photos.py    生成 manifest + 缩略图 + 中尺寸（Actions 使用）
 .github/workflows/      推送后自动同步清单
 ```
 
 ## 功能
 
 - 单行 sticky 顶栏
-- 全屏轮播（不拉伸）+ 等高 justified 图库 + 沉浸灯箱
-- WebP 缩略图 + 懒加载 + View Transitions
-- Service Worker 离线缓存 + Priority Hints（fetchpriority）
-- `photos/` 自动上墙（本地 serve / GitHub Actions）
-- 页面内本地上传
+- 全屏轮播（不拉伸，medium 图）+ 等高 justified 图库 + 沉浸灯箱
+- 指针事件统一滑动（触控 / 鼠标拖拽）
+- WebP 缩略图 + 中尺寸灯箱图（~1600px，避免加载原图）+ 懒加载 + View Transitions
+- Service Worker 离线缓存（媒体 LRU 上限）+ Priority Hints（fetchpriority）
+- `photos/` 自动上墙（本地 serve / GitHub Actions，日期优先取 EXIF）
+- 页面内本地上传（上传前客户端压缩为 ≤2048px WebP）
 - 支持 `prefers-reduced-motion`

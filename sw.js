@@ -1,7 +1,8 @@
-/* 米兰 Service Worker：壳层 SWR，缩略图/原图 Cache First，清单 Network First */
-const VERSION = "milan-v3";
+/* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
+const VERSION = "milan-v4";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
+const MEDIA_MAX_ENTRIES = 100;
 
 const SHELL_ASSETS = ["./", "./index.html", "./styles.css", "./app.js"];
 
@@ -56,13 +57,42 @@ function isShellRequest(url) {
   );
 }
 
+/** 媒体缓存按插入序裁剪，超出上限删最旧 */
+async function trimMediaCache(maxEntries = MEDIA_MAX_ENTRIES) {
+  try {
+    const cache = await caches.open(CACHE_MEDIA);
+    const keys = await cache.keys();
+    if (keys.length <= maxEntries) return;
+    const excess = keys.length - maxEntries;
+    await Promise.all(keys.slice(0, excess).map((key) => cache.delete(key)));
+  } catch {
+    /* quota / private mode — ignore */
+  }
+}
+
+async function putMedia(request, response) {
+  const cache = await caches.open(CACHE_MEDIA);
+  await cache.put(request, response);
+  await trimMediaCache();
+}
+
 async function cacheFirst(request) {
   const cached = await caches.match(request, { ignoreSearch: true });
-  if (cached) return cached;
+  if (cached) {
+    // 命中后重放一份到 media，便于 LRU 保留热图
+    // （Cache API 无原生 recency，用 delete+put 近似）
+    try {
+      const cache = await caches.open(CACHE_MEDIA);
+      await cache.delete(request);
+      await cache.put(request, cached.clone());
+    } catch {
+      /* ignore */
+    }
+    return cached;
+  }
   const response = await fetch(request);
   if (response && response.ok && response.type === "basic") {
-    const cache = await caches.open(CACHE_MEDIA);
-    cache.put(request, response.clone());
+    await putMedia(request, response.clone());
   }
   return response;
 }
@@ -71,8 +101,7 @@ async function networkFirst(request) {
   try {
     const response = await fetch(request);
     if (response && response.ok) {
-      const cache = await caches.open(CACHE_MEDIA);
-      cache.put(request, response.clone());
+      await putMedia(request, response.clone());
     }
     return response;
   } catch {
@@ -105,6 +134,27 @@ async function staleWhileRevalidate(request) {
   return Response.error();
 }
 
+async function thumbStaleWhileRevalidate(request) {
+  const cache = await caches.open(CACHE_MEDIA);
+  const cached = await cache.match(request, { ignoreSearch: true });
+  const network = fetch(request)
+    .then(async (response) => {
+      if (response && response.ok && response.type === "basic") {
+        await putMedia(request, response.clone());
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    network.then(() => {});
+    return cached;
+  }
+  const response = await network;
+  if (response) return response;
+  return Response.error();
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
@@ -118,7 +168,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isThumbRequest(url)) {
-    event.respondWith(staleWhileRevalidate(request));
+    event.respondWith(thumbStaleWhileRevalidate(request));
     return;
   }
 

@@ -34,25 +34,13 @@
   const pad = (n) => String(n).padStart(2, "0");
   const uid = () => `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
-  // 长边 ≥3000px 或面积 ≥800 万像素时视为「大图」，在网格中占满整行
-  function isLargePhoto(width, height) {
-    if (!width || !height) return false;
-    const longEdge = Math.max(width, height);
-    const area = width * height;
-    return longEdge >= 3000 || area >= 8_000_000;
-  }
-
-  function mediaAspect(width, height) {
-    const ar = width / height;
-    if (ar >= 1.2) return Math.min(Math.max(ar, 16 / 9), 2.05);
-    return Math.max(ar, 3 / 4);
-  }
-
-  function applyLargeLayout(card, media, width, height) {
-    if (!isLargePhoto(width, height)) return;
-    card.classList.add("is-large");
-    if (width < height) card.classList.add("is-portrait");
-    media.style.aspectRatio = String(mediaAspect(width, height));
+  // 等高 justified：用宽高比决定横向占比，行内节奏更整齐
+  function applyRowFit(card, media, width, height) {
+    const ar = width > 0 && height > 0 ? width / height : 4 / 3;
+    const clamped = Math.max(0.7, Math.min(ar, 1.9));
+    card.style.flexGrow = String(clamped);
+    card.style.flexBasis = `${Math.round(200 * clamped)}px`;
+    if (media) media.style.aspectRatio = "";
   }
 
   function toLocalDate(msOrDate) {
@@ -162,6 +150,10 @@
       } else {
         img.loading = "lazy";
         img.fetchPriority = "low";
+      }
+      if (photo.width && photo.height) {
+        img.width = photo.width;
+        img.height = photo.height;
       }
       slide.appendChild(img);
 
@@ -482,12 +474,12 @@
       if (photo.width && photo.height) {
         img.width = photo.width;
         img.height = photo.height;
-        applyLargeLayout(card, media, photo.width, photo.height);
+        applyRowFit(card, media, photo.width, photo.height);
       } else {
         img.addEventListener(
           "load",
           () => {
-            applyLargeLayout(card, media, img.naturalWidth, img.naturalHeight);
+            applyRowFit(card, media, img.naturalWidth, img.naturalHeight);
           },
           { once: true }
         );

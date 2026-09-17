@@ -1,5 +1,5 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/原图 Cache First，清单 Network First */
-const VERSION = "milan-v1";
+const VERSION = "milan-v3";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 

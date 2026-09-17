@@ -29,6 +29,7 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--nav-h) + 8px);
 }
 
 body {
@@ -68,32 +69,39 @@ strong {
   color: inherit;
 }
 
-/* —— 顶栏下方全宽全屏轮播 —— */
+/* —— 顶栏下方全宽全屏轮播（图完整显示、不拉伸） —— */
 .hero-carousel {
   position: relative;
   width: 100%;
-  height: calc(100vh - var(--nav-h));
-  height: calc(100dvh - var(--nav-h));
-  min-height: 320px;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 420px;
   overflow: hidden;
-  background: #0a0a0a;
+  background: #000;
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  display: flex;
+  flex-direction: column;
 }
 
 .hero-carousel-track {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
-  height: 100%;
 }
 
 .hero-carousel-slide {
   position: absolute;
   inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
   transition: opacity 0.55s var(--ease);
   pointer-events: none;
+  background: #000;
 }
 
 .hero-carousel-slide.is-active {
@@ -103,20 +111,23 @@ strong {
 }
 
 .hero-carousel-slide img {
-  width: 100%;
-  height: 100%;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   object-position: center;
-  background: #0a0a0a;
+  background: transparent;
 }
 
 .hero-carousel-caption {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
-  padding: 48px 22px 28px;
-  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.55) 100%);
+  bottom: 36px;
+  padding: 28px 22px 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.45) 100%);
   color: #f5f5f7;
   pointer-events: none;
   z-index: 2;
@@ -215,13 +226,14 @@ strong {
 
 @media (max-width: 560px) {
   .hero-carousel {
-    height: calc(100vh - var(--nav-h));
-    height: calc(100dvh - var(--nav-h));
-    min-height: 240px;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 360px;
   }
 
   .hero-carousel-caption {
-    padding: 36px 16px 28px;
+    padding: 20px 16px 0;
+    bottom: 40px;
   }
 
   .hero-carousel-arrow {
@@ -259,8 +271,10 @@ strong {
 
 /* —— 单行 sticky 导航 —— */
 .site-nav {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 50;
   height: var(--nav-h);
   background: rgba(255, 255, 255, 0.72);
@@ -630,7 +644,7 @@ strong {
   font-weight: 500;
 }
 
-/* —— Gallery —— */
+/* —— Gallery：等高 justified，行内整齐 —— */
 .gallery-section {
   padding: 100px 0 80px;
   background: var(--bg-elevated);
@@ -640,9 +654,10 @@ strong {
   max-width: var(--max-wide);
   margin: 0 auto;
   padding: 0 22px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 36px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px 14px;
+  align-items: stretch;
 }
 
 .card {
@@ -655,10 +670,15 @@ strong {
   cursor: pointer;
   font: inherit;
   color: inherit;
-  width: 100%;
+  width: auto;
+  min-width: 150px;
+  max-width: 100%;
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
   touch-action: manipulation;
   content-visibility: auto;
-  contain-intrinsic-size: auto 360px;
+  contain-intrinsic-size: auto 300px;
 }
 
 .card:focus-visible {
@@ -669,10 +689,11 @@ strong {
 
 .card-media {
   position: relative;
-  border-radius: var(--radius);
+  border-radius: 14px;
   overflow: hidden;
   background: #e8e8ed;
-  aspect-ratio: 4 / 3;
+  height: clamp(200px, 24vw, 280px);
+  width: 100%;
   contain: layout paint;
 }
 
@@ -680,12 +701,8 @@ strong {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   transition: transform 0.55s var(--ease);
-}
-
-/* 像素尺寸较大的照片占满整行 */
-.card.is-large {
-  grid-column: 1 / -1;
 }
 
 .card:hover .card-media img,
@@ -694,22 +711,26 @@ strong {
 }
 
 .card-meta {
-  padding: 14px 4px 0;
+  padding: 10px 2px 0;
 }
 
 .card-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--ink);
 }
 
 .card-caption {
-  margin: 6px 0 0;
-  font-size: 14px;
+  margin: 3px 0 0;
+  font-size: 12px;
   color: var(--ink-secondary);
-  line-height: 1.4;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .filter-bar {
@@ -1174,17 +1195,30 @@ body.lb-open {
   }
 
   .gallery {
-    grid-template-columns: 1fr;
-    gap: 24px;
-    padding: 0 16px;
+    gap: 16px 8px;
+    padding: 0 12px;
+  }
+
+  .card {
+    flex-basis: 44%;
+    min-width: 140px;
+  }
+
+  .card-media {
+    height: 140px;
+    border-radius: 12px;
   }
 
   .card-meta {
-    padding: 12px 2px 0;
+    padding: 8px 2px 0;
   }
 
   .card-title {
-    font-size: 20px;
+    font-size: 13px;
+  }
+
+  .card-caption {
+    font-size: 11px;
   }
 
   .filter-bar {

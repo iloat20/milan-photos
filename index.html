@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="米兰 · 照片墙" />
+  <title>米兰</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-nav" id="siteNav">
+    <div class="site-nav-inner">
+      <a class="site-nav-logo" href="#">米兰</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="gallery-section chapter-light" id="gallery">
+      <div class="chapter-head">
+        <p class="chapter-kicker">Gallery</p>
+        <h2 class="chapter-title">全部照片</h2>
+        <p class="chapter-sub">按时间筛选，点按任意一张进入沉浸浏览。</p>
+      </div>
+      <div class="filter-bar" id="filterBar" role="toolbar" aria-label="按日期筛选"></div>
+      <div class="gallery" id="galleryGrid" aria-live="polite"></div>
+      <p class="empty" id="empty" hidden>还没有照片。把图片放进 <code>photos/</code> 后执行同步，或用下方「选择图片」上传。</p>
+    </section>
+
+    <section class="about chapter-dark" id="about">
+      <div class="about-inner">
+        <p class="chapter-kicker chapter-kicker-on-dark">About</p>
+        <h2 class="about-title">为照片而生的<br />安静展台。</h2>
+        <p class="about-text">米兰用产品页的叙事方式陈列照片：章节化滚动、全幅画面、清晰层级。纯 HTML / CSS / JS，可直接发布到 GitHub Pages。</p>
+        <a class="btn btn-primary" href="#gallery">回到图库</a>
+      </div>
+    </section>
+
+    <section class="upload-section" id="upload">
+      <div class="upload-inner">
+        <p class="chapter-kicker">Upload</p>
+        <h2 class="upload-title">添加你的照片</h2>
+        <p class="upload-sub">选择本地图片，立即展示在页面上。照片保存在本机浏览器，不会上传到服务器。</p>
+        <button class="btn btn-primary" type="button" id="addPhotoBtn">选择图片</button>
+        <input type="file" id="photoInput" accept="image/*" multiple hidden />
+        <p class="upload-status" id="uploadStatus" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <p class="footer-note">把图片放进 <code>photos/</code>，运行 <code>python tools/sync_photos.py</code>（或推送后由 Actions 自动生成清单）即可上墙。</p>
+      <p class="footer-copy">Copyright © 2026 米兰</p>
+    </div>
+  </footer>
+
+  <div class="lightbox" id="lightbox" hidden>
+    <div class="lightbox-chrome">
+      <button class="lb-text-btn" id="close" type="button">完成</button>
+    </div>
+    <figure class="lightbox-stage">
+      <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一张">‹</button>
+      <img class="lightbox-img" id="lbImg" alt="" />
+      <button class="lb-arrow lb-next" id="next" type="button" aria-label="下一张">›</button>
+    </figure>
+    <div class="lightbox-meta">
+      <h2 class="lb-title" id="lbTitle"></h2>
+      <p class="lb-caption" id="lbCaption"></p>
+      <p class="lb-index" id="lbIndex"></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

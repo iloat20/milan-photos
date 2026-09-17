@@ -93,7 +93,11 @@
 
   <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="照片浏览" hidden>
     <div class="lightbox-chrome">
-      <button class="lb-text-btn" id="close" type="button">完成</button>
+      <button class="lb-close" id="close" type="button" aria-label="关闭">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+          <path d="M1 1l12 12M13 1L1 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
     <figure class="lightbox-stage">
       <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一张">‹</button>

@@ -870,44 +870,47 @@
   });
   closeBtn.addEventListener("click", closeLightbox);
 
+  const stage = lightbox.querySelector(".lightbox-stage");
   let swipeX = 0;
   let swipeY = 0;
-  let swiping = false;
+  let lbDidSwipe = false;
   let lbPointer = null;
-
-  lbImg.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (swiping) {
-      swiping = false;
-      return;
-    }
-    step(1);
-  });
-
-  const stage = lightbox.querySelector(".lightbox-stage");
 
   stage.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (e.isPrimary === false) return;
+    if (e.target.closest?.(".lb-arrow")) return;
     lbPointer = e.pointerId;
     swipeX = e.clientX;
     swipeY = e.clientY;
-    swiping = false;
+    lbDidSwipe = false;
   });
 
   stage.addEventListener("pointerup", (e) => {
     if (lbPointer !== e.pointerId) return;
     lbPointer = null;
+    if (e.target.closest?.(".lb-arrow")) return;
     const dx = e.clientX - swipeX;
     const dy = e.clientY - swipeY;
-    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-    swiping = true;
-    step(dx < 0 ? 1 : -1);
+    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      lbDidSwipe = true;
+      step(dx < 0 ? 1 : -1);
+    }
   });
 
   stage.addEventListener("pointercancel", () => {
     lbPointer = null;
-    swiping = false;
+    lbDidSwipe = false;
+  });
+
+  // 点按图片区域（非箭头）切下一张；滑动后的合成 click 吞掉
+  stage.addEventListener("click", (e) => {
+    if (e.target.closest?.(".lb-arrow")) return;
+    if (lbDidSwipe) {
+      lbDidSwipe = false;
+      return;
+    }
+    step(1);
   });
 
   document.addEventListener("keydown", (e) => {

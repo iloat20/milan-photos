@@ -34,13 +34,129 @@
   const pad = (n) => String(n).padStart(2, "0");
   const uid = () => `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
-  // 等高 justified：用宽高比决定横向占比，行内节奏更整齐
+  /** 从画作采样，生成可用于展厅的低饱和墙色 */
+  function sampleRoomColor(img) {
+    if (!img || !img.naturalWidth) return null;
+    try {
+      const n = 28;
+      const canvas = document.createElement("canvas");
+      canvas.width = n;
+      canvas.height = n;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, n, n);
+      const { data } = ctx.getImageData(0, 0, n, n);
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+      let ar = 0;
+      let ag = 0;
+      let ab = 0;
+      let as = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const pr = data[i];
+        const pg = data[i + 1];
+        const pb = data[i + 2];
+        const pa = data[i + 3];
+        if (pa < 32) continue;
+        r += pr;
+        g += pg;
+        b += pb;
+        count += 1;
+        const mx = Math.max(pr, pg, pb);
+        const mn = Math.min(pr, pg, pb);
+        const sat = mx === 0 ? 0 : (mx - mn) / mx;
+        const score = sat * (mx / 255);
+        if (score > as) {
+          as = score;
+          ar = pr;
+          ag = pg;
+          ab = pb;
+        }
+      }
+      if (!count) return null;
+      const avg = { r: r / count, g: g / count, b: b / count };
+      const accent = as > 0.08 ? { r: ar, g: ag, b: ab } : avg;
+      const mix = (c, t, k) => ({
+        r: c.r * (1 - k) + t.r * k,
+        g: c.g * (1 - k) + t.g * k,
+        b: c.b * (1 - k) + t.b * k,
+      });
+      const hall = { r: 31, g: 42, b: 36 };
+      const dim = { r: 12, g: 16, b: 14 };
+      // 画作色压进展厅深绿，保持油画馆气质
+      const wall = mix(mix(avg, accent, 0.35), hall, 0.62);
+      const glow = mix(mix(avg, accent, 0.55), hall, 0.35);
+      const deep = mix(wall, dim, 0.45);
+      const css = (c, a = 1) =>
+        `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${a})`;
+      return {
+        wall: css(wall),
+        glow: css(glow, 0.55),
+        deep: css(deep),
+        accent: css(mix(accent, hall, 0.25), 0.75),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  function applyRoomToHero(palette) {
+    if (!heroCarousel) return;
+    if (!palette) {
+      heroCarousel.style.removeProperty("--room-adapt");
+      heroCarousel.style.removeProperty("--room-adapt-deep");
+      heroCarousel.style.removeProperty("--room-adapt-glow");
+      return;
+    }
+    heroCarousel.style.setProperty("--room-adapt", palette.wall);
+    heroCarousel.style.setProperty("--room-adapt-deep", palette.deep);
+    heroCarousel.style.setProperty("--room-adapt-glow", palette.glow);
+  }
+
+  function applyRoomToLightbox(palette) {
+    if (!lightbox) return;
+    if (!palette) {
+      lightbox.style.removeProperty("--room-adapt");
+      lightbox.style.removeProperty("--room-adapt-deep");
+      lightbox.style.removeProperty("--room-adapt-glow");
+      return;
+    }
+    lightbox.style.setProperty("--room-adapt", palette.wall);
+    lightbox.style.setProperty("--room-adapt-deep", palette.deep);
+    lightbox.style.setProperty("--room-adapt-glow", palette.glow);
+  }
+
+  // 画心随原作比例，金框只是外沿
   function applyRowFit(card, media, width, height) {
     const ar = width > 0 && height > 0 ? width / height : 4 / 3;
-    const clamped = Math.max(0.7, Math.min(ar, 1.9));
-    card.style.flexGrow = String(clamped);
-    card.style.flexBasis = `${Math.round(200 * clamped)}px`;
-    if (media) media.style.aspectRatio = "";
+    const clamped = Math.max(0.55, Math.min(ar, 1.9));
+    if (media) media.style.aspectRatio = String(clamped);
+  }
+
+  function looksLikeFileTitle(title) {
+    return (
+      !title ||
+      /^(img|dsc|pxl|mmexport|photo|image|未命名)/i.test(title) ||
+      /^[\w.-]*\d{6,}/.test(title)
+    );
+  }
+
+  function displayTitle(photo, index) {
+    const t = (photo?.title || "").trim();
+    if (!looksLikeFileTitle(t)) return `《${t}》`;
+    return `《无题 · ${String(index + 1).padStart(2, "0")}》`;
+  }
+
+  function wallNumber(index) {
+    return `MIL · ${String(index + 1).padStart(3, "0")}`;
+  }
+
+  function mediumLine(photo) {
+    const year = (photo?.date || "").slice(0, 4);
+    return year
+      ? `布面数字影像，${year} · 米兰美术馆藏`
+      : "布面数字影像 · 米兰美术馆藏";
   }
 
   function toLocalDate(msOrDate) {
@@ -129,6 +245,17 @@
         if (i === heroPos) {
           img.loading = "eager";
           img.fetchPriority = "high";
+          if (!img.dataset.roomBound) {
+            img.dataset.roomBound = "1";
+            const syncRoom = () => {
+              if (heroPos !== i) return;
+              applyRoomToHero(sampleRoomColor(img));
+            };
+            if (img.complete) syncRoom();
+            else img.addEventListener("load", syncRoom, { once: true });
+          } else if (img.complete) {
+            applyRoomToHero(sampleRoomColor(img));
+          }
         } else {
           img.loading = "lazy";
           img.fetchPriority = "low";
@@ -195,7 +322,7 @@
       slide.setAttribute("aria-label", `${i + 1} / ${list.length}`);
 
       const img = document.createElement("img");
-      img.alt = photo.title;
+      img.alt = "";
       img.decoding = "async";
       img.loading = "lazy";
       img.fetchPriority = "low";
@@ -203,18 +330,16 @@
         img.width = photo.width;
         img.height = photo.height;
       }
-      slide.appendChild(img);
+      const art = document.createElement("div");
+      art.className = "hero-art";
+      art.appendChild(img);
+      slide.appendChild(art);
 
       const caption = document.createElement("div");
       caption.className = "hero-carousel-caption";
       const h = document.createElement("h2");
-      h.textContent = photo.title;
+      h.textContent = "";
       caption.appendChild(h);
-      if (photo.caption || photo.date) {
-        const p = document.createElement("p");
-        p.textContent = photo.caption || photo.date;
-        caption.appendChild(p);
-      }
       slide.appendChild(caption);
 
       slide.addEventListener("click", () => {
@@ -326,7 +451,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "filter-chip" + (opt.id === activeFilter ? " is-active" : "");
-      btn.textContent = opt.label;
+      btn.textContent = opt.id === "all" ? "全部展厅" : `${ymLabel(opt.id)}`;
       btn.setAttribute("aria-pressed", opt.id === activeFilter ? "true" : "false");
       btn.addEventListener("click", () => {
         activeFilter = opt.id;
@@ -441,6 +566,7 @@
 
     if (prefersViewTransitions()) {
       const t = document.startViewTransition(() => {
+        if (sourceImg) sourceImg.style.viewTransitionName = "";
         syncLightbox();
         lightbox.hidden = false;
         document.body.classList.add("lb-open");
@@ -469,7 +595,12 @@
     };
 
     if (prefersViewTransitions()) {
-      const t = document.startViewTransition(closeUpdate);
+      const t = document.startViewTransition(() => {
+        lbImg.style.viewTransitionName = "";
+        lightbox.hidden = true;
+        document.body.classList.remove("lb-open");
+        if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
+      });
       t.finished.finally(() => {
         if (sourceImg) sourceImg.style.viewTransitionName = "";
         restoreFocus();
@@ -501,11 +632,24 @@
   function syncLightbox() {
     const photo = visible[lbPos];
     if (!photo) return;
+    const titleText = displayTitle(photo, lbPos);
     lbImg.src = lightboxSrc(photo);
-    lbImg.alt = photo.title;
-    lbTitle.textContent = photo.title;
-    lbCaption.textContent = photo.caption || photo.date || "";
-    lbIndex.textContent = `${pad(lbPos + 1)} / ${pad(visible.length)}`;
+    lbImg.alt = titleText;
+    if (lbTitle) lbTitle.textContent = "";
+    if (lbCaption) lbCaption.textContent = "";
+    if (lbIndex) lbIndex.textContent = "";
+    const lbMedium = document.getElementById("lbMedium");
+    if (lbMedium) lbMedium.textContent = "";
+    applyRoomToLightbox(null);
+    const frame = lightbox?.querySelector(".lightbox-frame");
+    if (frame) {
+      frame.classList.remove("is-lit");
+      void frame.offsetWidth;
+      frame.classList.add("is-lit");
+    }
+    const roomSync = () => applyRoomToLightbox(sampleRoomColor(lbImg));
+    if (lbImg.complete) roomSync();
+    else lbImg.addEventListener("load", roomSync, { once: true });
     lbImg.style.animation = "none";
     void lbImg.offsetWidth;
     lbImg.style.animation = "";
@@ -528,7 +672,8 @@
       const card = document.createElement("button");
       card.type = "button";
       card.className = "card";
-      card.setAttribute("aria-label", `打开照片：${photo.title}`);
+      const titleText = displayTitle(photo, i);
+      card.setAttribute("aria-label", `观展：${titleText}`);
 
       const media = document.createElement("div");
       media.className = "card-media";
@@ -538,9 +683,9 @@
       if (photo.thumbSrcset) {
         img.srcset = photo.thumbSrcset;
         img.sizes =
-          "(max-width: 560px) 44vw, (max-width: 834px) 30vw, 220px";
+          "(max-width: 560px) 46vw, (max-width: 834px) 40vw, 320px";
       }
-      img.alt = photo.title;
+      img.alt = titleText;
       img.decoding = "async";
       if (i < 2) {
         img.loading = "eager";
@@ -562,6 +707,16 @@
           { once: true }
         );
       }
+
+      const bindCardRoom = () => {
+        const palette = sampleRoomColor(img);
+        if (!palette) return;
+        media.style.setProperty("--card-wall", palette.wall);
+        media.style.setProperty("--card-glow", palette.glow);
+        media.style.setProperty("--card-accent", palette.accent);
+      };
+      if (img.complete) bindCardRoom();
+      else img.addEventListener("load", bindCardRoom, { once: true });
       media.appendChild(img);
       if (photo.animated) {
         const badge = document.createElement("span");
@@ -571,17 +726,7 @@
         media.appendChild(badge);
       }
 
-      const meta = document.createElement("div");
-      meta.className = "card-meta";
-      const title = document.createElement("h3");
-      title.className = "card-title";
-      title.textContent = photo.title;
-      const caption = document.createElement("p");
-      caption.className = "card-caption";
-      caption.textContent = photo.caption || photo.date || "";
-      meta.append(title, caption);
-
-      card.append(media, meta);
+      card.appendChild(media);
       card.addEventListener("click", () => openLightbox(i));
       gallery.appendChild(card);
     });
@@ -989,6 +1134,14 @@
     if (e.key === "ArrowLeft") step(-1);
     if (e.key === "ArrowRight") step(1);
   });
+
+  const siteNav = document.getElementById("siteNav");
+  const onScrollNav = () => {
+    if (!siteNav) return;
+    siteNav.classList.toggle("is-scrolled", window.scrollY > 40);
+  };
+  window.addEventListener("scroll", onScrollNav, { passive: true });
+  onScrollNav();
 
   renderFilters();
   renderGallery();

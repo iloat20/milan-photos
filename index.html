@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="米兰 · 照片墙" />
-  <meta name="theme-color" content="#ffffff" />
-  <title>米兰</title>
+  <meta name="description" content="米兰美术馆 · 油画式摄影陈列" />
+  <meta name="theme-color" content="#1f2a24" />
+  <title>米兰美术馆 · 油画展厅</title>
   <link rel="preload" href="styles.css" as="style" />
   <link rel="preload" href="app.js" as="script" />
   <link rel="stylesheet" href="styles.css" />
@@ -13,49 +13,51 @@
 <body>
   <header class="site-nav" id="siteNav">
     <div class="site-nav-inner">
-      <a class="site-nav-logo" href="#">米兰</a>
+      <a class="site-nav-logo" href="#">米兰美术馆</a>
+      <nav class="site-nav-links" aria-label="馆内导航">
+        <a href="#gallery">展厅</a>
+        <a href="#about">前言</a>
+        <a href="#archive">库房</a>
+      </nav>
     </div>
   </header>
 
-  <section class="hero-carousel" id="heroCarousel" aria-label="精选轮播" aria-roledescription="carousel">
+  <section class="hero-carousel" id="heroCarousel" aria-label="重点陈列" aria-roledescription="carousel">
+    <div class="hero-plate" id="heroPlate">
+      <h1 class="hero-title">米兰美术馆</h1>
+    </div>
     <div class="hero-carousel-track" id="heroCarouselTrack"></div>
-    <button class="hero-carousel-arrow hero-carousel-prev" id="heroPrev" type="button" aria-label="上一张">‹</button>
-    <button class="hero-carousel-arrow hero-carousel-next" id="heroNext" type="button" aria-label="下一张">›</button>
-    <div class="hero-carousel-dots" id="heroCarouselDots" role="tablist" aria-label="轮播页码"></div>
+    <button class="hero-carousel-arrow hero-carousel-prev" id="heroPrev" type="button" aria-label="上一件">‹</button>
+    <button class="hero-carousel-arrow hero-carousel-next" id="heroNext" type="button" aria-label="下一件">›</button>
+    <div class="hero-carousel-dots" id="heroCarouselDots" role="tablist" aria-label="重点陈列页码"></div>
   </section>
 
   <main>
-    <section class="gallery-section chapter-light" id="gallery">
+    <section class="gallery-section chapter-room" id="gallery">
       <div class="chapter-head">
-        <p class="chapter-kicker">MiLan</p>
-        <h2 class="chapter-title">全部照片</h2>
-        <p class="chapter-sub">按时间筛选，点按任意一张进入沉浸浏览。</p>
+        <h2 class="chapter-title">展厅</h2>
       </div>
-      <div class="filter-bar" id="filterBar" role="toolbar" aria-label="按日期筛选"></div>
+      <div class="filter-bar" id="filterBar" role="toolbar" aria-label="展厅索引"></div>
       <div class="gallery" id="galleryGrid" aria-live="polite"></div>
-      <p class="empty" id="empty" hidden>还没有照片。把图片放进 <code>photos/</code> 后执行同步，或用下方「选择图片」上传。</p>
+      <p class="empty" id="empty" hidden>展厅尚未布展。将图片放入 <code>photos/</code> 后刷新，或到库房登记入藏。</p>
     </section>
 
-    <section class="about chapter-dark" id="about">
+    <section class="about chapter-room-deep" id="about">
       <div class="about-inner">
-        <p class="chapter-kicker chapter-kicker-on-dark">About</p>
-        <h2 class="about-title">为照片而生的<br />安静展台。</h2>
-        <p class="about-text">米兰用产品页的叙事方式陈列照片：章节化滚动、全幅画面、清晰层级。纯 HTML / CSS / JS，可直接发布到 GitHub Pages。</p>
-        <a class="btn btn-primary" href="#gallery">回到图库</a>
+        <h2 class="about-title">像油画一样<br />被观看。</h2>
+        <a class="btn btn-text" href="#gallery">进入展厅</a>
       </div>
     </section>
 
     <section class="upload-section" id="upload">
       <div class="upload-inner">
-        <p class="chapter-kicker">Upload</p>
-        <h2 class="upload-title">添加你的照片</h2>
-        <p class="upload-sub">先在本机预览；配置 GitHub 后会一并写入仓库，Pages 站点同步更新。</p>
-        <button class="btn btn-primary" type="button" id="addPhotoBtn">选择图片</button>
+        <h2 class="upload-title" id="archive">库房</h2>
+        <button class="btn btn-outline" type="button" id="addPhotoBtn">登记入藏</button>
         <input type="file" id="photoInput" accept="image/*" multiple hidden />
         <p class="upload-status" id="uploadStatus" role="status" aria-live="polite"></p>
 
         <details class="gh-panel" id="ghPanel">
-          <summary>同步到 GitHub</summary>
+          <summary>同步馆藏数据到 GitHub</summary>
           <div class="gh-fields">
             <label class="gh-field">
               <span>仓库</span>
@@ -70,8 +72,8 @@
               <input type="password" id="ghToken" placeholder="ghp_… 或 fine-grained PAT" autocomplete="off" spellcheck="false" />
             </label>
             <div class="gh-actions">
-              <button class="btn btn-ghost-dark" type="button" id="ghSaveBtn">保存设置</button>
-              <button class="btn btn-ghost-dark" type="button" id="ghClearBtn">清除</button>
+              <button class="btn btn-outline" type="button" id="ghSaveBtn">保存设置</button>
+              <button class="btn btn-ghost" type="button" id="ghClearBtn">清除</button>
             </div>
             <p class="gh-hint">
               在 GitHub → Settings → Developer settings → Personal access tokens 创建，
@@ -86,28 +88,30 @@
 
   <footer class="footer">
     <div class="footer-inner">
-      <p class="footer-note">把图片放进 <code>photos/</code>，运行 <code>python tools/sync_photos.py</code>（或推送后由 Actions 自动生成清单）即可上墙。</p>
-      <p class="footer-copy">Copyright © 2026 米兰</p>
+      <div class="footer-brand">
+        <p class="footer-museum">米兰美术馆</p>
+      </div>
+      <p class="footer-copy">© 2026 米兰美术馆</p>
     </div>
   </footer>
 
-  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="照片浏览" hidden>
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="观画室" hidden>
     <div class="lightbox-chrome">
-      <button class="lb-close" id="close" type="button" aria-label="关闭">
+      <button class="lb-close" id="close" type="button" aria-label="关闭观画室">
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
           <path d="M1 1l12 12M13 1L1 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
       </button>
     </div>
     <figure class="lightbox-stage">
-      <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一张">‹</button>
-      <img class="lightbox-img" id="lbImg" alt="" />
-      <button class="lb-arrow lb-next" id="next" type="button" aria-label="下一张">›</button>
+      <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一件">‹</button>
+      <div class="lightbox-frame">
+        <img class="lightbox-img" id="lbImg" alt="" />
+      </div>
+      <button class="lb-arrow lb-next" id="next" type="button" aria-label="下一件">›</button>
     </figure>
     <div class="lightbox-meta">
       <h2 class="lb-title" id="lbTitle"></h2>
-      <p class="lb-caption" id="lbCaption"></p>
-      <p class="lb-index" id="lbIndex"></p>
     </div>
   </div>
 

@@ -342,13 +342,66 @@ code {
   right: 18px;
 }
 
+.hero-carousel-controls {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 10px 16px 6px;
+}
+
 .hero-carousel-dots {
   position: relative;
   z-index: 5;
   display: flex;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px 6px;
+  padding: 0;
+}
+
+.hero-carousel-pause {
+  appearance: none;
+  border: 1px solid var(--rule);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 0;
+  background: rgba(21, 28, 24, 0.72);
+  color: var(--gilt-bright);
+  font-family: var(--display);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+
+.hero-carousel-pause[hidden] {
+  display: none !important;
+}
+
+.hero-carousel-pause:hover {
+  background: rgba(201, 169, 106, 0.16);
+  border-color: var(--gilt);
+}
+
+.hero-carousel-pause:focus-visible {
+  outline: 2px solid var(--gilt-bright);
+  outline-offset: 3px;
+}
+
+/* 控件自带暗底，不依赖采样墙色的明度 */
+.site-nav,
+.hero-carousel-arrow,
+.hero-carousel-pause,
+.lb-close,
+.lb-arrow {
+  color: var(--gilt-bright);
 }
 
 .hero-carousel-dot {
@@ -665,11 +718,12 @@ code {
   width: calc(100% - 14px);
   height: calc(100% - 14px);
   max-width: none;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   transition: transform 0.7s var(--ease), opacity 0.4s var(--ease);
   opacity: 0.98;
-  background: #111;
+  /* 画框内侧：比例不符时信箱化为墙面色，而非裁切 */
+  background: var(--card-wall, #2a2418);
 }
 
 .card:hover .card-media img,
@@ -1450,7 +1504,12 @@ body.lb-open {
 }
 
 .filter-chip {
-  color: var(--haze);
+  /* 比 --haze 更稳：采样墙变亮时仍可读 */
+  color: var(--ivory-dim);
+}
+
+.filter-chip.is-active {
+  color: var(--gilt-bright);
 }
 
 @media (prefers-reduced-motion: reduce) {

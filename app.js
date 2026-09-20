@@ -30,6 +30,7 @@
   const heroDots = document.getElementById("heroCarouselDots");
   const heroPrev = document.getElementById("heroPrev");
   const heroNext = document.getElementById("heroNext");
+  const heroPauseBtn = document.getElementById("heroPause");
 
   const pad = (n) => String(n).padStart(2, "0");
   const uid = () => `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -85,9 +86,36 @@
       const hall = { r: 31, g: 42, b: 36 };
       const dim = { r: 12, g: 16, b: 14 };
       // 画作色压进展厅深绿，保持油画馆气质
-      const wall = mix(mix(avg, accent, 0.35), hall, 0.62);
-      const glow = mix(mix(avg, accent, 0.55), hall, 0.35);
-      const deep = mix(wall, dim, 0.45);
+      let wall = mix(mix(avg, accent, 0.35), hall, 0.62);
+      let glow = mix(mix(avg, accent, 0.55), hall, 0.35);
+      let deep = mix(wall, dim, 0.45);
+      // 采样墙再亮也不牺牲 chrome 文字对比（对照象牙字）
+      const ivory = { r: 240, g: 234, b: 216 };
+      const relLum = (c) => {
+        const f = (v) => {
+          const s = Math.max(0, Math.min(255, v)) / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+      };
+      const contrastWith = (c, fg) => {
+        const l1 = relLum(c);
+        const l2 = relLum(fg);
+        const hi = Math.max(l1, l2);
+        const lo = Math.min(l1, l2);
+        return (hi + 0.05) / (lo + 0.05);
+      };
+      const darkenForUi = (c, fg, minRatio) => {
+        let col = { r: c.r, g: c.g, b: c.b };
+        for (let i = 0; i < 20; i += 1) {
+          if (contrastWith(col, fg) >= minRatio) return col;
+          col = { r: col.r * 0.9, g: col.g * 0.9, b: col.b * 0.9 };
+        }
+        return col;
+      };
+      wall = darkenForUi(wall, ivory, 4.5);
+      deep = darkenForUi(deep, ivory, 4.5);
+      glow = darkenForUi(glow, ivory, 3);
       const css = (c, a = 1) =>
         `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${a})`;
       return {
@@ -171,12 +199,28 @@
   }
 
   function ymLabel(key) {
-    const [y, m] = key.split("-");
+    const [y, m] = String(key || "").split("-");
+    if (!y || !m) return String(key || "");
     return `${y}年${Number(m)}月`;
   }
 
+  /** 用于 folder / custom 去重：取路径最后一段文件名 */
+  function baseFileName(p) {
+    const raw = p?.file || p?.fileName || "";
+    if (raw) return String(raw).split("/").pop();
+    return "";
+  }
+
   function rebuildPhotos() {
-    photos = folderPhotos.concat(customPhotos);
+    const folderKeys = new Set(
+      folderPhotos.map(baseFileName).filter(Boolean)
+    );
+    const extras = customPhotos.filter((p) => {
+      const key = baseFileName(p);
+      if (!key) return true;
+      return !folderKeys.has(key);
+    });
+    photos = folderPhotos.concat(extras);
     applyFilter();
     renderHeroCarousel();
   }
@@ -217,6 +261,75 @@
   let heroSlides = [];
   let heroList = [];
   let heroSwiped = false;
+  let heroUserPaused = false;
+  let heroTempPaused = false;
+  let lbReturnFocus = null;
+  /** 灯箱导航序列；null 表示跟随当前筛选 visible */
+  let lbList = null;
+
+  function lightboxPhotos() {
+    return lbList || visible;
+  }
+
+  function pageInertTargets() {
+    return [
+      document.getElementById("siteNav"),
+      document.getElementById("heroCarousel"),
+      document.querySelector("main"),
+      document.querySelector(".footer"),
+    ].filter(Boolean);
+  }
+
+  function setPageInert(on) {
+    pageInertTargets().forEach((el) => {
+      if (on) el.setAttribute("inert", "");
+      else el.removeAttribute("inert");
+    });
+  }
+
+  function lightboxFocusable() {
+    if (!lightbox) return [];
+    return [...lightbox.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((el) => !el.hasAttribute("disabled") && el.getClientRects().length > 0);
+  }
+
+  function trapLightboxTab(e) {
+    if (!lightbox || lightbox.hidden || e.key !== "Tab") return;
+    const focusable = lightboxFocusable();
+    if (!focusable.length) {
+      e.preventDefault();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (!lightbox.contains(active)) {
+      e.preventDefault();
+      first.focus();
+      return;
+    }
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  function syncHeroPauseButton() {
+    if (!heroPauseBtn) return;
+    const canAuto = !reduceMotion && heroSlides.length >= 2;
+    heroPauseBtn.hidden = !canAuto;
+    heroPauseBtn.setAttribute("aria-pressed", heroUserPaused ? "true" : "false");
+    heroPauseBtn.setAttribute(
+      "aria-label",
+      heroUserPaused ? "继续自动轮播" : "暂停自动轮播"
+    );
+    const glyph = heroPauseBtn.querySelector(".hero-pause-glyph");
+    if (glyph) glyph.textContent = heroUserPaused ? "▶" : "‖";
+  }
 
   function heroSrc(photo) {
     // 动图在轮播只用静态缩略图，避免首屏拉原文件
@@ -239,18 +352,20 @@
       if (!img || !photo) return;
       const src = heroSrc(photo);
       if (near.has(i)) {
-        if (img.getAttribute("src") !== src) {
+        const srcChanged = img.getAttribute("src") !== src;
+        if (srcChanged) {
           img.src = src;
         }
         if (i === heroPos) {
           img.loading = "eager";
           img.fetchPriority = "high";
-          if (!img.dataset.roomBound) {
+          const syncRoom = () => {
+            if (heroPos !== i) return;
+            applyRoomToHero(sampleRoomColor(img));
+          };
+          // src 被摘掉再挂回时 complete 会短暂为 false，必须重新绑 load
+          if (srcChanged || !img.dataset.roomBound) {
             img.dataset.roomBound = "1";
-            const syncRoom = () => {
-              if (heroPos !== i) return;
-              applyRoomToHero(sampleRoomColor(img));
-            };
             if (img.complete) syncRoom();
             else img.addEventListener("load", syncRoom, { once: true });
           } else if (img.complete) {
@@ -273,13 +388,31 @@
     }
   }
 
+  function heroAutoAllowed() {
+    return (
+      !reduceMotion &&
+      !heroUserPaused &&
+      !heroTempPaused &&
+      !document.hidden &&
+      heroSlides.length >= 2
+    );
+  }
+
   function startHeroAuto() {
     stopHeroAuto();
-    if (reduceMotion || heroSlides.length < 2) return;
+    if (!heroAutoAllowed()) return;
     heroTimer = setInterval(() => {
-      if (document.hidden) return;
+      if (!heroAutoAllowed()) {
+        stopHeroAuto();
+        return;
+      }
       setHeroIndex(heroPos + 1);
     }, 4200);
+  }
+
+  function setHeroTempPaused(on) {
+    heroTempPaused = !!on;
+    startHeroAuto();
   }
 
   function setHeroIndex(next) {
@@ -292,6 +425,7 @@
       [...heroDots.children].forEach((dot, i) => {
         dot.classList.toggle("is-active", i === heroPos);
         dot.setAttribute("aria-selected", i === heroPos ? "true" : "false");
+        dot.setAttribute("aria-current", i === heroPos ? "true" : "false");
       });
     }
     applyHeroSources();
@@ -303,12 +437,14 @@
     heroSlides = [];
     heroList = [];
     heroPos = 0;
+    heroTempPaused = false;
     heroTrack.innerHTML = "";
     if (heroDots) heroDots.innerHTML = "";
 
     const list = photos.slice(0, HERO_MAX);
     if (!list.length) {
       heroCarousel.classList.add("is-empty");
+      syncHeroPauseButton();
       return;
     }
     heroCarousel.classList.remove("is-empty");
@@ -320,9 +456,10 @@
       slide.setAttribute("role", "group");
       slide.setAttribute("aria-roledescription", "slide");
       slide.setAttribute("aria-label", `${i + 1} / ${list.length}`);
+      slide.tabIndex = -1;
 
       const img = document.createElement("img");
-      img.alt = "";
+      img.alt = displayTitle(photo, i);
       img.decoding = "async";
       img.loading = "lazy";
       img.fetchPriority = "low";
@@ -347,8 +484,14 @@
           heroSwiped = false;
           return;
         }
-        const idx = visible.findIndex((p) => p.id === photo.id);
-        if (idx >= 0) openLightbox(idx);
+        const inFilter = visible.findIndex((p) => p.id === photo.id);
+        if (inFilter >= 0) {
+          openLightbox(inFilter, slide);
+          return;
+        }
+        // 筛选不含该画时，按全量馆藏打开，避免静默无响应
+        const allIdx = photos.findIndex((p) => p.id === photo.id);
+        if (allIdx >= 0) openLightbox(allIdx, slide, photos);
       });
 
       heroTrack.appendChild(slide);
@@ -370,8 +513,18 @@
       }
     });
 
+    syncHeroPauseButton();
     applyHeroSources();
     startHeroAuto();
+  }
+
+  if (heroPauseBtn) {
+    heroPauseBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      heroUserPaused = !heroUserPaused;
+      syncHeroPauseButton();
+      startHeroAuto();
+    });
   }
 
   if (heroPrev) {
@@ -400,7 +553,7 @@
       hx = e.clientX;
       hy = e.clientY;
       heroSwiped = false;
-      stopHeroAuto();
+      setHeroTempPaused(true);
     });
     heroCarousel.addEventListener("pointerup", (e) => {
       if (heroPointer !== e.pointerId) return;
@@ -411,17 +564,42 @@
         heroSwiped = true;
         setHeroIndex(heroPos + (dx < 0 ? 1 : -1));
       }
-      startHeroAuto();
+      if (!heroCarousel.matches(":hover") && !heroCarousel.contains(document.activeElement)) {
+        setHeroTempPaused(false);
+      } else {
+        startHeroAuto();
+      }
     });
     heroCarousel.addEventListener("pointercancel", () => {
       heroPointer = null;
-      startHeroAuto();
+      if (!heroCarousel.matches(":hover") && !heroCarousel.contains(document.activeElement)) {
+        setHeroTempPaused(false);
+      } else {
+        startHeroAuto();
+      }
+    });
+    heroCarousel.addEventListener("pointerenter", () => setHeroTempPaused(true));
+    heroCarousel.addEventListener("pointerleave", () => {
+      if (heroPointer != null) return;
+      if (heroCarousel.contains(document.activeElement)) {
+        startHeroAuto();
+        return;
+      }
+      setHeroTempPaused(false);
+    });
+    heroCarousel.addEventListener("focusin", () => setHeroTempPaused(true));
+    heroCarousel.addEventListener("focusout", (e) => {
+      if (heroCarousel.contains(e.relatedTarget)) return;
+      if (heroPointer != null || heroCarousel.matches(":hover")) {
+        startHeroAuto();
+        return;
+      }
+      setHeroTempPaused(false);
     });
   }
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) stopHeroAuto();
-    else startHeroAuto();
+    startHeroAuto();
   });
 
   window
@@ -429,6 +607,7 @@
     .addEventListener("change", (e) => {
       reduceMotion = e.matches;
       renderGallery();
+      syncHeroPauseButton();
       startHeroAuto();
     });
 
@@ -526,24 +705,50 @@
     });
   }
 
+  function revokeBlobUrl(url) {
+    if (url && String(url).startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function revokePhotoUrls(photo) {
+    revokeBlobUrl(photo?.src);
+    if (photo?.thumb && photo.thumb !== photo.src) {
+      revokeBlobUrl(photo.thumb);
+    }
+  }
+
   async function loadCustomPhotos() {
+    const previous = customPhotos;
     try {
       const rows = await idbGetAll();
       rows.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-      customPhotos = rows.map((r) => ({
-        id: r.id,
-        src: URL.createObjectURL(r.blob),
-        thumb: URL.createObjectURL(r.blob),
-        title: r.title || "未命名",
-        caption: r.caption || "",
-        date: r.date || toLocalDate(r.createdAt || Date.now()),
-        custom: true,
-        width: Number(r.width) || 0,
-        height: Number(r.height) || 0,
-      }));
+      customPhotos = rows.map((r) => {
+        const url = URL.createObjectURL(r.blob);
+        return {
+          id: r.id,
+          src: url,
+          thumb: url,
+          title: r.title || "未命名",
+          caption: r.caption || "",
+          date: r.date || toLocalDate(r.createdAt || Date.now()),
+          custom: true,
+          fileName: r.fileName || "",
+          animated:
+            Boolean(r.animated) ||
+            Boolean(r.blob && r.blob.type === "image/gif"),
+          width: Number(r.width) || 0,
+          height: Number(r.height) || 0,
+        };
+      });
     } catch {
       customPhotos = [];
     }
+    previous.forEach(revokePhotoUrls);
     rebuildPhotos();
   }
 
@@ -555,42 +760,60 @@
     return gallery?.querySelectorAll(".card")[index]?.querySelector("img") || null;
   }
 
-  function openLightbox(index) {
-    const sourceImg = cardImageAt(index);
+  function openLightbox(index, invoker, list) {
+    lbList = list && list.length ? list : null;
+    const sourceImg = lbList ? null : cardImageAt(index);
     if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
     lbPos = index;
+    lbReturnFocus =
+      invoker ||
+      sourceImg?.closest(".card") ||
+      null;
 
     const finish = () => {
       if (sourceImg) sourceImg.style.viewTransitionName = "";
     };
 
+    const reveal = () => {
+      syncLightbox();
+      lightbox.hidden = false;
+      document.body.classList.add("lb-open");
+      setPageInert(true);
+      closeBtn.focus();
+    };
+
     if (prefersViewTransitions()) {
       const t = document.startViewTransition(() => {
         if (sourceImg) sourceImg.style.viewTransitionName = "";
-        syncLightbox();
-        lightbox.hidden = false;
-        document.body.classList.add("lb-open");
+        reveal();
         lbImg.style.viewTransitionName = "milan-lightbox-img";
       });
       t.finished.finally(finish);
     } else {
-      syncLightbox();
-      lightbox.hidden = false;
-      document.body.classList.add("lb-open");
+      reveal();
       finish();
     }
-    closeBtn.focus();
   }
 
   function closeLightbox() {
-    const sourceImg = cardImageAt(lbPos);
+    const sourceImg = lbList ? null : cardImageAt(lbPos);
+    const returnEl =
+      lbReturnFocus ||
+      sourceImg?.closest(".card") ||
+      null;
+    lbReturnFocus = null;
+    lbList = null;
+
     const restoreFocus = () => {
-      sourceImg?.closest(".card")?.focus({ preventScroll: true });
+      if (returnEl && typeof returnEl.focus === "function") {
+        returnEl.focus({ preventScroll: true });
+      }
     };
     const closeUpdate = () => {
       lbImg.style.viewTransitionName = "";
       lightbox.hidden = true;
       document.body.classList.remove("lb-open");
+      setPageInert(false);
       if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
     };
 
@@ -599,6 +822,7 @@
         lbImg.style.viewTransitionName = "";
         lightbox.hidden = true;
         document.body.classList.remove("lb-open");
+        setPageInert(false);
         if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
       });
       t.finished.finally(() => {
@@ -619,8 +843,9 @@
   }
 
   function preloadLightboxNeighbor(delta) {
-    if (!visible.length) return;
-    const next = visible[(lbPos + delta + visible.length) % visible.length];
+    const list = lightboxPhotos();
+    if (!list.length) return;
+    const next = list[(lbPos + delta + list.length) % list.length];
     const src = lightboxSrc(next);
     if (!src) return;
     const img = new Image();
@@ -630,7 +855,8 @@
   }
 
   function syncLightbox() {
-    const photo = visible[lbPos];
+    const list = lightboxPhotos();
+    const photo = list[lbPos];
     if (!photo) return;
     const titleText = displayTitle(photo, lbPos);
     lbImg.src = lightboxSrc(photo);
@@ -658,8 +884,9 @@
   }
 
   function step(delta) {
-    if (!visible.length) return;
-    lbPos = (lbPos + delta + visible.length) % visible.length;
+    const list = lightboxPhotos();
+    if (!list.length) return;
+    lbPos = (lbPos + delta + list.length) % list.length;
     syncLightbox();
   }
 
@@ -727,7 +954,7 @@
       }
 
       card.appendChild(media);
-      card.addEventListener("click", () => openLightbox(i));
+      card.addEventListener("click", () => openLightbox(i, card));
       gallery.appendChild(card);
     });
   }
@@ -903,7 +1130,11 @@
         );
         if (res.ok) {
           const data = await res.json();
-          const text = atob(String(data.content || "").replace(/\n/g, ""));
+          // GitHub Contents API 返回 base64；必须按 UTF-8 解码，裸 atob 会弄坏中文标题
+          const bin = atob(String(data.content || "").replace(/\n/g, ""));
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+          const text = new TextDecoder("utf-8").decode(bytes);
           const parsed = JSON.parse(text);
           photosList = Array.isArray(parsed) ? parsed : parsed.photos || [];
         }
@@ -918,8 +1149,16 @@
       .concat(photosList);
 
     const payload = JSON.stringify({ photos: merged }, null, 2);
-    const b64 = btoa(unescape(encodeURIComponent(payload)));
-    await ghPutFile(cfg, path, b64, "chore: update photos manifest");
+    const payloadBytes = new TextEncoder().encode(payload);
+    let bin = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < payloadBytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(
+        null,
+        payloadBytes.subarray(i, i + chunk)
+      );
+    }
+    await ghPutFile(cfg, path, btoa(bin), "chore: update photos manifest");
   }
 
   async function uploadToGitHub(file, meta) {
@@ -984,12 +1223,15 @@
           probe.onerror = () => resolve({ width: 0, height: 0 });
           probe.src = objectUrl;
         });
+        const isAnimated = working.type === "image/gif" || file.type === "image/gif";
         const record = {
           id,
           blob: working,
           title,
           caption: "",
           date,
+          fileName,
+          animated: isAnimated,
           createdAt: working.lastModified || file.lastModified || Date.now(),
           width: dims.width,
           height: dims.height,
@@ -1003,7 +1245,8 @@
           caption: "",
           date,
           custom: true,
-          animated: working.type === "image/gif" || file.type === "image/gif",
+          fileName,
+          animated: isAnimated,
           width: dims.width,
           height: dims.height,
         });
@@ -1129,8 +1372,16 @@
   });
 
   document.addEventListener("keydown", (e) => {
-    if (lightbox.hidden) return;
-    if (e.key === "Escape") closeLightbox();
+    if (!lightbox || lightbox.hidden) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeLightbox();
+      return;
+    }
+    if (e.key === "Tab") {
+      trapLightboxTab(e);
+      return;
+    }
     if (e.key === "ArrowLeft") step(-1);
     if (e.key === "ArrowRight") step(1);
   });

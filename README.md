@@ -2,6 +2,10 @@
 
 纯静态照片墙，可 GitHub Pages。图片放进 `photos/` 即可，无需改数据文件。
 
+当前视觉是**无字油画馆陈列**（艺术指导），不是浅色机构馆藏站：深墙 + 金框 + 极简导航；墙签与说明在 CSS 中刻意隐藏，DOM 仍保留标题/alt 供辅助技术读取。
+
+展厅布局是**规则网格上的金框画心**（CSS Grid + 随画比例的画框），**不是** Flickr 式 justified（等高行、按宽缩放、不裁切）；也**不**依赖 CSS masonry（2026 仍非 Baseline）。列表与灯箱均用 `contain` 完整呈现画心，极端比例时画框内侧以墙面色信箱化。
+
 ## 本地预览（推荐，自动扫描）
 
 ```powershell
@@ -68,11 +72,14 @@ tools/sync_photos.py    生成 manifest + 缩略图 + 中尺寸（Actions 使用
 ## 功能
 
 - 单行 sticky 顶栏
-- 全屏轮播（不拉伸，仅预载当前/前后张 medium）+ 等高 justified 图库 + 沉浸灯箱
+- 全屏轮播（不拉伸，仅预载当前/前后张 medium）+ **金框规则网格展厅**（非 justified）+ 沉浸灯箱
+- 轮播支持暂停/播放；焦点或悬停时自动暂停（APG Carousel）
+- 灯箱为模态对话框：Esc 关闭、Tab 焦点陷阱、背景 `inert`（APG Dialog）
 - 指针事件统一滑动（触控 / 鼠标拖拽）
 - WebP 响应式缩略图（400/800/1200 srcset）+ 中尺寸灯箱图（~1600px）+ 懒加载 + View Transitions
-- Service Worker 离线缓存（媒体 LRU 上限）+ Priority Hints（fetchpriority）
+- Service Worker 离线缓存（媒体 LRU 上限）+ Priority Hints（fetchpriority）；改前端后须抬 `sw.js` 的 `VERSION`
 - `photos/` 自动上墙（本地 serve / GitHub Actions，日期优先取 EXIF）
 - 支持 GIF / 动图：列表显示静帧 + 角标，灯箱播放原文件
 - 页面内本地上传（上传前客户端压缩为 ≤2048px WebP；GIF 保留原文件）
-- 支持 `prefers-reduced-motion`
+- 支持 `prefers-reduced-motion`（关闭自动轮播与非必要动效）
+- 展厅墙面 `sampleRoomColor()` 随画采样，并钳制墙色亮度以保证金字/象牙字对比度

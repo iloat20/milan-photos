@@ -178,7 +178,27 @@ def load_meta() -> dict:
         return {}
 
 
-def photo_item(path: Path, meta: dict) -> dict:
+def load_prev_dates() -> dict[str, str]:
+    """读取已有 manifest 的 file→date，保证入馆照片日期不再漂移。
+
+    git 不保存 mtime，CI 每次 checkout 都把文件 mtime 变成当天；
+    无 EXIF 的图若每次都从 mtime 重新推导 date，就会被改成跑 CI 的日期。
+    """
+    if not MANIFEST.exists():
+        return {}
+    try:
+        data = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    dates: dict[str, str] = {}
+    for entry in data.get("photos", []):
+        name, day = entry.get("file"), entry.get("date")
+        if isinstance(name, str) and isinstance(day, str):
+            dates[name] = day
+    return dates
+
+
+def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None) -> dict:
     name = path.name
     info = meta.get(name) or {}
     size = image_size(path)
@@ -191,7 +211,8 @@ def photo_item(path: Path, meta: dict) -> dict:
         "file": name,
         "title": info.get("title") or title_from_name(name),
         "caption": info.get("caption") or "",
-        "date": info.get("date") or photo_date(path),
+        # 回退链：手写 meta > 已入馆日期（防 CI/本机 mtime 漂移）> EXIF > mtime
+        "date": info.get("date") or (prev_dates or {}).get(name) or photo_date(path),
     }
     if animated:
         item["animated"] = True
@@ -216,4 +237,5 @@ def photo_item(path: Path, meta: dict) -> dict:
 
 def build_photos() -> list[dict]:
     meta = load_meta()
-    return [photo_item(p, meta) for p in list_photo_files()]
+    prev_dates = load_prev_dates()
+    return [photo_item(p, meta, prev_dates) for p in list_photo_files()]

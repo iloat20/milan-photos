@@ -404,25 +404,44 @@ code {
   color: var(--gilt-bright);
 }
 
+/* 按钮本体 24×24 满足触摸目标（WCAG 2.5.8），5px 微点视觉交给 ::before 绘制 */
 .hero-carousel-dot {
   appearance: none;
   border: 0;
-  width: 5px;
-  height: 5px;
+  position: relative;
+  width: 24px;
+  height: 24px;
   padding: 0;
+  margin: 0;
   border-radius: 0;
-  background: rgba(240, 234, 216, 0.22);
+  background: transparent;
   cursor: pointer;
   touch-action: manipulation;
+}
+
+.hero-carousel-dot::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px;
+  height: 5px;
+  background: rgba(240, 234, 216, 0.22);
   transition: width 0.3s var(--ease), background 0.3s var(--ease);
 }
 
-.hero-carousel-dot.is-active {
+.hero-carousel-dot.is-active::before {
   width: 20px;
   background: var(--gilt);
 }
 
+/* 焦点框画回微点本身，维持原有视觉 */
 .hero-carousel-dot:focus-visible {
+  outline: none;
+}
+
+.hero-carousel-dot:focus-visible::before {
   outline: 2px solid var(--gilt);
   outline-offset: 3px;
 }

@@ -1,5 +1,5 @@
 (() => {
-  /** @type {{src:string,thumb?:string,thumbSrcset?:string,medium?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,custom?:boolean,width?:number,height?:number}[]} */
+  /** @type {{src:string,thumb?:string,thumbSrcset?:string,medium?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,fileName?:string,custom?:boolean,width?:number,height?:number}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -16,9 +16,7 @@
   const emptyEl = document.getElementById("empty");
   const lightbox = document.getElementById("lightbox");
   const lbImg = document.getElementById("lbImg");
-  const lbIndex = document.getElementById("lbIndex");
   const lbTitle = document.getElementById("lbTitle");
-  const lbCaption = document.getElementById("lbCaption");
   const prevBtn = document.getElementById("prev");
   const nextBtn = document.getElementById("next");
   const closeBtn = document.getElementById("close");
@@ -226,9 +224,12 @@
   }
 
   function preloadImage(href) {
-    if (!href || document.head.querySelector(`link[rel="preload"][href="${href}"]`)) {
-      return;
-    }
+    if (!href) return;
+    // 用属性比较而非拼选择器：href 含引号会让 querySelector 抛 SyntaxError，
+    // 而这里在 loadFolderPhotos 的 try 内，异常会连带把整个图库清空
+    const already = [...document.head.querySelectorAll('link[rel="preload"][as="image"]')]
+      .some((l) => l.getAttribute("href") === href);
+    if (already) return;
     const link = document.createElement("link");
     link.rel = "preload";
     link.as = "image";
@@ -424,8 +425,8 @@
     if (heroDots) {
       [...heroDots.children].forEach((dot, i) => {
         dot.classList.toggle("is-active", i === heroPos);
-        dot.setAttribute("aria-selected", i === heroPos ? "true" : "false");
-        dot.setAttribute("aria-current", i === heroPos ? "true" : "false");
+        if (i === heroPos) dot.setAttribute("aria-current", "true");
+        else dot.removeAttribute("aria-current");
       });
     }
     applyHeroSources();
@@ -501,9 +502,8 @@
         const dot = document.createElement("button");
         dot.type = "button";
         dot.className = "hero-carousel-dot" + (i === 0 ? " is-active" : "");
-        dot.setAttribute("role", "tab");
         dot.setAttribute("aria-label", `第 ${i + 1} 张`);
-        dot.setAttribute("aria-selected", i === 0 ? "true" : "false");
+        if (i === 0) dot.setAttribute("aria-current", "true");
         dot.addEventListener("click", (e) => {
           e.stopPropagation();
           setHeroIndex(i);
@@ -546,6 +546,25 @@
     let hx = 0;
     let hy = 0;
     let heroPointer = null;
+
+    // 只有键盘焦点（:focus-visible）才算「用户在用键盘看轮播」：
+    // 触屏/鼠标点按产生的焦点不该长期压住自动轮播，否则触屏点开灯箱、
+    // 关闭后焦点还给 slide 时没有可见的移出方式，轮播会一直停着
+    const keyboardFocusInHero = () => {
+      const el = document.activeElement;
+      return Boolean(el) && heroCarousel.contains(el) && el.matches(":focus-visible");
+    };
+
+    // 按压结束后的恢复：键盘焦点在内→保持焦点暂停；鼠标仍悬停→保持悬停暂停；
+    // 触屏/笔没有持续悬停状态，抬起即恢复，不依赖可能缺失的 pointerleave
+    const resumeAfterPress = (e) => {
+      if (keyboardFocusInHero() || (e.pointerType === "mouse" && heroCarousel.matches(":hover"))) {
+        startHeroAuto();
+      } else {
+        setHeroTempPaused(false);
+      }
+    };
+
     heroCarousel.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       if (e.isPrimary === false) return;
@@ -564,30 +583,24 @@
         heroSwiped = true;
         setHeroIndex(heroPos + (dx < 0 ? 1 : -1));
       }
-      if (!heroCarousel.matches(":hover") && !heroCarousel.contains(document.activeElement)) {
-        setHeroTempPaused(false);
-      } else {
-        startHeroAuto();
-      }
+      resumeAfterPress(e);
     });
-    heroCarousel.addEventListener("pointercancel", () => {
+    heroCarousel.addEventListener("pointercancel", (e) => {
       heroPointer = null;
-      if (!heroCarousel.matches(":hover") && !heroCarousel.contains(document.activeElement)) {
-        setHeroTempPaused(false);
-      } else {
-        startHeroAuto();
-      }
+      resumeAfterPress(e);
     });
     heroCarousel.addEventListener("pointerenter", () => setHeroTempPaused(true));
     heroCarousel.addEventListener("pointerleave", () => {
       if (heroPointer != null) return;
-      if (heroCarousel.contains(document.activeElement)) {
+      if (keyboardFocusInHero()) {
         startHeroAuto();
         return;
       }
       setHeroTempPaused(false);
     });
-    heroCarousel.addEventListener("focusin", () => setHeroTempPaused(true));
+    heroCarousel.addEventListener("focusin", () => {
+      if (keyboardFocusInHero()) setHeroTempPaused(true);
+    });
     heroCarousel.addEventListener("focusout", (e) => {
       if (heroCarousel.contains(e.relatedTarget)) return;
       if (heroPointer != null || heroCarousel.matches(":hover")) {
@@ -621,9 +634,9 @@
     );
 
     if (!options.some((o) => o.id === activeFilter)) {
+      // 该月份已不在馆藏里：退回全部，并同步 visible 供 renderGallery 使用
       activeFilter = "all";
-      if (activeFilter === "all") visible = photos.slice();
-      else visible = photos.filter((p) => ymKey(p.date) === activeFilter);
+      visible = photos.slice();
     }
 
     options.forEach((opt) => {
@@ -646,19 +659,25 @@
       if (!res.ok) throw new Error("manifest missing");
       const data = await res.json();
       const list = Array.isArray(data) ? data : data.photos || [];
-      folderPhotos = list.map((item, i) => ({
-        src: item.src || item.file || `photos/${item}`,
-        thumb: item.thumb || item.src || item.file || `photos/${item}`,
-        thumbSrcset: item.thumbSrcset || "",
-        medium: item.medium || "",
-        animated: Boolean(item.animated),
-        title: item.title || "未命名",
-        caption: item.caption || "",
-        date: item.date || "",
-        id: item.file || item.src || `f${i}`,
-        width: Number(item.width) || 0,
-        height: Number(item.height) || 0,
-      }));
+      folderPhotos = list.map((item, i) => {
+        const src = item.src || item.file || `photos/${item}`;
+        return {
+          src,
+          thumb: item.thumb || src,
+          thumbSrcset: item.thumbSrcset || "",
+          medium: item.medium || "",
+          animated: Boolean(item.animated),
+          title: item.title || "未命名",
+          caption: item.caption || "",
+          date: item.date || "",
+          // file 必须保留：rebuildPhotos 靠 baseFileName(file/fileName)
+          // 按文件名去重 folder 与 custom，缺了它去重会整体失效
+          file: item.file || String(src).split("/").pop(),
+          id: item.file || item.src || `f${i}`,
+          width: Number(item.width) || 0,
+          height: Number(item.height) || 0,
+        };
+      });
       if (folderPhotos[0]) {
         preloadImage(heroSrc(folderPhotos[0]));
       }
@@ -687,22 +706,30 @@
 
   async function idbPut(record) {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(record);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).put(record);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } finally {
+      db.close();
+    }
   }
 
   async function idbGetAll() {
     const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readonly");
-      const req = tx.objectStore(STORE).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => reject(req.error);
-    });
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, "readonly");
+        const req = tx.objectStore(STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    } finally {
+      db.close();
+    }
   }
 
   function revokeBlobUrl(url) {
@@ -862,10 +889,6 @@
     lbImg.src = lightboxSrc(photo);
     lbImg.alt = titleText;
     if (lbTitle) lbTitle.textContent = "";
-    if (lbCaption) lbCaption.textContent = "";
-    if (lbIndex) lbIndex.textContent = "";
-    const lbMedium = document.getElementById("lbMedium");
-    if (lbMedium) lbMedium.textContent = "";
     applyRoomToLightbox(null);
     const frame = lightbox?.querySelector(".lightbox-frame");
     if (frame) {
@@ -1114,33 +1137,35 @@
 
   async function ghUpdateManifest(cfg, newItems) {
     const path = "photos/manifest.json";
+    // 读取失败必须中止本次写入：一旦用空清单合并，会把远端 manifest
+    // 覆盖成只剩本次新图，历史记录全部丢失。404（首次创建）才允许空清单。
+    const sha = await ghGetFileSha(cfg, path);
     let photosList = [];
-    try {
-      const sha = await ghGetFileSha(cfg, path);
-      if (sha) {
-        const res = await fetch(
-          `https://api.github.com/repos/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${cfg.token}`,
-              Accept: "application/vnd.github+json",
-              "X-GitHub-Api-Version": "2022-11-28",
-            },
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          // GitHub Contents API 返回 base64；必须按 UTF-8 解码，裸 atob 会弄坏中文标题
-          const bin = atob(String(data.content || "").replace(/\n/g, ""));
-          const bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
-          const text = new TextDecoder("utf-8").decode(bytes);
-          const parsed = JSON.parse(text);
-          photosList = Array.isArray(parsed) ? parsed : parsed.photos || [];
+    if (sha) {
+      const res = await fetch(
+        `https://api.github.com/repos/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${cfg.token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
         }
+      );
+      if (!res.ok) throw new Error(`读取远端清单失败 (${res.status})，已中止写入`);
+      const data = await res.json();
+      let parsed;
+      try {
+        // GitHub Contents API 返回 base64；必须按 UTF-8 解码，裸 atob 会弄坏中文标题
+        const bin = atob(String(data.content || "").replace(/\n/g, ""));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+        const text = new TextDecoder("utf-8").decode(bytes);
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error("远端清单解析失败，已中止写入以免覆盖历史记录");
       }
-    } catch {
-      photosList = [];
+      photosList = Array.isArray(parsed) ? parsed : parsed.photos || [];
     }
 
     const existing = new Set(photosList.map((p) => p.src || p.file));
@@ -1197,9 +1222,13 @@
     const ghReady = Boolean(loadGhConfig()?.token);
     let okLocal = 0;
     let okGh = 0;
+    let ghFail = 0;
     let fail = 0;
 
     for (const file of files) {
+      // 本张图的 blob URL；入藏 customPhotos 后转移所有权并置空，
+      // 没转移就失败时由 catch 回收，避免反复失败累积泄漏
+      let objectUrl = "";
       try {
         if (file.size > 25 * 1024 * 1024) {
           fail += 1;
@@ -1215,7 +1244,7 @@
         const date = toLocalDate(working.lastModified || file.lastModified || Date.now());
         const title = stripExt(file.name) || "新照片";
         const fileName = safeFileName(working);
-        const objectUrl = URL.createObjectURL(working);
+        objectUrl = URL.createObjectURL(working);
         const dims = await new Promise((resolve) => {
           const probe = new Image();
           probe.onload = () =>
@@ -1250,22 +1279,31 @@
           width: dims.width,
           height: dims.height,
         });
+        // URL 已交给 customPhotos 持有，失败路径不再回收
+        objectUrl = "";
         okLocal += 1;
 
         if (ghReady) {
           setStatus(`正在同步到 GitHub：${file.name}…`);
-          await uploadToGitHub(working, {
-            fileName,
-            title,
-            caption: "",
-            date,
-            width: dims.width,
-            height: dims.height,
-          });
-          okGh += 1;
+          // 远端失败单独计数：本机已存成功，不该和本地失败混为一谈
+          try {
+            await uploadToGitHub(working, {
+              fileName,
+              title,
+              caption: "",
+              date,
+              width: dims.width,
+              height: dims.height,
+            });
+            okGh += 1;
+          } catch (err) {
+            ghFail += 1;
+            if (err && err.message) setStatus(err.message, true);
+          }
         }
       } catch (err) {
         fail += 1;
+        if (objectUrl) revokeBlobUrl(objectUrl);
         if (err && err.message) setStatus(err.message, true);
       }
     }
@@ -1273,9 +1311,11 @@
     rebuildPhotos();
 
     if (ghReady && okGh) {
-      setStatus(
-        `本机 +${okLocal} 张，GitHub +${okGh} 张。Pages 会在 Actions 构建后更新（约 1 分钟）。`
-      );
+      let msg = `本机 +${okLocal} 张，GitHub +${okGh} 张。Pages 会在 Actions 构建后更新（约 1 分钟）。`;
+      if (ghFail) msg += ` 另有 ${ghFail} 张远端同步失败，已在本机保留。`;
+      setStatus(msg, Boolean(ghFail || fail));
+    } else if (okLocal && ghFail) {
+      setStatus(`本机 +${okLocal} 张已保存，但 GitHub 同步失败 ${ghFail} 张，请稍后重试。`, true);
     } else if (okLocal && !fail) {
       setStatus(`已在本机添加 ${okLocal} 张（未配置 GitHub Token，仅本机可见）。`);
     } else if (okLocal && fail) {

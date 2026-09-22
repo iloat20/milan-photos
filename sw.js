@@ -1,5 +1,5 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v18";
+const VERSION = "milan-v19";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
@@ -101,7 +101,9 @@ async function networkFirst(request) {
   try {
     const response = await fetch(request);
     if (response && response.ok) {
-      await putMedia(request, response.clone());
+      // 清单存壳层缓存：不占媒体 LRU 名额，免得每次刷新清单挤掉一张图
+      const cache = await caches.open(CACHE_SHELL);
+      await cache.put(request, response.clone());
     }
     return response;
   } catch {
@@ -111,48 +113,55 @@ async function networkFirst(request) {
   }
 }
 
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(CACHE_SHELL);
-  const cached = await cache.match(request, { ignoreSearch: true });
-  const network = fetch(request)
-    .then((response) => {
-      if (response && response.ok && response.type === "basic") {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
+/* SWR 拆成「应答」和「后台刷新」两个 Promise：
+   刷新必须在 fetch 事件的同步阶段交给 event.waitUntil()，
+   否则是浮动 Promise，SW 随时可能被回收，缓存更新半途而废。 */
+function shellSwr(request) {
+  const cacheP = caches.open(CACHE_SHELL);
+  const revalidate = cacheP
+    .then((cache) =>
+      fetch(request).then(async (response) => {
+        if (response && response.ok && response.type === "basic") {
+          await cache.put(request, response.clone());
+        }
+        return response;
+      })
+    )
     .catch(() => null);
 
-  if (cached) {
-    network.then(() => {});
-    return cached;
-  }
-  const response = await network;
-  if (response) return response;
-  const fallback = await caches.match("./index.html");
-  if (fallback) return fallback;
-  return Response.error();
+  const serve = cacheP.then(async (cache) => {
+    const cached = await cache.match(request, { ignoreSearch: true });
+    if (cached) return cached;
+    const response = await revalidate;
+    if (response) return response;
+    const fallback = await caches.match("./index.html");
+    if (fallback) return fallback;
+    return Response.error();
+  });
+
+  return { serve, revalidate };
 }
 
-async function thumbStaleWhileRevalidate(request) {
-  const cache = await caches.open(CACHE_MEDIA);
-  const cached = await cache.match(request, { ignoreSearch: true });
-  const network = fetch(request)
-    .then(async (response) => {
-      if (response && response.ok && response.type === "basic") {
-        await putMedia(request, response.clone());
-      }
-      return response;
-    })
+function thumbSwr(request) {
+  const cacheP = caches.open(CACHE_MEDIA);
+  const revalidate = cacheP
+    .then((cache) =>
+      fetch(request).then(async (response) => {
+        if (response && response.ok && response.type === "basic") {
+          await putMedia(request, response.clone());
+        }
+        return response;
+      })
+    )
     .catch(() => null);
 
-  if (cached) {
-    network.then(() => {});
-    return cached;
-  }
-  const response = await network;
-  if (response) return response;
-  return Response.error();
+  const serve = cacheP.then(async (cache) => {
+    const cached = await cache.match(request, { ignoreSearch: true });
+    if (cached) return cached;
+    return (await revalidate) || Response.error();
+  });
+
+  return { serve, revalidate };
 }
 
 self.addEventListener("fetch", (event) => {
@@ -168,7 +177,9 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isThumbRequest(url)) {
-    event.respondWith(thumbStaleWhileRevalidate(request));
+    const { serve, revalidate } = thumbSwr(request);
+    event.respondWith(serve);
+    event.waitUntil(revalidate);
     return;
   }
 
@@ -178,6 +189,8 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (isShellRequest(url) || request.mode === "navigate") {
-    event.respondWith(staleWhileRevalidate(request));
+    const { serve, revalidate } = shellSwr(request);
+    event.respondWith(serve);
+    event.waitUntil(revalidate);
   }
 });

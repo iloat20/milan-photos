@@ -1,0 +1,16 @@
+{
+  "name": "米兰美术馆 · 油画展厅",
+  "short_name": "米兰美术馆",
+  "description": "油画式摄影陈列：重点陈列轮播、展厅索引与库房入藏。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1f2a24",
+  "theme_color": "#1f2a24",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

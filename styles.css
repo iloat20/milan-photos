@@ -23,6 +23,8 @@
   --display: "Songti SC", "Source Han Serif SC", "Noto Serif SC", "STSong",
     "SimSun", Georgia, "Times New Roman", serif;
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  /* 系统控件/滚动条跟随暗色（另在 <meta name="color-scheme"> 声明） */
+  color-scheme: dark;
   --frame:
     0 0 0 1px rgba(42, 36, 24, 0.55),
     0 0 0 3px var(--gilt-dark),
@@ -1529,6 +1531,28 @@ body.lb-open {
 
 .filter-chip.is-active {
   color: var(--gilt-bright);
+}
+
+/* —— 排版细节 —— */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+/* 屏外区块跳过渲染，contain-intrinsic 的 auto 记住已渲染高度避免跳动 */
+.upload-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 560px;
+}
+
+.footer {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 140px;
 }
 
 @media (prefers-reduced-motion: reduce) {

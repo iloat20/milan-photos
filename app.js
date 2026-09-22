@@ -16,6 +16,7 @@
   const gallery = document.getElementById("galleryGrid");
   const filterBar = document.getElementById("filterBar");
   const emptyEl = document.getElementById("empty");
+  const skeletonEl = document.getElementById("gallerySkeleton");
   const lightbox = document.getElementById("lightbox");
   const lbImg = document.getElementById("lbImg");
   const lbTitle = document.getElementById("lbTitle");
@@ -688,6 +689,7 @@
     }
     // 数据到达（无论成败）后才允许显示空状态
     galleryReady = true;
+    if (skeletonEl) skeletonEl.hidden = true;
     rebuildPhotos();
   }
 
@@ -927,10 +929,20 @@
       card.type = "button";
       card.className = "card";
       const titleText = displayTitle(photo, i);
-      card.setAttribute("aria-label", `观展：${titleText}`);
+      const wallNo = wallNumber(Math.max(0, photos.indexOf(photo)));
+      // accessible name 需覆盖卡片内全部可见文本（图注编号 + 标题），否则 axe label-content-name-mismatch
+      card.setAttribute("aria-label", `观展：${wallNo} ${titleText}`);
 
       const media = document.createElement("div");
       media.className = "card-media";
+
+      // 墙签浮层：默认无字陈列，hover/键盘聚焦才浮现。
+      // 单一文本节点：多节点列布局会被 axe 提取为 \n 分隔的可见文本，与 aria-label 无法匹配
+      const anno = document.createElement("div");
+      anno.className = "card-anno";
+      anno.setAttribute("aria-hidden", "true");
+      anno.textContent = `${wallNo} ${titleText}`;
+      media.appendChild(anno);
 
       const img = document.createElement("img");
       img.src = photo.thumb || photo.src;

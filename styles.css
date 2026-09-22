@@ -1,3 +1,25 @@
+@layer reset, base, components, sections, responsive;
+
+/* 注册采样色为类型化颜色：JS setProperty 的色值可平滑插值 */
+@property --card-wall {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #2a2418;
+}
+
+@property --card-glow {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(201, 169, 106, 0.18);
+}
+
+@property --card-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(201, 169, 106, 0.28);
+}
+
+@layer base {
 /* 米兰美术馆 — 油画展厅 */
 :root {
   --room: #1f2a24;
@@ -39,11 +61,17 @@
     0 10px 28px rgba(0, 0, 0, 0.4);
 }
 
+}
+
+@layer reset {
 *,
 *::before,
 *::after {
   box-sizing: border-box;
 }
+}
+
+@layer base {
 
 html {
   scroll-behavior: smooth;
@@ -82,6 +110,9 @@ code {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.9em;
 }
+}
+
+@layer components {
 
 /* —— 馆名顶栏 —— */
 .site-nav {
@@ -605,6 +636,9 @@ code {
   outline-offset: 3px;
 }
 
+}
+
+@layer sections {
 /* —— Chapters —— */
 .chapter-room {
   background: var(--room);
@@ -1087,6 +1121,9 @@ code {
   letter-spacing: 0.18em;
 }
 
+}
+
+@layer components {
 /* —— 观画室 —— */
 .lightbox {
   position: fixed;
@@ -1320,6 +1357,9 @@ body.lb-open {
   touch-action: none;
 }
 
+}
+
+@layer responsive {
 /* —— Responsive —— */
 @media (max-width: 834px) {
   .gallery-section {
@@ -1580,5 +1620,172 @@ p {
   .card-media::before,
   .hero-art::after {
     opacity: 0.5;
+  }
+}
+
+}
+
+/* —— 现代特性与质感（追加区，归 sections 层：需覆盖 sections 内的 card/chapter 基础规则） —— */
+@layer sections {
+  /* 章节题 sticky：滚动时常驻，渐变底色避免与卡片叠字 */
+  .chapter-head {
+    position: sticky;
+    top: calc(var(--nav-h) + 6px);
+    z-index: 4;
+  }
+
+  .chapter-head::before {
+    content: "";
+    position: absolute;
+    inset: -16px -40px -30px;
+    background: linear-gradient(to bottom, var(--room) 62%, transparent 100%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* 章节竖排小字（右缘装饰） */
+  .gallery-section,
+  .about,
+  .upload-section {
+    position: relative;
+  }
+
+  .chapter-vert {
+    position: absolute;
+    top: 104px;
+    right: 22px;
+    writing-mode: vertical-rl;
+    font-family: var(--display);
+    font-size: 11px;
+    letter-spacing: 0.4em;
+    /* 装饰字仍需过 AA（axe 对 aria-hidden 文本照测对比度）：gilt 对各深绿底 ≥ 6 */
+    color: var(--gilt);
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* 卡片 hover 升级：金框提亮 + 光晕增强 */
+  .card:hover .card-media,
+  .card:focus-visible .card-media {
+    border-color: var(--gilt);
+    box-shadow:
+      0 0 0 1px rgba(42, 36, 24, 0.35),
+      0 16px 36px color-mix(in oklab, var(--card-glow) 62%, rgba(201, 169, 106, 0.42));
+  }
+
+  /* 墙签浮层：默认无字，hover/键盘聚焦浮现 */
+  .card-anno {
+    position: absolute;
+    inset: auto 0 0 0;
+    z-index: 1;
+    padding: 16px 13px 11px;
+    background: linear-gradient(to bottom, transparent, rgba(14, 18, 16, 0.92) 64%);
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    color: var(--ivory);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
+    pointer-events: none;
+  }
+
+  .card:hover .card-anno,
+  .card:focus-visible .card-anno {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* 首屏骨架：manifest 未到时占位，数据到达后隐藏 */
+  .gallery-skeleton {
+    max-width: var(--max-wide);
+    margin: 0 auto;
+    padding: 28px 40px 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 64px 40px;
+  }
+
+  .gallery-skeleton span {
+    display: block;
+    aspect-ratio: 4 / 3;
+    background: linear-gradient(
+      110deg,
+      var(--room-soft) 32%,
+      color-mix(in oklab, var(--room-soft), var(--gilt) 12%) 48%,
+      var(--room-soft) 64%
+    );
+    background-size: 220% 100%;
+    animation: skeleton-shimmer 1.5s linear infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    to {
+      background-position: -220% 0;
+    }
+  }
+
+  .gallery-skeleton[hidden] {
+    display: none;
+  }
+
+  /* 颗粒噪点：整站质感（SVG turbulence，固定层） */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    pointer-events: none;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* 滚动渐显（view timeline），不支持的浏览器自动跳过 */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .card {
+        animation: card-rise linear both;
+        animation-timeline: view();
+        animation-range: entry 0% entry 70%;
+      }
+
+      @keyframes card-rise {
+        from {
+          opacity: 0;
+          transform: translateY(22px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+    }
+  }
+
+  /* 动效与输入适配 */
+  @media (prefers-reduced-motion: reduce) {
+    .card-anno,
+    .card-media {
+      transition: none;
+    }
+
+    .gallery-skeleton span {
+      animation: none;
+    }
+  }
+
+  @media (hover: none) {
+    .card-anno {
+      display: none;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .chapter-vert {
+      display: none;
+    }
   }
 }

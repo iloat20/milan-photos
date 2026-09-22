@@ -1444,7 +1444,9 @@ body.lb-open {
   }
 }
 
-/* —— 无字陈列：只留金框画 —— */
+/* —— 无字陈列：只留金框画 ——
+   只隐藏文案装饰；功能性 UI（.upload-status 反馈、.gh-panel 同步设置、
+   .empty 空状态引导）必须可见，否则上传/同步流程不可达。 */
 .chapter-kicker,
 .chapter-sub,
 .hero-kicker,
@@ -1456,12 +1458,9 @@ body.lb-open {
 .lb-medium,
 .lightbox-meta,
 .upload-sub,
-.upload-status,
-.gh-panel,
 .footer-note,
 .footer-museum-en,
-.filter-bar::before,
-.empty {
+.filter-bar::before {
   display: none !important;
 }
 

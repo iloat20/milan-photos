@@ -105,20 +105,17 @@ def _write_webp_variant(src: Path, out_dir: Path, max_edge: int, quality: int) -
         return None
 
 
-def ensure_thumb(src: Path) -> str | None:
-    """Generate photos/thumbs/<stem>.webp if missing; return web path or None."""
-    return _write_webp_variant(src, THUMBS, THUMB_MAX_EDGE, THUMB_QUALITY)
+def ensure_thumb_set(src: Path) -> dict[str, tuple[str, int]]:
+    """生成 400/800/1200 档缩略图；返回 {档位: (相对路径, 实际像素宽)}。
 
-
-def ensure_thumb_set(src: Path) -> dict[str, str]:
-    """生成 400/800/1200 档缩略图；小档文件名 <stem>-<edge>.webp。"""
-    out: dict[str, str] = {}
+    小图不放大，三档可能同尺寸——srcset 必须按实际宽度声明，
+    虚报 400w/800w/1200w 会让浏览器选错档、把小图放大到模糊。
+    """
+    out: dict[str, tuple[str, int]] = {}
     try:
         from PIL import Image, ImageOps
     except ImportError:
-        path = ensure_thumb(src)
-        if path:
-            out["1200"] = path
+        # 无 Pillow 时同样生成不了缩略图，等同无输出
         return out
 
     THUMBS.mkdir(parents=True, exist_ok=True)
@@ -134,7 +131,11 @@ def ensure_thumb_set(src: Path) -> dict[str, str]:
                     if im.mode not in ("RGB", "RGBA"):
                         im = im.convert("RGB")
                     im.save(out_path, "WEBP", quality=THUMB_QUALITY, method=6)
-            out[str(edge)] = out_path.relative_to(ROOT).as_posix()
+                    out[str(edge)] = (out_path.relative_to(ROOT).as_posix(), int(im.width))
+            else:
+                size = image_size(out_path)
+                if size:
+                    out[str(edge)] = (out_path.relative_to(ROOT).as_posix(), int(size[0]))
         except Exception:
             continue
     return out
@@ -195,11 +196,17 @@ def photo_item(path: Path, meta: dict) -> dict:
     if animated:
         item["animated"] = True
     if thumbs.get("1200"):
-        item["thumb"] = thumbs["1200"]
-    if thumbs.get("400") and thumbs.get("800") and thumbs.get("1200"):
-        item["thumbSrcset"] = ", ".join(
-            f"{thumbs[edge]} {edge}w" for edge in ("400", "800", "1200")
-        )
+        item["thumb"] = thumbs["1200"][0]
+        # srcset 按每档实际像素宽声明并同宽去重（小图三档内容相同）
+        seen: dict[int, str] = {}
+        for edge in sorted(thumbs, key=int):
+            rel, width = thumbs[edge]
+            if width > 0 and width not in seen:
+                seen[width] = rel
+        if seen:
+            item["thumbSrcset"] = ", ".join(
+                f"{rel} {width}w" for width, rel in sorted(seen.items())
+            )
     if medium:
         item["medium"] = medium
     if size:

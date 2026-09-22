@@ -30,7 +30,7 @@
     <button class="hero-carousel-arrow hero-carousel-prev" id="heroPrev" type="button" aria-label="上一件">‹</button>
     <button class="hero-carousel-arrow hero-carousel-next" id="heroNext" type="button" aria-label="下一件">›</button>
     <div class="hero-carousel-controls">
-      <div class="hero-carousel-dots" id="heroCarouselDots" role="tablist" aria-label="重点陈列页码"></div>
+      <div class="hero-carousel-dots" id="heroCarouselDots" role="group" aria-label="重点陈列页码"></div>
       <button class="hero-carousel-pause" id="heroPause" type="button" aria-label="暂停自动轮播" aria-pressed="false" hidden>
         <span class="hero-pause-glyph" aria-hidden="true">‖</span>
       </button>
@@ -43,7 +43,7 @@
         <h2 class="chapter-title">展厅</h2>
       </div>
       <div class="filter-bar" id="filterBar" role="toolbar" aria-label="展厅索引"></div>
-      <div class="gallery" id="galleryGrid" aria-live="polite"></div>
+      <div class="gallery" id="galleryGrid"></div>
       <p class="empty" id="empty" hidden>展厅尚未布展。将图片放入 <code>photos/</code> 后刷新，或到库房登记入藏。</p>
     </section>
 

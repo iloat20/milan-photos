@@ -8,6 +8,8 @@
   /** @type {typeof folderPhotos} */
   let visible = [];
   let activeFilter = "all";
+  // manifest 到达前不展示空状态，避免首屏闪现「展厅尚未布展」
+  let galleryReady = false;
   let lbPos = 0;
   let reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -684,6 +686,8 @@
     } catch {
       folderPhotos = [];
     }
+    // 数据到达（无论成败）后才允许显示空状态
+    galleryReady = true;
     rebuildPhotos();
   }
 
@@ -916,7 +920,7 @@
   function renderGallery() {
     if (!gallery) return;
     gallery.innerHTML = "";
-    emptyEl.hidden = visible.length > 0;
+    emptyEl.hidden = !galleryReady || visible.length > 0;
 
     visible.forEach((photo, i) => {
       const card = document.createElement("button");

@@ -9,7 +9,8 @@
   --gilt-liner: #2a2418;
   --ivory: #f0ead8;
   --ivory-dim: #cfc6b0;
-  --haze: #9a927e;
+  /* 提亮一档保证对比度：--room 5.8 / --room-deep 6.8 / --room-soft 5.2（均 ≥ AA 4.5） */
+  --haze: #aaa28d;
   --rule: rgba(201, 169, 106, 0.28);
   --rule-soft: rgba(240, 234, 216, 0.12);
   --night: #0e1210;

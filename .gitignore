@@ -14,4 +14,13 @@ Thumbs.db
 *.local
 .playwright-cli/
 output/
-.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Node / 工程化
+node_modules/
+.lighthouseci/
+test-results/
+playwright-report/

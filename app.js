@@ -225,7 +225,7 @@
     renderHeroCarousel();
   }
 
-  function preloadImage(href) {
+  function preloadImage(href, priority = "high") {
     if (!href) return;
     // 用属性比较而非拼选择器：href 含引号会让 querySelector 抛 SyntaxError，
     // 而这里在 loadFolderPhotos 的 try 内，异常会连带把整个图库清空
@@ -236,7 +236,7 @@
     link.rel = "preload";
     link.as = "image";
     link.href = href;
-    link.setAttribute("fetchpriority", "high");
+    link.setAttribute("fetchpriority", priority);
     document.head.appendChild(link);
   }
 
@@ -982,6 +982,10 @@
 
       card.appendChild(media);
       card.addEventListener("click", () => openLightbox(i, card));
+      // hover/聚焦即预载灯箱中图，点开「瞬出」（light rel preload 自带去重）
+      const prefetchLightbox = () => preloadImage(lightboxSrc(photo), "auto");
+      card.addEventListener("pointerenter", prefetchLightbox, { once: true });
+      card.addEventListener("focus", prefetchLightbox, { once: true });
       gallery.appendChild(card);
     });
   }

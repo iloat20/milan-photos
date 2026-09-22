@@ -1,10 +1,10 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v19";
+const VERSION = "milan-v20";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
 
-const SHELL_ASSETS = ["./", "./index.html", "./styles.css", "./app.js"];
+const SHELL_ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

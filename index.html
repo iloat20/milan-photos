@@ -78,15 +78,20 @@
 
   <main>
     <section class="gallery-section chapter-room" id="gallery">
+      <span class="chapter-vert" aria-hidden="true">展厅</span>
       <div class="chapter-head">
         <h2 class="chapter-title">展厅</h2>
       </div>
       <div class="filter-bar" id="filterBar" role="toolbar" aria-label="展厅索引"></div>
+      <div class="gallery-skeleton" id="gallerySkeleton" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
       <div class="gallery" id="galleryGrid"></div>
       <p class="empty" id="empty" hidden>展厅尚未布展。将图片放入 <code>photos/</code> 后刷新，或到库房登记入藏。</p>
     </section>
 
     <section class="about chapter-room-deep" id="about">
+      <span class="chapter-vert" aria-hidden="true">前言</span>
       <div class="about-inner">
         <h2 class="about-title">像油画一样<br />被观看。</h2>
         <a class="btn btn-text" href="#gallery">进入展厅</a>
@@ -94,6 +99,7 @@
     </section>
 
     <section class="upload-section" id="upload">
+      <span class="chapter-vert" aria-hidden="true">库房</span>
       <div class="upload-inner">
         <h2 class="upload-title" id="archive">库房</h2>
         <button class="btn btn-outline" type="button" id="addPhotoBtn">登记入藏</button>

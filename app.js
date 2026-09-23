@@ -248,12 +248,56 @@
     return keys;
   }
 
-  function applyFilter() {
+  /* —— URL hash 深链：#f=<年月> 筛选 / #p=<photo.id> 灯箱；纯锚点（#gallery 等）不干预 —— */
+  const HASH_FILTER_RE = /^f=(\d{4}-\d{2})$/;
+  const HASH_PHOTO_RE = /^p=(.+)$/;
+
+  function setHash(hash) {
+    // replaceState 不触发 hashchange，避免读写互激
+    const base = location.href.split("#")[0];
+    history.replaceState(null, "", hash ? base + "#" + hash : base);
+  }
+
+  function currentFilterHash() {
+    return activeFilter === "all" ? "" : "f=" + encodeURIComponent(activeFilter);
+  }
+
+  function openLightboxFromHash(key) {
+    const inVisible = visible.findIndex((p) => p.id === key);
+    if (inVisible >= 0) {
+      openLightbox(inVisible, null);
+      return;
+    }
+    // 筛选不含该画时按全量馆藏打开，与 hero 点击行为一致
+    const allIdx = photos.findIndex((p) => p.id === key);
+    if (allIdx >= 0) openLightbox(allIdx, null, photos);
+  }
+
+  window.addEventListener("hashchange", () => {
+    const hm = location.hash.slice(1);
+    const fm = hm.match(HASH_FILTER_RE);
+    if (fm) {
+      if (fm[1] !== activeFilter) {
+        activeFilter = fm[1];
+        applyFilter(true); // 非法年月由 renderFilters 兜底退 all 并清 hash
+      }
+      return;
+    }
+    const pm = hm.match(HASH_PHOTO_RE);
+    if (pm && !lightbox.open) {
+      openLightboxFromHash(decodeURIComponent(pm[1]));
+    }
+    // 纯锚点交给浏览器默认滚动
+  });
+
+  function applyFilter(syncHash) {
     const update = () => {
       if (activeFilter === "all") visible = photos.slice();
       else visible = photos.filter((p) => ymKey(p.date) === activeFilter);
       renderFilters();
       renderGallery();
+      // 用户点 chip 才同步 #f 深链；初始/rebuild 调用不传，避免顶掉 URL 里的 #p
+      if (syncHash) setHash(currentFilterHash());
     };
     // 首屏初始渲染不套 VT（gallery 为空）；筛选/数据重建走卡片级配对动画
     if (prefersViewTransitions() && gallery && gallery.childElementCount > 0) {
@@ -690,7 +734,7 @@
       btn.setAttribute("aria-pressed", opt.id === activeFilter ? "true" : "false");
       btn.addEventListener("click", () => {
         activeFilter = opt.id;
-        applyFilter();
+        applyFilter(true);
       });
       filterBar.appendChild(btn);
     });
@@ -732,7 +776,13 @@
     // 数据到达（无论成败）后才允许显示空状态
     galleryReady = true;
     if (skeletonEl) skeletonEl.hidden = true;
+    // 深链初始解析：#f 在数据重建前套用（非法/过期年月由 renderFilters 兜底退 all）
+    const hm = location.hash.slice(1);
+    const fm0 = hm.match(HASH_FILTER_RE);
+    if (fm0) activeFilter = fm0[1];
     rebuildPhotos();
+    const pm0 = hm.match(HASH_PHOTO_RE);
+    if (pm0) openLightboxFromHash(decodeURIComponent(pm0[1]));
   }
 
   const DB_NAME = "milan-photos";
@@ -894,6 +944,8 @@
       lightbox.close();
       document.body.classList.remove("lb-open");
       if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
+      // 关灯箱恢复筛选深链（all 时清空）
+      setHash(currentFilterHash());
     };
 
     if (prefersViewTransitions()) {
@@ -961,6 +1013,8 @@
     lbImg.style.animation = "";
     preloadLightboxNeighbor(1);
     preloadLightboxNeighbor(-1);
+    // 深链：初开与单击切图都经这里，#p 始终指向当前画
+    if (photo.id != null) setHash("p=" + encodeURIComponent(photo.id));
   }
 
   function step(delta) {

@@ -8,7 +8,9 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/mmexport1788447848472.webp",
       "thumbSrcset": "photos/thumbs/mmexport1788447848472-400.webp 300w, photos/thumbs/mmexport1788447848472-800.webp 600w, photos/thumbs/mmexport1788447848472.webp 900w",
+      "thumbAvifSrcset": "photos/thumbs/mmexport1788447848472-400.avif 300w, photos/thumbs/mmexport1788447848472-800.avif 600w, photos/thumbs/mmexport1788447848472.avif 900w",
       "medium": "photos/medium/mmexport1788447848472.webp",
+      "mediumAvif": "photos/medium/mmexport1788447848472.avif",
       "width": 1279,
       "height": 1706
     },
@@ -20,7 +22,9 @@
       "date": "2026-09-16",
       "thumb": "photos/thumbs/IMG20260916193852.webp",
       "thumbSrcset": "photos/thumbs/IMG20260916193852-400.webp 400w, photos/thumbs/IMG20260916193852-800.webp 800w, photos/thumbs/IMG20260916193852.webp 1200w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260916193852-400.avif 400w, photos/thumbs/IMG20260916193852-800.avif 800w, photos/thumbs/IMG20260916193852.avif 1200w",
       "medium": "photos/medium/IMG20260916193852.webp",
+      "mediumAvif": "photos/medium/IMG20260916193852.avif",
       "width": 4096,
       "height": 3072
     },
@@ -32,7 +36,9 @@
       "date": "2026-09-16",
       "thumb": "photos/thumbs/IMG20260916193836.webp",
       "thumbSrcset": "photos/thumbs/IMG20260916193836-400.webp 400w, photos/thumbs/IMG20260916193836-800.webp 800w, photos/thumbs/IMG20260916193836.webp 1200w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260916193836-400.avif 400w, photos/thumbs/IMG20260916193836-800.avif 800w, photos/thumbs/IMG20260916193836.avif 1200w",
       "medium": "photos/medium/IMG20260916193836.webp",
+      "mediumAvif": "photos/medium/IMG20260916193836.avif",
       "width": 4096,
       "height": 3072
     },
@@ -44,7 +50,9 @@
       "date": "2026-09-16",
       "thumb": "photos/thumbs/IMG20260916193647.webp",
       "thumbSrcset": "photos/thumbs/IMG20260916193647-400.webp 300w, photos/thumbs/IMG20260916193647-800.webp 600w, photos/thumbs/IMG20260916193647.webp 900w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260916193647-400.avif 300w, photos/thumbs/IMG20260916193647-800.avif 600w, photos/thumbs/IMG20260916193647.avif 900w",
       "medium": "photos/medium/IMG20260916193647.webp",
+      "mediumAvif": "photos/medium/IMG20260916193647.avif",
       "width": 3072,
       "height": 4096
     },
@@ -56,7 +64,9 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/IMG20260817164949_01.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817164949_01-400.webp 300w, photos/thumbs/IMG20260817164949_01-800.webp 600w, photos/thumbs/IMG20260817164949_01.webp 900w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260817164949_01-400.avif 300w, photos/thumbs/IMG20260817164949_01-800.avif 600w, photos/thumbs/IMG20260817164949_01.avif 900w",
       "medium": "photos/medium/IMG20260817164949_01.webp",
+      "mediumAvif": "photos/medium/IMG20260817164949_01.avif",
       "width": 1536,
       "height": 2048
     },
@@ -68,7 +78,9 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/IMG20260817164045.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817164045-400.webp 300w, photos/thumbs/IMG20260817164045-800.webp 600w, photos/thumbs/IMG20260817164045.webp 900w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260817164045-400.avif 300w, photos/thumbs/IMG20260817164045-800.avif 600w, photos/thumbs/IMG20260817164045.avif 900w",
       "medium": "photos/medium/IMG20260817164045.webp",
+      "mediumAvif": "photos/medium/IMG20260817164045.avif",
       "width": 1536,
       "height": 2048
     },
@@ -80,7 +92,9 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/IMG20260817155446.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817155446-400.webp 300w, photos/thumbs/IMG20260817155446-800.webp 600w, photos/thumbs/IMG20260817155446.webp 900w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260817155446-400.avif 300w, photos/thumbs/IMG20260817155446-800.avif 600w, photos/thumbs/IMG20260817155446.avif 900w",
       "medium": "photos/medium/IMG20260817155446.webp",
+      "mediumAvif": "photos/medium/IMG20260817155446.avif",
       "width": 1536,
       "height": 2048
     },
@@ -92,7 +106,9 @@
       "date": "2026-08-17",
       "thumb": "photos/thumbs/IMG20260817155358.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817155358-400.webp 300w, photos/thumbs/IMG20260817155358-800.webp 600w, photos/thumbs/IMG20260817155358.webp 900w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260817155358-400.avif 300w, photos/thumbs/IMG20260817155358-800.avif 600w, photos/thumbs/IMG20260817155358.avif 900w",
       "medium": "photos/medium/IMG20260817155358.webp",
+      "mediumAvif": "photos/medium/IMG20260817155358.avif",
       "width": 6144,
       "height": 8192
     },
@@ -104,7 +120,9 @@
       "date": "2026-08-17",
       "thumb": "photos/thumbs/IMG20260817155311.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817155311-400.webp 300w, photos/thumbs/IMG20260817155311-800.webp 600w, photos/thumbs/IMG20260817155311.webp 900w",
+      "thumbAvifSrcset": "photos/thumbs/IMG20260817155311-400.avif 300w, photos/thumbs/IMG20260817155311-800.avif 600w, photos/thumbs/IMG20260817155311.avif 900w",
       "medium": "photos/medium/IMG20260817155311.webp",
+      "mediumAvif": "photos/medium/IMG20260817155311.avif",
       "width": 6144,
       "height": 8192
     },
@@ -116,6 +134,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/1700559942072.webp",
       "thumbSrcset": "photos/thumbs/1700559942072-400.webp 360w",
+      "thumbAvifSrcset": "photos/thumbs/1700559942072-400.avif 360w",
       "width": 360,
       "height": 360
     },
@@ -127,6 +146,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/08-portrait-silhouette.webp",
       "thumbSrcset": "photos/thumbs/08-portrait-silhouette-400.webp 400w, photos/thumbs/08-portrait-silhouette-800.webp 800w, photos/thumbs/08-portrait-silhouette.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/08-portrait-silhouette-400.avif 400w, photos/thumbs/08-portrait-silhouette-800.avif 800w, photos/thumbs/08-portrait-silhouette.avif 1024w",
       "width": 1024,
       "height": 901
     },
@@ -138,6 +158,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/07-botanical.webp",
       "thumbSrcset": "photos/thumbs/07-botanical-400.webp 400w, photos/thumbs/07-botanical-800.webp 800w, photos/thumbs/07-botanical.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/07-botanical-400.avif 400w, photos/thumbs/07-botanical-800.avif 800w, photos/thumbs/07-botanical.avif 1024w",
       "width": 1024,
       "height": 901
     },
@@ -149,6 +170,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/06-neon-window.webp",
       "thumbSrcset": "photos/thumbs/06-neon-window-400.webp 400w, photos/thumbs/06-neon-window-800.webp 800w, photos/thumbs/06-neon-window.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/06-neon-window-400.avif 400w, photos/thumbs/06-neon-window-800.avif 800w, photos/thumbs/06-neon-window.avif 1024w",
       "width": 1024,
       "height": 901
     },
@@ -160,6 +182,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/05-desert-dunes.webp",
       "thumbSrcset": "photos/thumbs/05-desert-dunes-400.webp 400w, photos/thumbs/05-desert-dunes-800.webp 800w, photos/thumbs/05-desert-dunes.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/05-desert-dunes-400.avif 400w, photos/thumbs/05-desert-dunes-800.avif 800w, photos/thumbs/05-desert-dunes.avif 1024w",
       "width": 1024,
       "height": 901
     },
@@ -171,6 +194,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/04-mist-lake.webp",
       "thumbSrcset": "photos/thumbs/04-mist-lake-400.webp 400w, photos/thumbs/04-mist-lake-800.webp 800w, photos/thumbs/04-mist-lake.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/04-mist-lake-400.avif 400w, photos/thumbs/04-mist-lake-800.avif 800w, photos/thumbs/04-mist-lake.avif 1024w",
       "width": 1024,
       "height": 901
     },
@@ -182,6 +206,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/03-light-trails.webp",
       "thumbSrcset": "photos/thumbs/03-light-trails-400.webp 400w, photos/thumbs/03-light-trails-800.webp 800w, photos/thumbs/03-light-trails.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/03-light-trails-400.avif 400w, photos/thumbs/03-light-trails-800.avif 800w, photos/thumbs/03-light-trails.avif 1024w",
       "width": 1024,
       "height": 901
     },
@@ -193,6 +218,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/02-staircase.webp",
       "thumbSrcset": "photos/thumbs/02-staircase-400.webp 400w, photos/thumbs/02-staircase-800.webp 800w, photos/thumbs/02-staircase.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/02-staircase-400.avif 400w, photos/thumbs/02-staircase-800.avif 800w, photos/thumbs/02-staircase.avif 1024w",
       "width": 1024,
       "height": 901
     },
@@ -204,6 +230,7 @@
       "date": "2026-09-22",
       "thumb": "photos/thumbs/01-city-rain.webp",
       "thumbSrcset": "photos/thumbs/01-city-rain-400.webp 400w, photos/thumbs/01-city-rain-800.webp 800w, photos/thumbs/01-city-rain.webp 1024w",
+      "thumbAvifSrcset": "photos/thumbs/01-city-rain-400.avif 400w, photos/thumbs/01-city-rain-800.avif 800w, photos/thumbs/01-city-rain.avif 1024w",
       "width": 1024,
       "height": 901
     }

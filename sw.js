@@ -1,5 +1,5 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v25";
+const VERSION = "milan-v26";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
@@ -109,13 +109,23 @@ async function cacheFirst(request) {
 
 async function networkFirst(request) {
   try {
-    const response = await fetch(request);
+    // 离线模拟/黑洞连接可能让 fetch 永久 pending（既不 resolve 也不 reject），
+    // 3s 兜底转缓存回落，避免页面 loadFolderPhotos 永远不 settle、展厅永远空
+    const response = await Promise.race([
+      fetch(request),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("manifest fetch timeout")), 3000)
+      ),
+    ]);
     if (response && response.ok) {
       // 清单存壳层缓存：不占媒体 LRU 名额，免得每次刷新清单挤掉一张图
       const cache = await caches.open(CACHE_SHELL);
       await cache.put(request, response.clone());
+      return response;
     }
-    return response;
+    // 非 2xx（离线模拟/中转可能给 error response 而非 reject）也走缓存回落，
+    // 不把坏清单交给页面——否则 r.json() 抛错，展厅会空
+    throw new Error("manifest fetch not ok");
   } catch {
     const cached = await caches.match(request, { ignoreSearch: true });
     if (cached) return cached;

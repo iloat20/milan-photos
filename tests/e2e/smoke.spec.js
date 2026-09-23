@@ -70,6 +70,32 @@ test.describe("画廊冒烟", () => {
     await expect(cards).toHaveCount(18);
   });
 
+  test("URL 深链：#f 筛选 / #p 灯箱 / 关灯箱恢复 / 直达", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    const curHash = () => new URL(page.url()).hash;
+    // ① 点 chip → #f=<年月>
+    await page.locator(".filter-chip").nth(1).click();
+    await expect.poll(curHash, { timeout: 5_000 }).toMatch(/^#f=\d{4}-\d{2}$/);
+    const fHash = curHash();
+    // ② 开卡 → #p=<photo.id>，灯箱为原生 open
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await expect.poll(curHash, { timeout: 5_000 }).toMatch(/^#p=.+/);
+    const pHash = curHash();
+    // ③ 关灯箱 → hash 恢复 #f（回归防护：VT 分支曾内联漏掉 setHash 导致残留 #p）
+    await page.locator("#close").click();
+    await expect(page.locator("#lightbox")).toBeHidden();
+    await expect.poll(curHash, { timeout: 5_000 }).toBe(fHash);
+    // ④ 同文档直达 #p（hashchange 路由）→ 灯箱自动开
+    await page.goto("/" + pHash);
+    await expect(page.locator("#lightbox")).toBeVisible();
+    // ⑤ 硬刷新（loadFolderPhotos 初始解析 #p）→ 灯箱仍自动开、18 卡在场
+    await page.reload();
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect(page.locator("#lightbox")).toBeVisible();
+  });
+
   test("hero 轮播切换与分页点", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);

@@ -949,11 +949,9 @@
     };
 
     if (prefersViewTransitions()) {
+      // 复用 closeUpdate，勿内联复制：此前内联漏掉 setHash，导致 VT 分支关灯箱后 hash 残留 #p
       const t = document.startViewTransition(() => {
-        lbImg.style.viewTransitionName = "";
-        lightbox.close();
-        document.body.classList.remove("lb-open");
-        if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
+        closeUpdate();
       });
       t.finished.finally(() => {
         if (sourceImg) sourceImg.style.viewTransitionName = "";

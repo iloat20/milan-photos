@@ -1,5 +1,5 @@
 (() => {
-  /** @type {{src:string,thumb?:string,thumbSrcset?:string,medium?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,fileName?:string,custom?:boolean,width?:number,height?:number}[]} */
+  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,fileName?:string,custom?:boolean,width?:number,height?:number}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -19,6 +19,7 @@
   const skeletonEl = document.getElementById("gallerySkeleton");
   const lightbox = document.getElementById("lightbox");
   const lbImg = document.getElementById("lbImg");
+  const lbSource = document.getElementById("lbSource");
   const lbTitle = document.getElementById("lbTitle");
   const prevBtn = document.getElementById("prev");
   const nextBtn = document.getElementById("next");
@@ -237,6 +238,9 @@
     link.rel = "preload";
     link.as = "image";
     link.href = href;
+    // 声明 type：不支持该格式的浏览器跳过预载，避免 AVIF 在老浏览器白下
+    if (/\.avif$/i.test(href)) link.type = "image/avif";
+    else if (/\.webp$/i.test(href)) link.type = "image/webp";
     link.setAttribute("fetchpriority", priority);
     document.head.appendChild(link);
   }
@@ -384,12 +388,15 @@
     ]);
     heroSlides.forEach((slide, i) => {
       const img = slide.querySelector("img");
+      const source = slide.querySelector("source");
       const photo = heroList[i];
       if (!img || !photo) return;
       const src = heroSrc(photo);
+      const avif = photo.mediumAvif || "";
       if (near.has(i)) {
         const srcChanged = img.getAttribute("src") !== src;
         if (srcChanged) {
+          if (source) source.srcset = avif;
           img.src = src;
         }
         if (i === heroPos) {
@@ -412,6 +419,8 @@
           img.fetchPriority = "low";
         }
       } else if (img.getAttribute("src")) {
+        // 摘 src 才能让 lazy 失效省流——source 同步摘，否则浏览器仍会从 source 取
+        if (source) source.srcset = "";
         img.removeAttribute("src");
       }
     });
@@ -503,9 +512,15 @@
         img.width = photo.width;
         img.height = photo.height;
       }
+      // AVIF 候选：applyHeroSources 随 near/far 一起挂摘
+      const heroSource = document.createElement("source");
+      heroSource.type = "image/avif";
+      const picture = document.createElement("picture");
+      picture.appendChild(heroSource);
+      picture.appendChild(img);
       const art = document.createElement("div");
       art.className = "hero-art";
-      art.appendChild(img);
+      art.appendChild(picture);
       slide.appendChild(art);
 
       const caption = document.createElement("div");
@@ -700,7 +715,9 @@
           src,
           thumb: item.thumb || src,
           thumbSrcset: item.thumbSrcset || "",
+          thumbAvifSrcset: item.thumbAvifSrcset || "",
           medium: item.medium || "",
+          mediumAvif: item.mediumAvif || "",
           animated: Boolean(item.animated),
           title: item.title || "未命名",
           caption: item.caption || "",
@@ -714,7 +731,7 @@
         };
       });
       if (folderPhotos[0]) {
-        preloadImage(heroSrc(folderPhotos[0]));
+        preloadImage(folderPhotos[0].mediumAvif || heroSrc(folderPhotos[0]));
       }
     } catch {
       folderPhotos = [];
@@ -914,12 +931,14 @@
     const list = lightboxPhotos();
     if (!list.length) return;
     const next = list[(lbPos + delta + list.length) % list.length];
-    const src = lightboxSrc(next);
-    if (!src) return;
-    const img = new Image();
-    img.decoding = "async";
-    if ("fetchPriority" in img) img.fetchPriority = "low";
-    img.src = src;
+    // 走 rel=preload：带 type=image/avif 时老浏览器免下无效图，与灯箱选中一致可复用
+    preloadImage(lightboxAvifOrFallback(next), "low");
+  }
+
+  /** 预载须与灯箱 <picture> 实际选中一致：AVIF 优先，动图仍原文件 */
+  function lightboxAvifOrFallback(photo) {
+    if (photo?.animated) return photo?.src || "";
+    return photo?.mediumAvif || lightboxSrc(photo);
   }
 
   function syncLightbox() {
@@ -929,6 +948,8 @@
     // 换图复位缩放/平移
     resetLbZoom(false);
     const titleText = displayTitle(photo, lbPos);
+    // AVIF source 优先；动图/无中图留空，浏览器回退 img.src
+    if (lbSource) lbSource.srcset = photo.animated ? "" : photo.mediumAvif || "";
     lbImg.src = lightboxSrc(photo);
     lbImg.alt = titleText;
     if (lbTitle) lbTitle.textContent = "";
@@ -991,6 +1012,18 @@
         img.sizes =
           "(max-width: 560px) 46vw, (max-width: 834px) 40vw, 320px";
       }
+      // AVIF 变体优先：source 的 sizes 与 img 保持一致，WebP 仍作回退
+      let mediaEl = img;
+      if (photo.thumbAvifSrcset) {
+        const source = document.createElement("source");
+        source.type = "image/avif";
+        source.srcset = photo.thumbAvifSrcset;
+        source.sizes = img.sizes;
+        const picture = document.createElement("picture");
+        picture.appendChild(source);
+        picture.appendChild(img);
+        mediaEl = picture;
+      }
       img.alt = titleText;
       img.decoding = "async";
       if (i < 2) {
@@ -1023,7 +1056,7 @@
       };
       if (img.complete) bindCardRoom();
       else img.addEventListener("load", bindCardRoom, { once: true });
-      media.appendChild(img);
+      media.appendChild(mediaEl);
       if (photo.animated) {
         const badge = document.createElement("span");
         badge.className = "card-badge";
@@ -1034,8 +1067,8 @@
 
       card.appendChild(media);
       card.addEventListener("click", () => openLightbox(i, card));
-      // hover/聚焦即预载灯箱中图，点开「瞬出」（light rel preload 自带去重）
-      const prefetchLightbox = () => preloadImage(lightboxSrc(photo), "auto");
+      // hover/聚焦即预载灯箱用图，点开「瞬出」（与 <picture> 选中格式一致才可复用）
+      const prefetchLightbox = () => preloadImage(lightboxAvifOrFallback(photo), "auto");
       card.addEventListener("pointerenter", prefetchLightbox, { once: true });
       card.addEventListener("focus", prefetchLightbox, { once: true });
       gallery.appendChild(card);

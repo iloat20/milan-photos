@@ -156,7 +156,10 @@
     <figure class="lightbox-stage">
       <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一件">‹</button>
       <div class="lightbox-frame">
-        <img class="lightbox-img" id="lbImg" alt="" />
+        <picture>
+          <source id="lbSource" type="image/avif" srcset="" />
+          <img class="lightbox-img" id="lbImg" alt="" />
+        </picture>
       </div>
       <button class="lb-arrow lb-next" id="next" type="button" aria-label="下一件">›</button>
     </figure>

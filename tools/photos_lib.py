@@ -18,6 +18,9 @@ THUMB_MAX_EDGE = 1200
 THUMB_QUALITY = 82
 MEDIUM_MAX_EDGE = 1600
 MEDIUM_QUALITY = 85
+# AVIF 同主观质量体积约为 WebP 的 60-70%，质量参数独立调
+AVIF_THUMB_QUALITY = 62
+AVIF_MEDIUM_QUALITY = 65
 
 
 def title_from_name(name: str) -> str:
@@ -80,8 +83,19 @@ def is_animated(path: Path) -> bool:
         return path.suffix.lower() == ".gif"
 
 
-def _write_webp_variant(src: Path, out_dir: Path, max_edge: int, quality: int) -> str | None:
-    """Generate out_dir/<stem>.webp capped at max_edge; return web path or None."""
+def _try_save_avif(im, out: Path, quality: int) -> bool:
+    """尽力写 AVIF；无 AVIF 编解码的 Pillow 静默跳过，WebP 仍是权威回退。"""
+    try:
+        im.save(out, "AVIF", quality=quality)
+        return True
+    except Exception:
+        return False
+
+
+def _write_webp_variant(
+    src: Path, out_dir: Path, max_edge: int, quality: int
+) -> tuple[str, str | None] | None:
+    """生成 out_dir/<stem>.webp + 同尺寸 .avif（尽力）；返回 (webp, avif|None)。"""
     try:
         from PIL import Image, ImageOps
     except ImportError:
@@ -89,29 +103,37 @@ def _write_webp_variant(src: Path, out_dir: Path, max_edge: int, quality: int) -
 
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"{src.stem}.webp"
+    out_avif = out_dir / f"{src.stem}.avif"
+    webp_rel = out.relative_to(ROOT).as_posix()
+    avif_rel = out_avif.relative_to(ROOT).as_posix()
     try:
-        if out.exists() and out.stat().st_mtime >= src.stat().st_mtime:
-            rel = out.relative_to(ROOT).as_posix()
-            return rel
+        fresh_webp = out.exists() and out.stat().st_mtime >= src.stat().st_mtime
+        fresh_avif = out_avif.exists() and out_avif.stat().st_mtime >= src.stat().st_mtime
+        if fresh_webp and fresh_avif:
+            return webp_rel, avif_rel
+        made_avif = fresh_avif
         with Image.open(src) as im:
             im = ImageOps.exif_transpose(im)
             if max(im.size) > max_edge:
                 im.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
             if im.mode not in ("RGB", "RGBA"):
                 im = im.convert("RGB")
-            im.save(out, "WEBP", quality=quality, method=6)
-        return out.relative_to(ROOT).as_posix()
+            if not fresh_webp:
+                im.save(out, "WEBP", quality=quality, method=6)
+            if not fresh_avif:
+                made_avif = _try_save_avif(im, out_avif, AVIF_MEDIUM_QUALITY)
+        return webp_rel, (avif_rel if made_avif else None)
     except Exception:
         return None
 
 
-def ensure_thumb_set(src: Path) -> dict[str, tuple[str, int]]:
-    """生成 400/800/1200 档缩略图；返回 {档位: (相对路径, 实际像素宽)}。
+def ensure_thumb_set(src: Path) -> dict[str, tuple[str, int, str | None]]:
+    """生成 400/800/1200 档缩略图（WebP 必产 + AVIF 尽力）；返回 {档: (webp路径, 实际像素宽, avif路径|None)}。
 
     小图不放大，三档可能同尺寸——srcset 必须按实际宽度声明，
     虚报 400w/800w/1200w 会让浏览器选错档、把小图放大到模糊。
     """
-    out: dict[str, tuple[str, int]] = {}
+    out: dict[str, tuple[str, int, str | None]] = {}
     try:
         from PIL import Image, ImageOps
     except ImportError:
@@ -122,27 +144,38 @@ def ensure_thumb_set(src: Path) -> dict[str, tuple[str, int]]:
     for edge in THUMB_STEPS:
         name = f"{src.stem}.webp" if edge == THUMB_MAX_EDGE else f"{src.stem}-{edge}.webp"
         out_path = THUMBS / name
+        avif_path = out_path.with_suffix(".avif")
+        webp_rel = out_path.relative_to(ROOT).as_posix()
+        avif_rel = avif_path.relative_to(ROOT).as_posix()
         try:
-            if not (out_path.exists() and out_path.stat().st_mtime >= src.stat().st_mtime):
-                with Image.open(src) as im:
-                    im = ImageOps.exif_transpose(im)
-                    if max(im.size) > edge:
-                        im.thumbnail((edge, edge), Image.Resampling.LANCZOS)
-                    if im.mode not in ("RGB", "RGBA"):
-                        im = im.convert("RGB")
-                    im.save(out_path, "WEBP", quality=THUMB_QUALITY, method=6)
-                    out[str(edge)] = (out_path.relative_to(ROOT).as_posix(), int(im.width))
-            else:
+            fresh_webp = out_path.exists() and out_path.stat().st_mtime >= src.stat().st_mtime
+            fresh_avif = avif_path.exists() and avif_path.stat().st_mtime >= src.stat().st_mtime
+            if fresh_webp and fresh_avif:
                 size = image_size(out_path)
                 if size:
-                    out[str(edge)] = (out_path.relative_to(ROOT).as_posix(), int(size[0]))
+                    out[str(edge)] = (webp_rel, int(size[0]), avif_rel)
+                continue
+            made_avif = fresh_avif
+            width = 0
+            with Image.open(src) as im:
+                im = ImageOps.exif_transpose(im)
+                if max(im.size) > edge:
+                    im.thumbnail((edge, edge), Image.Resampling.LANCZOS)
+                if im.mode not in ("RGB", "RGBA"):
+                    im = im.convert("RGB")
+                if not fresh_webp:
+                    im.save(out_path, "WEBP", quality=THUMB_QUALITY, method=6)
+                if not fresh_avif:
+                    made_avif = _try_save_avif(im, avif_path, AVIF_THUMB_QUALITY)
+                width = int(im.width)
+            out[str(edge)] = (webp_rel, width, (avif_rel if made_avif else None))
         except Exception:
             continue
     return out
 
 
-def ensure_medium(src: Path) -> str | None:
-    """Generate photos/medium/<stem>.webp (~1600px) for lightbox; skip upscale."""
+def ensure_medium(src: Path) -> tuple[str, str | None] | None:
+    """生成 photos/medium/<stem>.webp + .avif（~1600px）；原图不大于上限时不另存。"""
     try:
         from PIL import Image, ImageOps
     except ImportError:
@@ -218,18 +251,27 @@ def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None)
         item["animated"] = True
     if thumbs.get("1200"):
         item["thumb"] = thumbs["1200"][0]
-        # srcset 按每档实际像素宽声明并同宽去重（小图三档内容相同）
+        # srcset 按每档实际像素宽声明并同宽去重（小图三档内容相同）；AVIF 与 WebP 同宽
         seen: dict[int, str] = {}
+        seen_avif: dict[int, str] = {}
         for edge in sorted(thumbs, key=int):
-            rel, width = thumbs[edge]
+            rel, width, avif_rel = thumbs[edge]
             if width > 0 and width not in seen:
                 seen[width] = rel
+            if width > 0 and avif_rel and width not in seen_avif:
+                seen_avif[width] = avif_rel
         if seen:
             item["thumbSrcset"] = ", ".join(
                 f"{rel} {width}w" for width, rel in sorted(seen.items())
             )
+        if seen_avif:
+            item["thumbAvifSrcset"] = ", ".join(
+                f"{rel} {width}w" for width, rel in sorted(seen_avif.items())
+            )
     if medium:
-        item["medium"] = medium
+        item["medium"] = medium[0]
+        if medium[1]:
+            item["mediumAvif"] = medium[1]
     if size:
         item["width"], item["height"] = size
     return item

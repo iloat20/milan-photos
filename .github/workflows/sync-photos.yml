@@ -21,17 +21,18 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install deps
-        run: pip install Pillow
+        run: pip install "Pillow>=11"
       - name: Generate manifest + thumbs
         run: python tools/sync_photos.py
       - name: Commit if changed
         run: |
-          if git diff --quiet -- photos/manifest.json photos/thumbs photos/medium; then
+          git add photos/manifest.json photos/thumbs photos/medium
+          # 新生成的 avif 是 untracked，工作区 git diff 看不见——必须 add 后比 index
+          if git diff --cached --quiet -- photos/manifest.json photos/thumbs photos/medium; then
             echo "manifest/thumbs/medium unchanged"
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add photos/manifest.json photos/thumbs photos/medium
             git commit -m "chore: sync photos manifest, thumbs and medium"
             git push
           fi

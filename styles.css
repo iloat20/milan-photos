@@ -69,6 +69,11 @@
 *::after {
   box-sizing: border-box;
 }
+
+/* <picture> 不生成盒子：img/source 保持原直接子的布局与定位 */
+picture {
+  display: contents;
+}
 }
 
 @layer base {

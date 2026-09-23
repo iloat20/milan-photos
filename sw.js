@@ -1,5 +1,5 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v24";
+const VERSION = "milan-v25";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
@@ -8,10 +8,20 @@ const SHELL_ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manif
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_SHELL)
-      .then((cache) => cache.addAll(SHELL_ASSETS))
-      .then(() => self.skipWaiting())
+    (async () => {
+      const cache = await caches.open(CACHE_SHELL);
+      await cache.addAll(SHELL_ASSETS);
+      // manifest 不进 addAll 原子组（缺它时 SW 仍应装上）；
+      // 首访时 SW claim 接管晚于首屏 manifest 请求，install 快照保证「首访后立刻离线」也有清单可回退。
+      // 注意 addAll 返回 undefined，不能链式当 cache 用，必须显式持有 cache 变量。
+      try {
+        const res = await fetch("./photos/manifest.json");
+        if (res && res.ok) await cache.put("./photos/manifest.json", res);
+      } catch {
+        /* 快照失败不阻断安装 */
+      }
+      await self.skipWaiting();
+    })()
   );
 });
 

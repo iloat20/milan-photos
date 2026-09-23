@@ -70,6 +70,65 @@ test.describe("画廊冒烟", () => {
     await expect(cards).toHaveCount(18);
   });
 
+  test("hero 轮播切换与分页点", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    const slides = page.locator(".hero-carousel-slide");
+    await expect(slides).toHaveCount(8);
+    const activeIdx = () =>
+      slides.evaluateAll((els) =>
+        els.findIndex((el) => el.classList.contains("is-active"))
+      );
+    expect(await activeIdx()).toBe(0);
+    await page.locator("#heroNext").click();
+    await expect.poll(activeIdx, { timeout: 3_000 }).toBe(1);
+    await page.locator("#heroPrev").click();
+    await expect.poll(activeIdx, { timeout: 3_000 }).toBe(0);
+  });
+
+  test("Service Worker 离线仍可服务", async ({ page, context }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    // claim 后主动经 SW 补拉一次清单：networkFirst 成功即写入 shell 缓存，
+    // 兜住 install 期请求被瞬断的场景（首屏 manifest 请求早于 claim、不经 SW）
+    await page.evaluate(() =>
+      fetch("photos/manifest.json", { cache: "no-store" }).then((r) => r.ok)
+    );
+    // 等 SW 激活 + shell 缓存（含 manifest 快照）+ 被 controller 接管
+    await page.waitForFunction(
+      async () => {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        const activated = regs.some((r) => r.active?.state === "activated");
+        const keys = await caches.keys();
+        const shelled = keys.some((k) => k.endsWith("-shell"));
+        const hasManifest = !!(await caches.match(
+          new Request("photos/manifest.json", { cache: "no-store" }),
+          { ignoreSearch: true }
+        ));
+        return (
+          activated && shelled && !!navigator.serviceWorker.controller && hasManifest
+        );
+      },
+      null,
+      { timeout: 20_000 }
+    );
+    await context.setOffline(true);
+    try {
+      // 用页面内导航而非 page.reload()：CDP 驱动的 reload 在 offline 模拟下
+      // 会直接 ERR_INTERNET_DISCONNECTED（未走 SW 拦截），页面内导航走标准 SW 路径
+      const navP = page.waitForNavigation({ waitUntil: "load", timeout: 10_000 });
+      await page
+        .evaluate(() => {
+          location.href = location.pathname + location.search + location.hash;
+        })
+        .catch(() => {});
+      await navP;
+      await expect(page.locator(".card")).toHaveCount(18, { timeout: 10_000 });
+    } finally {
+      await context.setOffline(false);
+    }
+  });
+
   test("控制台无错误", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (err) => errors.push(String(err)));

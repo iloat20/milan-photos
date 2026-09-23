@@ -252,10 +252,18 @@
   }
 
   function applyFilter() {
-    if (activeFilter === "all") visible = photos.slice();
-    else visible = photos.filter((p) => ymKey(p.date) === activeFilter);
-    renderFilters();
-    renderGallery();
+    const update = () => {
+      if (activeFilter === "all") visible = photos.slice();
+      else visible = photos.filter((p) => ymKey(p.date) === activeFilter);
+      renderFilters();
+      renderGallery();
+    };
+    // 首屏初始渲染不套 VT（gallery 为空）；筛选/数据重建走卡片级配对动画
+    if (prefersViewTransitions() && gallery && gallery.childElementCount > 0) {
+      document.startViewTransition(update);
+    } else {
+      update();
+    }
   }
 
   /* —— 顶栏下方半屏轮播 —— */
@@ -275,51 +283,75 @@
     return lbList || visible;
   }
 
-  function pageInertTargets() {
-    return [
-      document.getElementById("siteNav"),
-      document.getElementById("heroCarousel"),
-      document.querySelector("main"),
-      document.querySelector(".footer"),
-    ].filter(Boolean);
+  /* —— 观画室缩放状态（双指捏合 / 双击 / 滚轮） —— */
+  let lbZoom = 1;
+  let lbTx = 0;
+  let lbTy = 0;
+  /** 单击切图后的双击观察窗口（浏览器 dblclick 判定约 500ms，取 450ms 对齐） */
+  let tapTimer = 0;
+
+  function applyLbTransform() {
+    if (!lbImg) return;
+    lbImg.style.setProperty("--lb-zoom", String(lbZoom));
+    lbImg.style.setProperty("--lb-tx", `${lbTx}px`);
+    lbImg.style.setProperty("--lb-ty", `${lbTy}px`);
+    lbImg.classList.toggle("is-zoomed", lbZoom > 1);
   }
 
-  function setPageInert(on) {
-    pageInertTargets().forEach((el) => {
-      if (on) el.setAttribute("inert", "");
-      else el.removeAttribute("inert");
-    });
+  function resetLbZoom(instant) {
+    lbZoom = 1;
+    lbTx = 0;
+    lbTy = 0;
+    // instant：借 is-panning 的 transition:none 瞬时归位（VT 快照用）
+    if (instant) lbImg.classList.add("is-panning");
+    applyLbTransform();
+    if (instant) lbImg.classList.remove("is-panning");
   }
 
-  function lightboxFocusable() {
-    if (!lightbox) return [];
-    return [...lightbox.querySelectorAll(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )].filter((el) => !el.hasAttribute("disabled") && el.getClientRects().length > 0);
-  }
-
-  function trapLightboxTab(e) {
-    if (!lightbox || lightbox.hidden || e.key !== "Tab") return;
-    const focusable = lightboxFocusable();
-    if (!focusable.length) {
-      e.preventDefault();
+  function clampLbPan() {
+    if (lbZoom <= 1) {
+      lbTx = 0;
+      lbTy = 0;
       return;
     }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const active = document.activeElement;
-    if (!lightbox.contains(active)) {
-      e.preventDefault();
-      first.focus();
+    // 平移上限 = 缩放溢出的半幅，超出会露底
+    const maxX = (lbImg.offsetWidth * (lbZoom - 1)) / 2;
+    const maxY = (lbImg.offsetHeight * (lbZoom - 1)) / 2;
+    lbTx = Math.min(maxX, Math.max(-maxX, lbTx));
+    lbTy = Math.min(maxY, Math.max(-maxY, lbTy));
+  }
+
+  /** 锚点相对当前渲染矩形中心的屏幕偏移（变换围绕中心，中心含平移量） */
+  function anchorRel(clientX, clientY) {
+    const rect = lbImg.getBoundingClientRect();
+    return {
+      x: clientX - (rect.left + rect.width / 2),
+      y: clientY - (rect.top + rect.height / 2),
+    };
+  }
+
+  /** 锚点缩放：T' = T + rel * (1 - z'/z)，锚点处画面不动 */
+  function zoomAtAnchor(nextZoom, relX, relY) {
+    const z = Math.min(4, Math.max(1, nextZoom));
+    if (z <= 1) {
+      resetLbZoom(false);
       return;
     }
-    if (e.shiftKey && active === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && active === last) {
-      e.preventDefault();
-      first.focus();
+    const k = 1 - z / lbZoom;
+    lbTx += relX * k;
+    lbTy += relY * k;
+    lbZoom = z;
+    clampLbPan();
+    applyLbTransform();
+  }
+
+  function toggleLbZoomAt(clientX, clientY) {
+    if (lbZoom > 1) {
+      resetLbZoom(false);
+      return;
     }
+    const rel = anchorRel(clientX, clientY);
+    zoomAtAnchor(2.5, rel.x, rel.y);
   }
 
   function syncHeroPauseButton() {
@@ -809,9 +841,8 @@
 
     const reveal = () => {
       syncLightbox();
-      lightbox.hidden = false;
+      if (!lightbox.open) lightbox.showModal();
       document.body.classList.add("lb-open");
-      setPageInert(true);
       closeBtn.focus();
     };
 
@@ -829,6 +860,12 @@
   }
 
   function closeLightbox() {
+    if (tapTimer) {
+      clearTimeout(tapTimer);
+      tapTimer = 0;
+    }
+    // 瞬时复位缩放：VT 的 old 快照要以完整画面回卡片
+    resetLbZoom(true);
     const sourceImg = lbList ? null : cardImageAt(lbPos);
     const returnEl =
       lbReturnFocus ||
@@ -844,18 +881,16 @@
     };
     const closeUpdate = () => {
       lbImg.style.viewTransitionName = "";
-      lightbox.hidden = true;
+      lightbox.close();
       document.body.classList.remove("lb-open");
-      setPageInert(false);
       if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
     };
 
     if (prefersViewTransitions()) {
       const t = document.startViewTransition(() => {
         lbImg.style.viewTransitionName = "";
-        lightbox.hidden = true;
+        lightbox.close();
         document.body.classList.remove("lb-open");
-        setPageInert(false);
         if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
       });
       t.finished.finally(() => {
@@ -891,6 +926,8 @@
     const list = lightboxPhotos();
     const photo = list[lbPos];
     if (!photo) return;
+    // 换图复位缩放/平移
+    resetLbZoom(false);
     const titleText = displayTitle(photo, lbPos);
     lbImg.src = lightboxSrc(photo);
     lbImg.alt = titleText;
@@ -929,9 +966,12 @@
       card.type = "button";
       card.className = "card";
       const titleText = displayTitle(photo, i);
-      const wallNo = wallNumber(Math.max(0, photos.indexOf(photo)));
+      const wallIdx = Math.max(0, photos.indexOf(photo));
+      const wallNo = wallNumber(wallIdx);
       // accessible name 需覆盖卡片内全部可见文本（图注编号 + 标题），否则 axe label-content-name-mismatch
       card.setAttribute("aria-label", `观展：${wallNo} ${titleText}`);
+      // 筛选 View Transitions：按馆藏序号稳定命名，跨渲染配对（未命名元素走根 cross-fade）
+      card.style.viewTransitionName = `milan-card-${wallIdx}`;
 
       const media = document.createElement("div");
       media.className = "card-media";
@@ -1392,56 +1432,168 @@
   let swipeX = 0;
   let swipeY = 0;
   let lbDidSwipe = false;
-  let lbPointer = null;
+  /** 多指轨迹：id → 最近坐标；两指即捏合 */
+  const lbPointers = new Map();
+  let pinch = null;
+  let panBase = null;
 
   stage.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (e.isPrimary === false) return;
     if (e.target.closest?.(".lb-arrow")) return;
-    lbPointer = e.pointerId;
-    swipeX = e.clientX;
-    swipeY = e.clientY;
-    lbDidSwipe = false;
+    stage.setPointerCapture?.(e.pointerId);
+    lbPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (lbPointers.size === 1) {
+      swipeX = e.clientX;
+      swipeY = e.clientY;
+      panBase = { x: e.clientX, y: e.clientY, tx: lbTx, ty: lbTy };
+      lbDidSwipe = false;
+      pinch = null;
+    } else if (lbPointers.size === 2) {
+      const [a, b] = [...lbPointers.values()];
+      const rect = lbImg.getBoundingClientRect();
+      pinch = {
+        d0: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+        mx0: (a.x + b.x) / 2,
+        my0: (a.y + b.y) / 2,
+        cx0: rect.left + rect.width / 2,
+        cy0: rect.top + rect.height / 2,
+        z0: lbZoom,
+        tx0: lbTx,
+        ty0: lbTy,
+      };
+      lbDidSwipe = true; // 捏合后的合成 click 吞掉
+    }
   });
 
-  stage.addEventListener("pointerup", (e) => {
-    if (lbPointer !== e.pointerId) return;
-    lbPointer = null;
-    if (e.target.closest?.(".lb-arrow")) return;
+  stage.addEventListener("pointermove", (e) => {
+    if (!lbPointers.has(e.pointerId)) return;
+    lbPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && lbPointers.size >= 2) {
+      const [a, b] = [...lbPointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const z = Math.min(4, Math.max(1, pinch.z0 * (d / pinch.d0)));
+      if (z <= 1) {
+        lbZoom = 1;
+        lbTx = 0;
+        lbTy = 0;
+      } else {
+        // 锚定两指中点下的画面：T' = mx - cx0 + T0 - (z'/z0)*(mx0 - cx0)
+        lbZoom = z;
+        lbTx =
+          mx - pinch.cx0 + pinch.tx0 - (lbZoom / pinch.z0) * (pinch.mx0 - pinch.cx0);
+        lbTy =
+          my - pinch.cy0 + pinch.ty0 - (lbZoom / pinch.z0) * (pinch.my0 - pinch.cy0);
+        clampLbPan();
+      }
+      lbImg.classList.add("is-panning");
+      applyLbTransform();
+      return;
+    }
+    if (lbZoom > 1 && panBase) {
+      // 缩放态拖拽平移（屏幕像素）；位移超阈值即视为拖动，吞掉合成 click
+      const dx = e.clientX - panBase.x;
+      const dy = e.clientY - panBase.y;
+      if (Math.hypot(dx, dy) > 6) {
+        lbDidSwipe = true;
+        lbImg.classList.add("is-panning");
+      }
+      lbTx = panBase.tx + dx;
+      lbTy = panBase.ty + dy;
+      applyLbTransform();
+    }
+    // zoom === 1 的横滑在 pointerup 判定
+  });
+
+  const lbGestureEnd = (e) => {
+    lbPointers.delete(e.pointerId);
+    if (pinch && lbPointers.size < 2) {
+      pinch = null;
+      lbImg.classList.remove("is-panning");
+      if (lbZoom < 1.05) {
+        resetLbZoom(false);
+      } else {
+        clampLbPan();
+        applyLbTransform();
+      }
+      // 剩余一指重置为单指基线，避免后续位移跳变
+      const rest = [...lbPointers.values()][0];
+      if (rest) {
+        swipeX = rest.x;
+        swipeY = rest.y;
+        panBase = { x: rest.x, y: rest.y, tx: lbTx, ty: lbTy };
+      }
+      return;
+    }
+    if (lbPointers.size > 0) return; // 尚有手指未抬起
+    panBase = null;
+    lbImg.classList.remove("is-panning");
+    if (lbZoom > 1) {
+      clampLbPan();
+      applyLbTransform();
+      return;
+    }
+    if (e.type === "pointercancel") return;
     const dx = e.clientX - swipeX;
     const dy = e.clientY - swipeY;
     if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.2) {
       lbDidSwipe = true;
       step(dx < 0 ? 1 : -1);
     }
-  });
+  };
+  stage.addEventListener("pointerup", lbGestureEnd);
+  stage.addEventListener("pointercancel", lbGestureEnd);
 
-  stage.addEventListener("pointercancel", () => {
-    lbPointer = null;
-    lbDidSwipe = false;
-  });
-
-  // 点按图片区域（非箭头）切下一张；滑动后的合成 click 吞掉
+  // 点按即时切图；450ms 内第二击回退第一击，交给 dblclick 做缩放
   stage.addEventListener("click", (e) => {
     if (e.target.closest?.(".lb-arrow")) return;
     if (lbDidSwipe) {
       lbDidSwipe = false;
       return;
     }
+    if (tapTimer) {
+      clearTimeout(tapTimer);
+      tapTimer = 0;
+      step(-1);
+      return;
+    }
     step(1);
+    tapTimer = setTimeout(() => {
+      tapTimer = 0;
+    }, 450);
+  });
+
+  stage.addEventListener("dblclick", (e) => {
+    if (e.target.closest?.(".lb-arrow")) return;
+    if (tapTimer) {
+      clearTimeout(tapTimer);
+      tapTimer = 0;
+    }
+    toggleLbZoomAt(e.clientX, e.clientY);
+  });
+
+  stage.addEventListener(
+    "wheel",
+    (e) => {
+      if (!e.target.closest?.(".lightbox-frame")) return;
+      e.preventDefault();
+      if (lbZoom === 1 && e.deltaY > 0) return;
+      const rel = anchorRel(e.clientX, e.clientY);
+      zoomAtAnchor(lbZoom * (e.deltaY < 0 ? 1.18 : 1 / 1.18), rel.x, rel.y);
+    },
+    { passive: false }
+  );
+
+  // Esc → <dialog> 的 cancel 事件统一走 VT 关闭动画
+  lightbox?.addEventListener("cancel", (e) => {
+    e.preventDefault();
+    closeLightbox();
   });
 
   document.addEventListener("keydown", (e) => {
-    if (!lightbox || lightbox.hidden) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      closeLightbox();
-      return;
-    }
-    if (e.key === "Tab") {
-      trapLightboxTab(e);
-      return;
-    }
+    if (!lightbox || !lightbox.open) return;
+    // Esc 与 Tab 焦点圈定由 <dialog> 原生处理，这里只留翻页
     if (e.key === "ArrowLeft") step(-1);
     if (e.key === "ArrowRight") step(1);
   });

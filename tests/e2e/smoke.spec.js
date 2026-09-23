@@ -163,6 +163,15 @@ test.describe("画廊冒烟", () => {
     });
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
+    // 交互盲区：开/关灯箱 + 快速连续切筛选（会 skip 进行中的 VT——
+    // finished 无 catch 时其 InvalidStateError reject 会冒泡成 unhandledrejection）
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.locator("#close").click();
+    await expect(page.locator("#lightbox")).toBeHidden();
+    await page.locator(".filter-chip").nth(1).click();
+    await page.waitForTimeout(100);
+    await page.locator(".filter-chip").first().click();
     await page.waitForTimeout(1000);
     expect(errors).toEqual([]);
   });

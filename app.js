@@ -182,13 +182,6 @@
     return `MIL · ${String(index + 1).padStart(3, "0")}`;
   }
 
-  function mediumLine(photo) {
-    const year = (photo?.date || "").slice(0, 4);
-    return year
-      ? `布面数字影像，${year} · 米兰美术馆藏`
-      : "布面数字影像 · 米兰美术馆藏";
-  }
-
   function toLocalDate(msOrDate) {
     const d = msOrDate instanceof Date ? msOrDate : new Date(msOrDate);
     if (Number.isNaN(d.getTime())) return "";
@@ -1088,7 +1081,7 @@
   function safeFileName(file) {
     const stamp = Date.now().toString(36);
     const base = (file.name || "photo")
-      .replace(/[^\w.\-]+/g, "-")
+      .replace(/[^\w.-]+/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
     return `${stamp}-${base || "photo.jpg"}`;

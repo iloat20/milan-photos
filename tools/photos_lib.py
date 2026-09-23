@@ -177,14 +177,13 @@ def ensure_thumb_set(src: Path) -> dict[str, tuple[str, int, str | None]]:
 def ensure_medium(src: Path) -> tuple[str, str | None] | None:
     """生成 photos/medium/<stem>.webp + .avif（~1600px）；原图不大于上限时不另存。"""
     try:
-        from PIL import Image, ImageOps
+        from PIL import Image
     except ImportError:
         return None
 
     try:
+        # 只读 header 判尺寸，不解码像素（exif 转置只交换宽高，max(size) 不变）
         with Image.open(src) as im:
-            im = ImageOps.exif_transpose(im)
-            # 原图已不大于 medium 上限时不必另存
             if max(im.size) <= MEDIUM_MAX_EDGE:
                 return None
     except Exception:

@@ -1128,6 +1128,13 @@ code {
 .lightbox {
   position: fixed;
   inset: 0;
+  /* <dialog> UA reset：fit-content 宽高/内边距/边框会破坏全屏铺排 */
+  box-sizing: border-box;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: none;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -1151,8 +1158,12 @@ code {
   transition: background 0.65s var(--ease);
 }
 
-.lightbox[hidden] {
+.lightbox:not([open]) {
   display: none;
+}
+
+dialog.lightbox::backdrop {
+  background: rgba(14, 18, 16, 0.72);
 }
 
 .lightbox-chrome {
@@ -1255,6 +1266,8 @@ code {
   max-height: calc(var(--frame-max-h, 560px) - 2 * var(--frame-pad, 10px) - 2 * var(--frame-border, 2px));
   object-fit: contain;
   animation: lb-in 0.4s var(--ease) both;
+  transform: translate(var(--lb-tx, 0px), var(--lb-ty, 0px)) scale(var(--lb-zoom, 1));
+  transition: transform 0.35s var(--ease);
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
@@ -1264,14 +1277,22 @@ code {
   flex: 0 0 auto;
 }
 
+.lightbox-img.is-panning {
+  transition: none;
+  cursor: grabbing;
+}
+
+.lightbox-img.is-zoomed {
+  cursor: zoom-out;
+}
+
+/* 只动 opacity：fill both 的 transform 会永久盖掉缩放手势的 transform */
 @keyframes lb-in {
   from {
     opacity: 0;
-    transform: scale(0.98);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 

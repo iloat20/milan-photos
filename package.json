@@ -1,0 +1,21 @@
+{
+  "name": "milan-photos",
+  "private": true,
+  "description": "米兰美术馆照片画廊 — 工程化（lint / e2e / Lighthouse CI）",
+  "scripts": {
+    "lint:js": "eslint .",
+    "lint:css": "stylelint \"styles.css\"",
+    "lint": "npm run lint:js && npm run lint:css",
+    "test:e2e": "playwright test",
+    "lhci": "lhci autorun"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@lhci/cli": "^0.15.1",
+    "@playwright/test": "^1.63.0",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
+    "stylelint": "^17.15.0",
+    "stylelint-config-standard": "^40.0.0"
+  }
+}

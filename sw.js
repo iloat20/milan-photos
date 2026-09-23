@@ -145,7 +145,7 @@ function shellSwr(request) {
 function thumbSwr(request) {
   const cacheP = caches.open(CACHE_MEDIA);
   const revalidate = cacheP
-    .then((cache) =>
+    .then(() =>
       fetch(request).then(async (response) => {
         if (response && response.ok && response.type === "basic") {
           await putMedia(request, response.clone());

@@ -60,9 +60,12 @@ test.describe("画廊冒烟", () => {
     expect(n).toBeGreaterThanOrEqual(2);
     await expect(chips.first()).toHaveText("全部展厅");
     await chips.last().click();
+    // 筛选走 View Transitions 异步重渲染，轮询等新卡片数落地
+    await expect
+      .poll(async () => cards.count(), { timeout: 5_000 })
+      .toBeLessThan(18);
     const filtered = await cards.count();
     expect(filtered).toBeGreaterThan(0);
-    expect(filtered).toBeLessThan(18);
     await chips.first().click();
     await expect(cards).toHaveCount(18);
   });

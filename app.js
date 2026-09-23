@@ -301,7 +301,8 @@
     };
     // 首屏初始渲染不套 VT（gallery 为空）；筛选/数据重建走卡片级配对动画
     if (prefersViewTransitions() && gallery && gallery.childElementCount > 0) {
-      document.startViewTransition(update);
+      // 接住 finished：连续切换会 skip 进行中的 VT，其 finished 会 reject InvalidStateError
+      document.startViewTransition(update).finished.catch(() => {});
     } else {
       update();
     }
@@ -912,7 +913,9 @@
         reveal();
         lbImg.style.viewTransitionName = "milan-lightbox-img";
       });
-      t.finished.finally(finish);
+      t.finished.finally(finish).catch(() => {
+        /* VT 被后续 transition skip 时 finished reject（InvalidStateError），吞掉勿冒泡 */
+      });
     } else {
       reveal();
       finish();
@@ -953,10 +956,14 @@
       const t = document.startViewTransition(() => {
         closeUpdate();
       });
-      t.finished.finally(() => {
-        if (sourceImg) sourceImg.style.viewTransitionName = "";
-        restoreFocus();
-      });
+      t.finished
+        .finally(() => {
+          if (sourceImg) sourceImg.style.viewTransitionName = "";
+          restoreFocus();
+        })
+        .catch(() => {
+          /* VT 被后续 transition skip 时 finished reject（InvalidStateError），吞掉勿冒泡 */
+        });
     } else {
       closeUpdate();
       if (sourceImg) sourceImg.style.viewTransitionName = "";

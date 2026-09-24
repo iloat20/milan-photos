@@ -113,6 +113,17 @@ test.describe("画廊冒烟", () => {
   });
 
   test("Service Worker 离线仍可服务", async ({ page, context }) => {
+    const pageErrs = [];
+    page.on("pageerror", (e) => pageErrs.push("pageerror:" + String(e)));
+    page.on("console", (m) => {
+      if (m.type() === "error") pageErrs.push("console:" + m.text());
+    });
+    page.on("requestfailed", (req) =>
+      pageErrs.push(
+        "reqfail:" + req.url().replace(/^https?:\/\/[^/]+/, "") +
+          " " + (req.failure()?.errorText || "")
+      )
+    );
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
     // claim 后主动经 SW 补拉一次清单：networkFirst 成功即写入 shell 缓存，
@@ -138,6 +149,27 @@ test.describe("画廊冒烟", () => {
       null,
       { timeout: 20_000 }
     );
+    // 关键预热：goto 的 navigation 早于 SW register，SW 此前从未拦截过 navigation——
+    // 「SW 首次拦截 navigation/子资源」若恰逢 CDP 离线边界会出现 0 卡混沌（已实测双形态：
+    // app.js 直达网络被断 JS 没跑；manifest fetch 断 + 快照窗口期 match 落空）。
+    // 在线先 reload 一遍让 shellSwr/networkFirst 全链路走热，离线导航即第二次（热）路径。
+    await page.reload();
+    await expect(page.locator(".card")).toHaveCount(18);
+    await page.waitForFunction(
+      async () => {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        const activated = regs.some((r) => r.active?.state === "activated");
+        const hasManifest = !!(await caches.match(
+          new Request("photos/manifest.json", { cache: "no-store" }),
+          { ignoreSearch: true }
+        ));
+        return (
+          activated && !!navigator.serviceWorker.controller && hasManifest
+        );
+      },
+      null,
+      { timeout: 20_000 }
+    );
     await context.setOffline(true);
     try {
       // 用页面内导航而非 page.reload()：CDP 驱动的 reload 在 offline 模拟下
@@ -149,7 +181,45 @@ test.describe("画廊冒烟", () => {
         })
         .catch(() => {});
       await navP;
-      await expect(page.locator(".card")).toHaveCount(18, { timeout: 10_000 });
+      // 早态：导航完成后立刻取时间线，失败时与 errs 一起输出
+      const early = await page
+        .evaluate(() => ({
+          readyState: document.readyState,
+          cards0: document.querySelectorAll(".card").length,
+          appSrc: [...document.scripts].map((s) => s.src).filter((s) => s.includes("app.js")),
+        }))
+        .catch((err) => ({ earlyErr: String(err) }));
+      try {
+        await expect(page.locator(".card")).toHaveCount(18, { timeout: 10_000 });
+      } catch (e) {
+        // 失败现场：区分 fetch 挂起 / 缓存缺失 / SW 掉线 / 页面异常，避免间歇问题盲修
+        const diag = await page
+          .evaluate(async () => ({
+            controller: !!navigator.serviceWorker.controller,
+            keys: await caches.keys(),
+            matchDirect: !!(await caches.match("photos/manifest.json", {
+              ignoreSearch: true,
+            })),
+            fetchRes: await Promise.race([
+              fetch("photos/manifest.json", { cache: "no-store" })
+                .then((r) => "status:" + r.status)
+                .catch((err) => "reject:" + err.name),
+              new Promise((r) => setTimeout(() => r("HANG-5s"), 5000)),
+            ]),
+            cards: document.querySelectorAll(".card").length,
+          }))
+          .catch((err) => ({ diagErr: String(err) }));
+        console.log(
+          "OFFLINEDIAG " +
+            JSON.stringify({
+              ...diag,
+              early,
+              pageErrs: pageErrs.slice(0, 10),
+              lf: await page.evaluate(() => window.__lf || null).catch(() => "read-err"),
+            })
+        );
+        throw e;
+      }
     } finally {
       await context.setOffline(false);
     }

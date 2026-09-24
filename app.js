@@ -301,8 +301,7 @@
     };
     // 首屏初始渲染不套 VT（gallery 为空）；筛选/数据重建走卡片级配对动画
     if (prefersViewTransitions() && gallery && gallery.childElementCount > 0) {
-      // 接住 finished：连续切换会 skip 进行中的 VT，其 finished 会 reject InvalidStateError
-      document.startViewTransition(update).finished.catch(() => {});
+      startVT(update);
     } else {
       update();
     }
@@ -742,10 +741,33 @@
   }
 
   async function loadFolderPhotos() {
+    // 离线间歇问题留痕时间线：window.__lf 记录当初每步（轻量，线上可查）
+    const mark = (s) => {
+      (window.__lf || (window.__lf = [])).push(s);
+    };
+    mark("start");
     try {
-      const res = await fetch("photos/manifest.json", { cache: "no-store" });
-      if (!res.ok) throw new Error("manifest missing");
-      const data = await res.json();
+      let data = null;
+      try {
+        const res = await fetch("photos/manifest.json", { cache: "no-store" });
+        if (!res.ok) throw new Error("manifest missing");
+        data = await res.json();
+        mark("fetch-ok");
+      } catch (e) {
+        mark("fetch-throw:" + (e && e.name));
+        // SW 层回落意外失守（离线时序/坏 response）时直接问 CacheStorage：
+        // 它是存储层、不依赖 SW 拦截，install 快照必在——终结「离线 0 卡」
+        const cached = await caches.match("photos/manifest.json", {
+          ignoreSearch: true,
+        });
+        if (cached) {
+          data = await cached.json();
+          mark("fallback-hit");
+        } else {
+          mark("fallback-miss");
+          throw new Error("manifest unavailable", { cause: e });
+        }
+      }
       const list = Array.isArray(data) ? data : data.photos || [];
       folderPhotos = list.map((item, i) => {
         const src = item.src || item.file || `photos/${item}`;
@@ -771,7 +793,9 @@
       if (folderPhotos[0]) {
         preloadImage(folderPhotos[0].mediumAvif || heroSrc(folderPhotos[0]));
       }
-    } catch {
+      mark("parsed:" + folderPhotos.length);
+    } catch (e) {
+      mark("outer-catch:" + (e && e.message));
       folderPhotos = [];
     }
     // 数据到达（无论成败）后才允许显示空状态
@@ -782,6 +806,7 @@
     const fm0 = hm.match(HASH_FILTER_RE);
     if (fm0) activeFilter = fm0[1];
     rebuildPhotos();
+    mark("done:" + folderPhotos.length);
     const pm0 = hm.match(HASH_PHOTO_RE);
     if (pm0) openLightboxFromHash(decodeURIComponent(pm0[1]));
   }
@@ -882,6 +907,20 @@
     return typeof document.startViewTransition === "function" && !reduceMotion;
   }
 
+  /**
+   * 启动 VT 并把三个 promise 全接住：hidden/被后续 skip 时 finished/ready/
+   * updateCallbackDone 都会 reject InvalidStateError——漏接任何一个都会冒成
+   * unhandledrejection（headless 可见时 VT 正常完成不 reject，e2e 单测难复现，
+   * 线上 hidden 场景实测：只接 finished 每次交互仍冒 1 个）。
+   */
+  function startVT(update) {
+    const t = document.startViewTransition(update);
+    t.finished.catch(() => {});
+    t.ready.catch(() => {});
+    t.updateCallbackDone.catch(() => {});
+    return t;
+  }
+
   function cardImageAt(index) {
     return gallery?.querySelectorAll(".card")[index]?.querySelector("img") || null;
   }
@@ -908,7 +947,7 @@
     };
 
     if (prefersViewTransitions()) {
-      const t = document.startViewTransition(() => {
+      const t = startVT(() => {
         if (sourceImg) sourceImg.style.viewTransitionName = "";
         reveal();
         lbImg.style.viewTransitionName = "milan-lightbox-img";
@@ -953,7 +992,7 @@
 
     if (prefersViewTransitions()) {
       // 复用 closeUpdate，勿内联复制：此前内联漏掉 setHash，导致 VT 分支关灯箱后 hash 残留 #p
-      const t = document.startViewTransition(() => {
+      const t = startVT(() => {
         closeUpdate();
       });
       t.finished

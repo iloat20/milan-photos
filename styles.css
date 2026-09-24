@@ -727,7 +727,10 @@ code {
   flex-direction: column;
   touch-action: manipulation;
   content-visibility: auto;
-  contain-intrinsic-size: auto 400px;
+
+  /* 仅约束跳过渲染时的估算高度；单值 contain-intrinsic-size 会把宽度也设为 400px，
+     撑破手机端 1fr 网格并造成整页横向溢出。 */
+  contain-intrinsic-height: auto 400px;
   isolation: isolate;
 }
 
@@ -1420,6 +1423,10 @@ body.lb-open {
   .chapter-head {
     margin-bottom: 36px;
     padding: 0 18px;
+  }
+
+  .chapter-head::before {
+    inset-inline: 0;
   }
 
   .chapter-title {

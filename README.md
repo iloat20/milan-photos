@@ -67,7 +67,7 @@ photos/thumbs/             列表缩略图（WebP + AVIF，400/800/1200 三档�
 photos/medium/             灯箱用中尺寸（WebP + AVIF ≤1600px；原图 ≤1600 时不生成）
 tools/serve.py             本地预览（manifest mtime 戳缓存）
 tools/sync_photos.py       生成 manifest + 缩略图 + 中尺寸 + AVIF（CI 权威跑）
-tests/e2e/                 Playwright 冒烟（7 项）
+tests/e2e/                 Playwright 冒烟（10 项）
 .github/workflows/         sync-photos（清单回写）+ ci（lint → e2e → Lighthouse）
 .github/dependabot.yml     npm + GitHub Actions 每周依赖巡检
 AGENTS.md                  项目约定（命令 / 生成物 / 无障碍契约）
@@ -80,18 +80,7 @@ package.json               仅 dev 工具（应用本身零依赖零构建）
 ```powershell
 npm ci            # 首次
 npm run lint      # ESLint + Stylelint
-npm run test:e2e  # Playwright 冒烟：AVIF 协商 / manifest / 灯箱 / 筛选 / 轮播 / SW 离线 / 零 console 错误
-npm run lhci      # Lighthouse CI（a11y / best-practices / SEO 满分断言）
-```
-
-所有 push 都会触发 CI（lint → e2e → Lighthouse）；Dependabot 每周检查依赖与 Actions 版本。
-
-## 工程化与测试
-
-```powershell
-npm ci            # 首次
-npm run lint      # ESLint + Stylelint
-npm run test:e2e  # Playwright 冒烟：AVIF 协商 / manifest / 灯箱 / 筛选 / 轮播 / SW 离线 / 零 console 错误
+npm run test:e2e  # Playwright 冒烟：AVIF / manifest / 灯箱 / 筛选 / 轮播 / 移动端 / SW 缓存隔离与离线 / 零 console 错误
 npm run lhci      # Lighthouse CI（a11y / best-practices / SEO 满分断言）
 ```
 

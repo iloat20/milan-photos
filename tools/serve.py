@@ -40,17 +40,21 @@ def build_manifest() -> bytes:
 
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
-        path = self.path.split("?", 1)[0]
-        if path in ("/photos/manifest.json", "photos/manifest.json"):
-            body = build_manifest()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
+        try:
+            path = self.path.split("?", 1)[0]
+            if path in ("/photos/manifest.json", "photos/manifest.json"):
+                body = build_manifest()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            super().do_GET()
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            # 页面切换、懒加载和测试结束都会主动取消在途图片请求；这是正常断连。
             return
-        super().do_GET()
 
     def log_message(self, fmt: str, *args) -> None:
         print("%s - %s" % (self.address_string(), fmt % args))
@@ -64,6 +68,9 @@ class Server(ThreadingHTTPServer):
 
 def main() -> None:
     port = 8080
+    # 冷启动时先完成一次清单扫描；否则并行 E2E worker 会同时等同一把锁，
+    # 首个页面可能在默认 5s 断言窗口内仍拿不到卡片。
+    build_manifest()
     handler = partial(Handler, directory=str(ROOT))
     with Server(("127.0.0.1", port), handler) as httpd:
         print(f"米兰本地预览: http://127.0.0.1:{port}/")

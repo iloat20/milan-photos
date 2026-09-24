@@ -7,7 +7,8 @@ test.describe("画廊冒烟", () => {
     await expect(cards).toHaveCount(18);
     // 每张卡片的 picture 都挂了 image/avif source
     await expect(page.locator('.card picture source[type="image/avif"]')).toHaveCount(18);
-    // 协商结果：已加载（非懒加载占位）的 img currentSrc 应为 .avif
+    // 主动滚进展厅触发其余懒加载图片，再验证浏览器实际选择了 AVIF。
+    await cards.first().scrollIntoViewIfNeeded();
     await page.waitForFunction(
       () => {
         const loaded = [...document.querySelectorAll(".card img")].filter(
@@ -46,6 +47,30 @@ test.describe("画廊冒烟", () => {
     }, null, { timeout: 10_000 });
     const src = await page.locator("#lbImg").evaluate((img) => img.currentSrc);
     expect(src).toBeTruthy();
+    await page.locator("#close").click();
+    await expect(lightbox).toBeHidden();
+  });
+
+  test("手机宽度保持双列展厅且灯箱可用", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const cards = page.locator(".card");
+    await expect(cards).toHaveCount(18);
+
+    const layout = await page.locator("#galleryGrid").evaluate((gallery) => ({
+      columns: getComputedStyle(gallery).gridTemplateColumns.split(" ").length,
+      noHorizontalOverflow:
+        document.documentElement.scrollWidth <= window.innerWidth,
+    }));
+    expect(layout).toEqual({ columns: 2, noHorizontalOverflow: true });
+
+    await cards.first().click();
+    const lightbox = page.locator("#lightbox");
+    await expect(lightbox).toBeVisible();
+    const frameBox = await page.locator(".lightbox-frame").boundingBox();
+    expect(frameBox).not.toBeNull();
+    expect(frameBox.x).toBeGreaterThanOrEqual(0);
+    expect(frameBox.x + frameBox.width).toBeLessThanOrEqual(390);
     await page.locator("#close").click();
     await expect(lightbox).toBeHidden();
   });
@@ -110,6 +135,55 @@ test.describe("画廊冒烟", () => {
     await expect.poll(activeIdx, { timeout: 3_000 }).toBe(1);
     await page.locator("#heroPrev").click();
     await expect.poll(activeIdx, { timeout: 3_000 }).toBe(0);
+  });
+
+  test("Service Worker 激活只清理本站旧缓存", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+
+    const cachesAfterActivate = await page.evaluate(async () => {
+      const current = await navigator.serviceWorker.getRegistration();
+      if (current) await current.unregister();
+
+      const unrelated = await caches.open("unrelated-project-v1");
+      await unrelated.put("/unrelated.js", new Response("keep"));
+      const stale = await caches.open("milan-v0-shell");
+      await stale.put("/stale", new Response("stale"));
+
+      // 查询串确保这是全新的 Worker 安装，即使 sw.js 文件内容没有变化。
+      const registration = await navigator.serviceWorker.register(
+        "./sw.js?e2e-cache-isolation=1"
+      );
+      const worker = registration.installing || registration.waiting || registration.active;
+      if (!worker) throw new Error("Service Worker 未创建");
+      if (worker.state !== "activated") {
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("Service Worker 激活超时")), 10_000);
+          const checkState = () => {
+            if (worker.state === "activated") {
+              clearTimeout(timer);
+              resolve();
+            } else if (worker.state === "redundant") {
+              clearTimeout(timer);
+              reject(new Error("Service Worker 安装失败"));
+            }
+          };
+          worker.addEventListener("statechange", checkState);
+          checkState();
+        });
+      }
+
+      const preserved = await (await caches.open("unrelated-project-v1")).match(
+        "/unrelated.js"
+      );
+      return {
+        unrelated: preserved ? await preserved.text() : null,
+        staleOwnCacheExists: await caches.has("milan-v0-shell"),
+      };
+    });
+
+    expect(cachesAfterActivate.unrelated).toBe("keep");
+    expect(cachesAfterActivate.staleOwnCacheExists).toBe(false);
   });
 
   test("Service Worker 离线仍可服务", async ({ page, context }) => {

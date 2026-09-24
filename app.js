@@ -1072,13 +1072,14 @@
     if (!gallery) return;
     gallery.innerHTML = "";
     emptyEl.hidden = !galleryReady || visible.length > 0;
+    const wallIndexes = new Map(photos.map((photo, index) => [photo, index]));
 
     visible.forEach((photo, i) => {
       const card = document.createElement("button");
       card.type = "button";
       card.className = "card";
       const titleText = displayTitle(photo, i);
-      const wallIdx = Math.max(0, photos.indexOf(photo));
+      const wallIdx = wallIndexes.get(photo) ?? 0;
       const wallNo = wallNumber(wallIdx);
       // accessible name 需覆盖卡片内全部可见文本（图注编号 + 标题），否则 axe label-content-name-mismatch
       card.setAttribute("aria-label", `观展：${wallNo} ${titleText}`);

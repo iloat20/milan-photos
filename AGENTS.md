@@ -10,6 +10,7 @@ python tools/sync_photos.py    # 生成 manifest + thumbs + medium（需 Pillow�
 npm run lint                   # ESLint + Stylelint
 npm run test:e2e               # Playwright 冒烟（自动起 serve.py，5 项）
 npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
+node tools/build-font-subset.js # 改文案后重生成标题字体子集（需网络；不跑则新字逐字回退 SimSun）
 ```
 
 - 本地预览：`serve.py` 对 `/photos/manifest.json` 做 mtime 戳缓存（`photos/` 变了自动重建），新图刷新即见，**不要**为预览去跑 sync。
@@ -25,6 +26,7 @@ npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
+| `assets/fonts/milan-serif.woff2` | 标题字体子集（站内 257 字形 / ~95KB / 可变 400–600），`tools/build-font-subset.js` 生成；只含**可见**文本，改文案后重跑 |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
 - 日期优先 EXIF（DateTimeOriginal / DateTime），否则文件 mtime。
@@ -41,6 +43,9 @@ npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
 - 展厅墙面取色：`sampleRoomColor()` 从当前画作采样，写入 `--room-adapt` / `--room-adapt-deep` / `--room-adapt-glow`；采样后会按与象牙字的对比度**压暗墙色**，避免亮画把 chrome 冲没。
 - 金框用 box-shadow / border 模拟；光晕应落在墙面（伪元素），**不要**打在画心上。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
+- 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
+- 卡片的光是「轨道射灯」：框顶边受光更亮、锥光落在画框**上方**的墙面、投影向下坠，hover 即打亮；`--display` 字体栈里 `Milan Serif` 是站内字形子集（Windows 无系统中文衬线时兜底），插在 `STSong` 后、`SimSun` 前。
+- 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。
 
 ### 网格与比例（正名）
 

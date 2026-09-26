@@ -38,4 +38,12 @@ export default [
       globals: { ...globals.node, ...globals.commonjs, ...globals.browser },
     },
   },
+  {
+    files: ["tools/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: { ...globals.node },
+    },
+  },
 ];

@@ -90,7 +90,9 @@
       <div class="chapter-head">
         <h2 class="chapter-title">展厅</h2>
       </div>
-      <div class="filter-bar" id="filterBar" role="toolbar" aria-label="展厅索引"></div>
+      <!-- role=group 而非 toolbar：toolbar 语义要求 roving tabindex + 左右方向键导航，
+           这里是一组 aria-pressed 切换按钮、全部在 Tab 序列内，故用 group 更贴实。 -->
+      <div class="filter-bar" id="filterBar" role="group" aria-label="展厅索引"></div>
       <div class="gallery-skeleton" id="gallerySkeleton" aria-hidden="true">
         <span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
@@ -176,6 +178,10 @@
     </div>
   </dialog>
 
-  <script src="app.js" defer></script>
+  <!-- type="module"（P2-2）：app.js 现在从 ./src/util.js import 纯函数。
+       模块脚本默认就是 defer 语义，与原 `defer` 的执行时机一致，不改首屏行为。
+       ⚠️ sw.js 的 SHELL_ASSETS 必须同步列出 src/ 下的模块，否则离线时
+       app.js 能命中缓存、它的 import 却拉不到，整站停在骨架屏。 -->
+  <script type="module" src="app.js"></script>
 </body>
 </html>

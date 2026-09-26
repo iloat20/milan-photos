@@ -1,5 +1,22 @@
+import {
+  uid,
+  safeDecode,
+  displayTitle,
+  wallNumber,
+  toLocalDate,
+  ymKey,
+  ymLabel,
+  baseFileName,
+  collectFilters,
+  stripExt,
+  safeFileName,
+  heroSrc,
+  lightboxAvifOrFallback,
+} from "./src/util.js";
+import { createLightbox } from "./src/lightbox.js";
+
 (() => {
-  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,fileName?:string,custom?:boolean,width?:number,height?:number}[]} */
+  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,fileName?:string,custom?:boolean,width?:number,height?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -10,20 +27,15 @@
   let activeFilter = "all";
   // manifest 到达前不展示空状态，避免首屏闪现「展厅尚未布展」
   let galleryReady = false;
-  let lbPos = 0;
   let reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const gallery = document.getElementById("galleryGrid");
   const filterBar = document.getElementById("filterBar");
   const emptyEl = document.getElementById("empty");
   const skeletonEl = document.getElementById("gallerySkeleton");
+  // 灯箱自身的 DOM 引用（画心/标题/箭头/关闭）不在此处持有 —— 它们全归 src/lightbox.js。
+  // 这里只留 <dialog> 本体：墙色注入（applyRoomToLightbox）与 hashchange 需要读它。
   const lightbox = document.getElementById("lightbox");
-  const lbImg = document.getElementById("lbImg");
-  const lbSource = document.getElementById("lbSource");
-  const lbTitle = document.getElementById("lbTitle");
-  const prevBtn = document.getElementById("prev");
-  const nextBtn = document.getElementById("next");
-  const closeBtn = document.getElementById("close");
   const addPhotoBtn = document.getElementById("addPhotoBtn");
   const photoInput = document.getElementById("photoInput");
   const uploadStatus = document.getElementById("uploadStatus");
@@ -34,10 +46,47 @@
   const heroNext = document.getElementById("heroNext");
   const heroPauseBtn = document.getElementById("heroPause");
 
-  const pad = (n) => String(n).padStart(2, "0");
-  const uid = () => `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  /** 统一的绑定守卫：元素缺失时静默降级，而不是抛 TypeError 中断整个 IIFE。
+   *  这个 IIFE 里的事件绑定都发生在 renderFilters/renderGallery/loadFolderPhotos 之前，
+   *  任何一处裸 addEventListener 命中 null（HTML 结构调整、SW 旧壳层配新页面、
+   *  未来重构移掉 <dialog>）都会让整站停在骨架屏且不报错。
+   *  同文件其余绑定早已是 `if (x) {}` 风格，这里把遗漏的几处补齐并统一。 */
+  const on = (el, type, handler, opts) => {
+    if (!el) return;
+    el.addEventListener(type, handler, opts);
+  };
 
-  /** 从画作采样，生成可用于展厅的低饱和墙色 */
+  /* —— 观画室域装配（P2-2 第二步）——
+     src/lightbox.js 自带状态机、缩放平移、指针手势与全部灯箱事件监听；
+     这里只把 DOM 引用和六类跨域能力按端口注入。装配点必须留在文件顶部：
+     createLightbox 会在调用时立刻读 .lightbox-stage 并绑事件，且
+     openLightboxFromHash（定义在下方）依赖它 —— 放晚了会撞 const 的 TDZ。
+     注入的都是函数声明（提升）或箭头（惰性求值），无初始化顺序问题。 */
+  const lb = createLightbox({
+    lightbox,
+    img: document.getElementById("lbImg"),
+    source: document.getElementById("lbSource"),
+    title: document.getElementById("lbTitle"),
+    prevBtn: document.getElementById("prev"),
+    nextBtn: document.getElementById("next"),
+    closeBtn: document.getElementById("close"),
+    on,
+    getList: () => visible,
+    // 视图过渡配对：把展厅第 index 张卡片的 <img> 与灯箱画心连成同一个 name
+    cardImageAt: (index) =>
+      gallery?.querySelectorAll(".card")[index]?.querySelector("img") || null,
+    preload: preloadImage,
+    applyRoom: applyRoomToLightbox,
+    sampleRoom: sampleRoomColor,
+    setHash,
+    filterHash: currentFilterHash,
+    prefersVT: prefersViewTransitions,
+    startVT,
+  });
+
+  /** 从画作采样，生成可用于展厅的低饱和墙色。
+   *  仅作**回退**用：manifest 里的 palette 是 sync 阶段用同一算法预计算的，
+   *  只有浏览器内上传的图（photo.custom，没有 manifest 条目）才走到这里。 */
   function sampleRoomColor(img) {
     if (!img || !img.naturalWidth) return null;
     try {
@@ -133,9 +182,18 @@
     }
   }
 
-  /* 卡片墙色采样排进空闲时段：几十张缩略图的 load 回调会扎堆，
-     逐张做 canvas 取色 + 对比度迭代会把主线程一帧打满；
-     队列按 requestIdleCallback 分片跑，renderGallery 重建时代际作废旧任务 */
+  /** 把调色板写到卡片的画心容器上。palette 来自 manifest 预计算或采样回退，
+   *  两者同形，故这里不认识来源。（P1-6 前这段赋值散在 idle 任务里） */
+  function applyCardPalette(el, p) {
+    el.style.setProperty("--card-wall", p.wall);
+    el.style.setProperty("--card-glow", p.glow);
+    el.style.setProperty("--card-accent", p.accent);
+  }
+
+  /* 采样回退队列：仅在 manifest 没有 palette 时使用（当前只有上传图）。
+     保留分片是因为上传图数量不设上限，逐张 canvas 取色 + 对比度迭代仍可能
+     一帧打满；队列按 requestIdleCallback 分片跑，renderGallery 重建时代际作废旧任务。
+     注意：馆藏图已不再进这个队列（P1-6 前每次 renderGallery 会排 18 个任务）。 */
   const roomJobs = [];
   let roomEpoch = 0;
   let roomScheduled = false;
@@ -203,48 +261,6 @@
     if (card) card.style.setProperty("--fit", String(clamped));
   }
 
-  function looksLikeFileTitle(title) {
-    return (
-      !title ||
-      /^(img|dsc|pxl|mmexport|photo|image|未命名)/i.test(title) ||
-      /^[\w.-]*\d{6,}/.test(title)
-    );
-  }
-
-  function displayTitle(photo, index) {
-    const t = (photo?.title || "").trim();
-    if (!looksLikeFileTitle(t)) return `《${t}》`;
-    return `《无题 · ${String(index + 1).padStart(2, "0")}》`;
-  }
-
-  function wallNumber(index) {
-    return `MIL · ${String(index + 1).padStart(3, "0")}`;
-  }
-
-  function toLocalDate(msOrDate) {
-    const d = msOrDate instanceof Date ? msOrDate : new Date(msOrDate);
-    if (Number.isNaN(d.getTime())) return "";
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  }
-
-  function ymKey(dateStr) {
-    if (!dateStr || typeof dateStr !== "string") return "";
-    return dateStr.slice(0, 7);
-  }
-
-  function ymLabel(key) {
-    const [y, m] = String(key || "").split("-");
-    if (!y || !m) return String(key || "");
-    return `${y}年${Number(m)}月`;
-  }
-
-  /** 用于 folder / custom 去重：取路径最后一段文件名 */
-  function baseFileName(p) {
-    const raw = p?.file || p?.fileName || "";
-    if (raw) return String(raw).split("/").pop();
-    return "";
-  }
-
   function rebuildPhotos() {
     const folderKeys = new Set(
       folderPhotos.map(baseFileName).filter(Boolean)
@@ -257,6 +273,22 @@
     photos = folderPhotos.concat(extras);
     applyFilter();
     renderHeroCarousel();
+  }
+
+  /* preload 的 <link> 只增不减：每次 hover/focus/翻页都往 <head> 追加，
+     100 张馆藏时会挂到约 200 个节点。这里分两类管理：
+       priority === "high"（序厅首图，关键路径）→ 永久保留
+       其余（卡片 hover / 灯箱相邻）           → 进可回收池，超上限按插入序淘汰
+     淘汰不会造成重复下载：预载过的 URL 已在 HTTP 缓存里，SW 也落过盘，
+     真到用时命中缓存，不额外产生请求。 */
+  const PRELOAD_POOL_MAX = 24;
+  const preloadPool = [];
+
+  function trimPreloadPool() {
+    while (preloadPool.length > PRELOAD_POOL_MAX) {
+      const dead = preloadPool.shift();
+      if (dead && dead.isConnected) dead.remove();
+    }
   }
 
   function preloadImage(href, priority = "high") {
@@ -275,16 +307,10 @@
     else if (/\.webp$/i.test(href)) link.type = "image/webp";
     link.setAttribute("fetchpriority", priority);
     document.head.appendChild(link);
-  }
-
-  function collectFilters(list) {
-    const keys = [];
-    list.forEach((p) => {
-      const k = ymKey(p.date);
-      if (k && !keys.includes(k)) keys.push(k);
-    });
-    keys.sort().reverse();
-    return keys;
+    if (priority !== "high") {
+      preloadPool.push(link);
+      trimPreloadPool();
+    }
   }
 
   /* —— URL hash 深链：#f=<年月> 筛选 / #p=<photo.id> 灯箱；纯锚点（#gallery 等）不干预 —— */
@@ -304,12 +330,12 @@
   function openLightboxFromHash(key) {
     const inVisible = visible.findIndex((p) => p.id === key);
     if (inVisible >= 0) {
-      openLightbox(inVisible, null);
+      lb.open(inVisible, null);
       return;
     }
     // 筛选不含该画时按全量馆藏打开，与 hero 点击行为一致
     const allIdx = photos.findIndex((p) => p.id === key);
-    if (allIdx >= 0) openLightbox(allIdx, null, photos);
+    if (allIdx >= 0) lb.open(allIdx, null, photos);
   }
 
   window.addEventListener("hashchange", () => {
@@ -323,8 +349,8 @@
       return;
     }
     const pm = hm.match(HASH_PHOTO_RE);
-    if (pm && !lightbox.open) {
-      openLightboxFromHash(decodeURIComponent(pm[1]));
+    if (pm && !lb.isOpen()) {
+      openLightboxFromHash(safeDecode(pm[1]));
     }
     // 纯锚点交给浏览器默认滚动
   });
@@ -355,84 +381,9 @@
   let heroSwiped = false;
   let heroUserPaused = false;
   let heroTempPaused = false;
-  let lbReturnFocus = null;
-  /** 灯箱导航序列；null 表示跟随当前筛选 visible */
-  let lbList = null;
 
-  function lightboxPhotos() {
-    return lbList || visible;
-  }
-
-  /* —— 观画室缩放状态（双指捏合 / 双击 / 滚轮） —— */
-  let lbZoom = 1;
-  let lbTx = 0;
-  let lbTy = 0;
-  /** 单击切图后的双击观察窗口（浏览器 dblclick 判定约 500ms，取 450ms 对齐） */
-  let tapTimer = 0;
-
-  function applyLbTransform() {
-    if (!lbImg) return;
-    lbImg.style.setProperty("--lb-zoom", String(lbZoom));
-    lbImg.style.setProperty("--lb-tx", `${lbTx}px`);
-    lbImg.style.setProperty("--lb-ty", `${lbTy}px`);
-    lbImg.classList.toggle("is-zoomed", lbZoom > 1);
-  }
-
-  function resetLbZoom(instant) {
-    lbZoom = 1;
-    lbTx = 0;
-    lbTy = 0;
-    // instant：借 is-panning 的 transition:none 瞬时归位（VT 快照用）
-    if (instant) lbImg.classList.add("is-panning");
-    applyLbTransform();
-    if (instant) lbImg.classList.remove("is-panning");
-  }
-
-  function clampLbPan() {
-    if (lbZoom <= 1) {
-      lbTx = 0;
-      lbTy = 0;
-      return;
-    }
-    // 平移上限 = 缩放溢出的半幅，超出会露底
-    const maxX = (lbImg.offsetWidth * (lbZoom - 1)) / 2;
-    const maxY = (lbImg.offsetHeight * (lbZoom - 1)) / 2;
-    lbTx = Math.min(maxX, Math.max(-maxX, lbTx));
-    lbTy = Math.min(maxY, Math.max(-maxY, lbTy));
-  }
-
-  /** 锚点相对当前渲染矩形中心的屏幕偏移（变换围绕中心，中心含平移量） */
-  function anchorRel(clientX, clientY) {
-    const rect = lbImg.getBoundingClientRect();
-    return {
-      x: clientX - (rect.left + rect.width / 2),
-      y: clientY - (rect.top + rect.height / 2),
-    };
-  }
-
-  /** 锚点缩放：T' = T + rel * (1 - z'/z)，锚点处画面不动 */
-  function zoomAtAnchor(nextZoom, relX, relY) {
-    const z = Math.min(4, Math.max(1, nextZoom));
-    if (z <= 1) {
-      resetLbZoom(false);
-      return;
-    }
-    const k = 1 - z / lbZoom;
-    lbTx += relX * k;
-    lbTy += relY * k;
-    lbZoom = z;
-    clampLbPan();
-    applyLbTransform();
-  }
-
-  function toggleLbZoomAt(clientX, clientY) {
-    if (lbZoom > 1) {
-      resetLbZoom(false);
-      return;
-    }
-    const rel = anchorRel(clientX, clientY);
-    zoomAtAnchor(2.5, rel.x, rel.y);
-  }
+  /* 观画室的导航序列 / 焦点回归 / 缩放平移状态与全部手势，已迁往 src/lightbox.js —— 
+     本文件自 P2-2 第二步起不再持有任何灯箱态。 */
 
   function syncHeroPauseButton() {
     if (!heroPauseBtn) return;
@@ -445,12 +396,6 @@
     );
     const glyph = heroPauseBtn.querySelector(".hero-pause-glyph");
     if (glyph) glyph.textContent = heroUserPaused ? "▶" : "‖";
-  }
-
-  function heroSrc(photo) {
-    // 动图在轮播只用静态缩略图，避免首屏拉原文件
-    if (photo?.animated) return photo.thumb || photo.src || "";
-    return photo?.medium || photo?.thumb || photo?.src || "";
   }
 
   /** 只给当前/前后一张挂 src——绝对定位会让 loading=lazy 全部失效 */
@@ -478,17 +423,24 @@
         if (i === heroPos) {
           img.loading = "eager";
           img.fetchPriority = "high";
-          const syncRoom = () => {
-            if (heroPos !== i) return;
-            applyRoomToHero(sampleRoomColor(img));
-          };
-          // src 被摘掉再挂回时 complete 会短暂为 false，必须重新绑 load
-          if (srcChanged || !img.dataset.roomBound) {
-            img.dataset.roomBound = "1";
-            if (img.complete) syncRoom();
-            else img.addEventListener("load", syncRoom, { once: true });
-          } else if (img.complete) {
-            applyRoomToHero(sampleRoomColor(img));
+          if (photo.palette) {
+            // 预计算调色板：不必等中图解码，切到本张时墙色立刻即终点色，
+            // 省掉「先默认深绿 → 解码后再变」的一次色跳（P1-6）
+            applyRoomToHero(photo.palette);
+          } else {
+            // 上传图无预计算值：等解码后采样，与 P1-6 前行为一致
+            const syncRoom = () => {
+              if (heroPos !== i) return;
+              applyRoomToHero(sampleRoomColor(img));
+            };
+            // src 被摘掉再挂回时 complete 会短暂为 false，必须重新绑 load
+            if (srcChanged || !img.dataset.roomBound) {
+              img.dataset.roomBound = "1";
+              if (img.complete) syncRoom();
+              else img.addEventListener("load", syncRoom, { once: true });
+            } else if (img.complete) {
+              applyRoomToHero(sampleRoomColor(img));
+            }
           }
         } else {
           img.loading = "lazy";
@@ -594,7 +546,12 @@
       const picture = document.createElement("picture");
       picture.appendChild(heroSource);
       picture.appendChild(img);
-      const art = document.createElement("div");
+      // 序厅画作用 <button> 承载：原生可聚焦、Enter/Space 原生派发 click，
+      // 事件冒泡到 slide 上既有的 click 处理器，无需另写 keydown。
+      // slide 自身仍是 role="group" + aria-roledescription="slide"（APG 轮播结构），
+      // tabIndex 保持 -1：它是可编程聚焦的容器，不是 Tab 站点。
+      const art = document.createElement("button");
+      art.type = "button";
       art.className = "hero-art";
       art.appendChild(picture);
       slide.appendChild(art);
@@ -613,12 +570,12 @@
         }
         const inFilter = visible.findIndex((p) => p.id === photo.id);
         if (inFilter >= 0) {
-          openLightbox(inFilter, slide);
+          lb.open(inFilter, slide);
           return;
         }
         // 筛选不含该画时，按全量馆藏打开，避免静默无响应
         const allIdx = photos.findIndex((p) => p.id === photo.id);
-        if (allIdx >= 0) openLightbox(allIdx, slide, photos);
+        if (allIdx >= 0) lb.open(allIdx, slide, photos);
       });
 
       heroTrack.appendChild(slide);
@@ -827,6 +784,9 @@
           id: item.file || item.src || `f${i}`,
           width: Number(item.width) || 0,
           height: Number(item.height) || 0,
+          // 预计算墙色调色板：这里是逐字段白名单拷贝，新字段必须显式接管，
+          // 漏掉不会报错、只会静默退回客户端采样（P1-6 就是这么被吞过一次）
+          palette: item.palette || null,
         };
       });
       if (folderPhotos[0]) {
@@ -960,152 +920,8 @@
     return t;
   }
 
-  function cardImageAt(index) {
-    return gallery?.querySelectorAll(".card")[index]?.querySelector("img") || null;
-  }
-
-  function openLightbox(index, invoker, list) {
-    lbList = list && list.length ? list : null;
-    const sourceImg = lbList ? null : cardImageAt(index);
-    if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
-    lbPos = index;
-    lbReturnFocus =
-      invoker ||
-      sourceImg?.closest(".card") ||
-      null;
-
-    const finish = () => {
-      if (sourceImg) sourceImg.style.viewTransitionName = "";
-    };
-
-    const reveal = () => {
-      syncLightbox();
-      if (!lightbox.open) lightbox.showModal();
-      document.body.classList.add("lb-open");
-      closeBtn.focus();
-    };
-
-    if (prefersViewTransitions()) {
-      const t = startVT(() => {
-        if (sourceImg) sourceImg.style.viewTransitionName = "";
-        reveal();
-        lbImg.style.viewTransitionName = "milan-lightbox-img";
-      });
-      t.finished.finally(finish).catch(() => {
-        /* VT 被后续 transition skip 时 finished reject（InvalidStateError），吞掉勿冒泡 */
-      });
-    } else {
-      reveal();
-      finish();
-    }
-  }
-
-  function closeLightbox() {
-    if (tapTimer) {
-      clearTimeout(tapTimer);
-      tapTimer = 0;
-    }
-    // 瞬时复位缩放：VT 的 old 快照要以完整画面回卡片
-    resetLbZoom(true);
-    const sourceImg = lbList ? null : cardImageAt(lbPos);
-    const returnEl =
-      lbReturnFocus ||
-      sourceImg?.closest(".card") ||
-      null;
-    lbReturnFocus = null;
-    lbList = null;
-
-    const restoreFocus = () => {
-      if (returnEl && typeof returnEl.focus === "function") {
-        returnEl.focus({ preventScroll: true });
-      }
-    };
-    const closeUpdate = () => {
-      lbImg.style.viewTransitionName = "";
-      lightbox.close();
-      document.body.classList.remove("lb-open");
-      if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
-      // 关灯箱恢复筛选深链（all 时清空）
-      setHash(currentFilterHash());
-    };
-
-    if (prefersViewTransitions()) {
-      // 复用 closeUpdate，勿内联复制：此前内联漏掉 setHash，导致 VT 分支关灯箱后 hash 残留 #p
-      const t = startVT(() => {
-        closeUpdate();
-      });
-      t.finished
-        .finally(() => {
-          if (sourceImg) sourceImg.style.viewTransitionName = "";
-          restoreFocus();
-        })
-        .catch(() => {
-          /* VT 被后续 transition skip 时 finished reject（InvalidStateError），吞掉勿冒泡 */
-        });
-    } else {
-      closeUpdate();
-      if (sourceImg) sourceImg.style.viewTransitionName = "";
-      restoreFocus();
-    }
-  }
-
-  function lightboxSrc(photo) {
-    // 动图灯箱用原文件，保证能播
-    if (photo?.animated) return photo.src || "";
-    return photo?.medium || photo?.src || "";
-  }
-
-  function preloadLightboxNeighbor(delta) {
-    const list = lightboxPhotos();
-    if (!list.length) return;
-    const next = list[(lbPos + delta + list.length) % list.length];
-    // 走 rel=preload：带 type=image/avif 时老浏览器免下无效图，与灯箱选中一致可复用
-    preloadImage(lightboxAvifOrFallback(next), "low");
-  }
-
-  /** 预载须与灯箱 <picture> 实际选中一致：AVIF 优先，动图仍原文件 */
-  function lightboxAvifOrFallback(photo) {
-    if (photo?.animated) return photo?.src || "";
-    return photo?.mediumAvif || lightboxSrc(photo);
-  }
-
-  function syncLightbox() {
-    const list = lightboxPhotos();
-    const photo = list[lbPos];
-    if (!photo) return;
-    // 换图复位缩放/平移
-    resetLbZoom(false);
-    const titleText = displayTitle(photo, lbPos);
-    // AVIF source 优先；动图/无中图留空，浏览器回退 img.src
-    if (lbSource) lbSource.srcset = photo.animated ? "" : photo.mediumAvif || "";
-    lbImg.src = lightboxSrc(photo);
-    lbImg.alt = titleText;
-    if (lbTitle) lbTitle.textContent = "";
-    applyRoomToLightbox(null);
-    const frame = lightbox?.querySelector(".lightbox-frame");
-    if (frame) {
-      frame.classList.remove("is-lit");
-      void frame.offsetWidth;
-      frame.classList.add("is-lit");
-    }
-    const roomSync = () => applyRoomToLightbox(sampleRoomColor(lbImg));
-    if (lbImg.complete) roomSync();
-    else lbImg.addEventListener("load", roomSync, { once: true });
-    lbImg.style.animation = "none";
-    void lbImg.offsetWidth;
-    lbImg.style.animation = "";
-    preloadLightboxNeighbor(1);
-    preloadLightboxNeighbor(-1);
-    // 深链：初开与单击切图都经这里，#p 始终指向当前画
-    if (photo.id != null) setHash("p=" + encodeURIComponent(photo.id));
-  }
-
-  function step(delta) {
-    const list = lightboxPhotos();
-    if (!list.length) return;
-    lbPos = (lbPos + delta + list.length) % list.length;
-    syncLightbox();
-  }
+  /* 观画室的开合 / 换图 / 预载 / 手势实现已整体迁往 src/lightbox.js（P2-2 第二步）。
+     本文件只保留装配（顶部 createLightbox 调用）与调用点 lb.open(...)。 */
 
   function renderGallery() {
     if (!gallery) return;
@@ -1185,19 +1001,29 @@
         );
       }
 
-      const bindCardRoom = () => {
-        // 采样进空闲队列：命中主线程的只有这一行 canvas 取色
-        queueRoomJob(() => {
-          const palette = sampleRoomColor(img);
-          if (!palette || !media.isConnected) return;
-          media.style.setProperty("--card-wall", palette.wall);
-          media.style.setProperty("--card-glow", palette.glow);
-          media.style.setProperty("--card-accent", palette.accent);
-        });
-      };
-      if (img.complete) bindCardRoom();
-      else img.addEventListener("load", bindCardRoom, { once: true });
-      media.appendChild(mediaEl);
+      // 墙色优先用 manifest 预计算的调色板：不依赖图片解码，卡片一挂上墙色就是
+      // 对的（P1-6 之前要等 img load，落地前是初始 #2a2418 → 首屏可见色跳）。
+      // 只有上传图没有预计算值，才回落到客户端采样。
+      if (photo.palette) {
+        applyCardPalette(media, photo.palette);
+      } else {
+        const bindCardRoom = () => {
+          // 采样进空闲队列：命中主线程的只有这一行 canvas 取色
+          queueRoomJob(() => {
+            const sampled = sampleRoomColor(img);
+            if (!sampled || !media.isConnected) return;
+            applyCardPalette(media, sampled);
+          });
+        };
+        if (img.complete) bindCardRoom();
+        else img.addEventListener("load", bindCardRoom, { once: true });
+      }
+      // 画心进独立裁切盒：.card-media 保持不裁切，墙面射灯（::before）才能溢出画框。
+      // 裁切盒只负责 hover 缩放不出框，几何与旧版直接定位 img 等价。
+      const glass = document.createElement("div");
+      glass.className = "card-media-glass";
+      glass.appendChild(mediaEl);
+      media.appendChild(glass);
       if (photo.animated) {
         const badge = document.createElement("span");
         badge.className = "card-badge";
@@ -1207,7 +1033,7 @@
       }
 
       card.appendChild(media);
-      card.addEventListener("click", () => openLightbox(i, card));
+      card.addEventListener("click", () => lb.open(i, card));
       // hover/聚焦即预载灯箱用图，点开「瞬出」（与 <picture> 选中格式一致才可复用）
       const prefetchLightbox = () => preloadImage(lightboxAvifOrFallback(photo), "auto");
       card.addEventListener("pointerenter", prefetchLightbox, { once: true });
@@ -1220,19 +1046,6 @@
     if (!uploadStatus) return;
     uploadStatus.textContent = msg;
     uploadStatus.classList.toggle("is-error", Boolean(isError));
-  }
-
-  function stripExt(name) {
-    return name.replace(/\.[^.]+$/, "");
-  }
-
-  function safeFileName(file) {
-    const stamp = Date.now().toString(36);
-    const base = (file.name || "photo")
-      .replace(/[^\w.-]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-    return `${stamp}-${base || "photo.jpg"}`;
   }
 
   /** 上传前压缩：最长边 ≤2048px WebP；GIF/动图跳过压缩以免丢帧 */
@@ -1340,22 +1153,31 @@
   }
 
   async function ghPutFile(cfg, path, contentB64, message) {
-    const sha = await ghGetFileSha(cfg, path);
-    const res = await fetch(`https://api.github.com/repos/${cfg.repo}/contents/${path}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${cfg.token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        content: contentB64,
-        branch: cfg.branch,
-        ...(sha ? { sha } : {}),
-      }),
-    });
+    const send = (sha) =>
+      fetch(`https://api.github.com/repos/${cfg.repo}/contents/${path}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${cfg.token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message,
+          content: contentB64,
+          branch: cfg.branch,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+
+    let sha = await ghGetFileSha(cfg, path);
+    let res = await send(sha);
+    // 409 / 422 = sha 冲突（并发上传、或人工同时在网页提交）：基于陈旧 sha 的写入被拒。
+    // 重取一次 sha 再写，否则这张图会永久失败、且用户看不出原因。
+    if (res.status === 409 || res.status === 422) {
+      sha = await ghGetFileSha(cfg, path);
+      res = await send(sha);
+    }
     if (!res.ok) {
       let detail = "";
       try {
@@ -1420,14 +1242,14 @@
     await ghPutFile(cfg, path, btoa(bin), "chore: update photos manifest");
   }
 
-  async function uploadToGitHub(file, meta) {
-    const cfg = loadGhConfig();
-    if (!cfg?.token) return { skipped: true };
-
+  /** 只把图文件写进仓库，返回待并入 manifest 的条目。
+   *  manifest 由调用方在**所有图都传完后一次性**更新 —— 原先每张图都重写整份清单
+   *  （1 取 sha + 1 读内容 + 1 写 = 3 次往返），20 张就是 60 次往返，且每次都在
+   *  「读-改-写」窗口内，并发或人工同时提交必撞 sha 冲突。 */
+  async function pushPhotoToGitHub(cfg, blob, meta) {
     const path = `photos/${meta.fileName}`;
-    const buf = await file.arrayBuffer();
-    const contentB64 = b64FromBuffer(buf);
-    await ghPutFile(cfg, path, contentB64, `add photo: ${meta.fileName}`);
+    const buf = await blob.arrayBuffer();
+    await ghPutFile(cfg, path, b64FromBuffer(buf), `add photo: ${meta.fileName}`);
 
     const item = {
       src: `photos/${meta.fileName}`,
@@ -1440,10 +1262,7 @@
       item.width = meta.width;
       item.height = meta.height;
     }
-
-    await ghUpdateManifest(cfg, [item]);
-
-    return { skipped: false };
+    return item;
   }
 
   async function handleFiles(fileList) {
@@ -1453,11 +1272,14 @@
       return;
     }
 
-    const ghReady = Boolean(loadGhConfig()?.token);
+    const ghCfg = loadGhConfig();
+    const ghReady = Boolean(ghCfg?.token);
     let okLocal = 0;
     let okGh = 0;
     let ghFail = 0;
     let fail = 0;
+    // 收集本批全部待并入清单的条目，循环结束后一次性提交（见 pushPhotoToGitHub）
+    const ghItems = [];
 
     for (const file of files) {
       // 本张图的 blob URL；入藏 customPhotos 后转移所有权并置空，
@@ -1521,15 +1343,16 @@
           setStatus(`正在同步到 GitHub：${file.name}…`);
           // 远端失败单独计数：本机已存成功，不该和本地失败混为一谈
           try {
-            await uploadToGitHub(working, {
-              fileName,
-              title,
-              caption: "",
-              date,
-              width: dims.width,
-              height: dims.height,
-            });
-            okGh += 1;
+            ghItems.push(
+              await pushPhotoToGitHub(ghCfg, working, {
+                fileName,
+                title,
+                caption: "",
+                date,
+                width: dims.width,
+                height: dims.height,
+              })
+            );
           } catch (err) {
             ghFail += 1;
             if (err && err.message) setStatus(err.message, true);
@@ -1538,6 +1361,19 @@
       } catch (err) {
         fail += 1;
         if (objectUrl) revokeBlobUrl(objectUrl);
+        if (err && err.message) setStatus(err.message, true);
+      }
+    }
+
+    // 本批图文件都传完后一次性更新清单：往返从 3N 降到 4（取 sha + 读 + 写 + 重试余量）
+    if (ghReady && ghItems.length) {
+      setStatus(`正在更新展厅清单（${ghItems.length} 张）…`);
+      try {
+        await ghUpdateManifest(ghCfg, ghItems);
+        okGh = ghItems.length;
+      } catch (err) {
+        // 图片文件已进仓库，但清单没更新 → 线上仍看不到，按整体失败计
+        ghFail += ghItems.length;
         if (err && err.message) setStatus(err.message, true);
       }
     }
@@ -1592,185 +1428,8 @@
   }
   fillGhForm();
 
-  prevBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    step(-1);
-  });
-  nextBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    step(1);
-  });
-  closeBtn.addEventListener("click", closeLightbox);
-
-  const stage = lightbox.querySelector(".lightbox-stage");
-  let swipeX = 0;
-  let swipeY = 0;
-  let lbDidSwipe = false;
-  /** 多指轨迹：id → 最近坐标；两指即捏合 */
-  const lbPointers = new Map();
-  let pinch = null;
-  let panBase = null;
-
-  stage.addEventListener("pointerdown", (e) => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (e.target.closest?.(".lb-arrow")) return;
-    stage.setPointerCapture?.(e.pointerId);
-    lbPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (lbPointers.size === 1) {
-      swipeX = e.clientX;
-      swipeY = e.clientY;
-      panBase = { x: e.clientX, y: e.clientY, tx: lbTx, ty: lbTy };
-      lbDidSwipe = false;
-      pinch = null;
-    } else if (lbPointers.size === 2) {
-      const [a, b] = [...lbPointers.values()];
-      const rect = lbImg.getBoundingClientRect();
-      pinch = {
-        d0: Math.hypot(a.x - b.x, a.y - b.y) || 1,
-        mx0: (a.x + b.x) / 2,
-        my0: (a.y + b.y) / 2,
-        cx0: rect.left + rect.width / 2,
-        cy0: rect.top + rect.height / 2,
-        z0: lbZoom,
-        tx0: lbTx,
-        ty0: lbTy,
-      };
-      lbDidSwipe = true; // 捏合后的合成 click 吞掉
-    }
-  });
-
-  stage.addEventListener("pointermove", (e) => {
-    if (!lbPointers.has(e.pointerId)) return;
-    lbPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pinch && lbPointers.size >= 2) {
-      const [a, b] = [...lbPointers.values()];
-      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
-      const mx = (a.x + b.x) / 2;
-      const my = (a.y + b.y) / 2;
-      const z = Math.min(4, Math.max(1, pinch.z0 * (d / pinch.d0)));
-      if (z <= 1) {
-        lbZoom = 1;
-        lbTx = 0;
-        lbTy = 0;
-      } else {
-        // 锚定两指中点下的画面：T' = mx - cx0 + T0 - (z'/z0)*(mx0 - cx0)
-        lbZoom = z;
-        lbTx =
-          mx - pinch.cx0 + pinch.tx0 - (lbZoom / pinch.z0) * (pinch.mx0 - pinch.cx0);
-        lbTy =
-          my - pinch.cy0 + pinch.ty0 - (lbZoom / pinch.z0) * (pinch.my0 - pinch.cy0);
-        clampLbPan();
-      }
-      lbImg.classList.add("is-panning");
-      applyLbTransform();
-      return;
-    }
-    if (lbZoom > 1 && panBase) {
-      // 缩放态拖拽平移（屏幕像素）；位移超阈值即视为拖动，吞掉合成 click
-      const dx = e.clientX - panBase.x;
-      const dy = e.clientY - panBase.y;
-      if (Math.hypot(dx, dy) > 6) {
-        lbDidSwipe = true;
-        lbImg.classList.add("is-panning");
-      }
-      lbTx = panBase.tx + dx;
-      lbTy = panBase.ty + dy;
-      applyLbTransform();
-    }
-    // zoom === 1 的横滑在 pointerup 判定
-  });
-
-  const lbGestureEnd = (e) => {
-    lbPointers.delete(e.pointerId);
-    if (pinch && lbPointers.size < 2) {
-      pinch = null;
-      lbImg.classList.remove("is-panning");
-      if (lbZoom < 1.05) {
-        resetLbZoom(false);
-      } else {
-        clampLbPan();
-        applyLbTransform();
-      }
-      // 剩余一指重置为单指基线，避免后续位移跳变
-      const rest = [...lbPointers.values()][0];
-      if (rest) {
-        swipeX = rest.x;
-        swipeY = rest.y;
-        panBase = { x: rest.x, y: rest.y, tx: lbTx, ty: lbTy };
-      }
-      return;
-    }
-    if (lbPointers.size > 0) return; // 尚有手指未抬起
-    panBase = null;
-    lbImg.classList.remove("is-panning");
-    if (lbZoom > 1) {
-      clampLbPan();
-      applyLbTransform();
-      return;
-    }
-    if (e.type === "pointercancel") return;
-    const dx = e.clientX - swipeX;
-    const dy = e.clientY - swipeY;
-    if (Math.abs(dx) >= 48 && Math.abs(dx) > Math.abs(dy) * 1.2) {
-      lbDidSwipe = true;
-      step(dx < 0 ? 1 : -1);
-    }
-  };
-  stage.addEventListener("pointerup", lbGestureEnd);
-  stage.addEventListener("pointercancel", lbGestureEnd);
-
-  // 点按即时切图；450ms 内第二击回退第一击，交给 dblclick 做缩放
-  stage.addEventListener("click", (e) => {
-    if (e.target.closest?.(".lb-arrow")) return;
-    if (lbDidSwipe) {
-      lbDidSwipe = false;
-      return;
-    }
-    if (tapTimer) {
-      clearTimeout(tapTimer);
-      tapTimer = 0;
-      step(-1);
-      return;
-    }
-    step(1);
-    tapTimer = setTimeout(() => {
-      tapTimer = 0;
-    }, 450);
-  });
-
-  stage.addEventListener("dblclick", (e) => {
-    if (e.target.closest?.(".lb-arrow")) return;
-    if (tapTimer) {
-      clearTimeout(tapTimer);
-      tapTimer = 0;
-    }
-    toggleLbZoomAt(e.clientX, e.clientY);
-  });
-
-  stage.addEventListener(
-    "wheel",
-    (e) => {
-      if (!e.target.closest?.(".lightbox-frame")) return;
-      e.preventDefault();
-      if (lbZoom === 1 && e.deltaY > 0) return;
-      const rel = anchorRel(e.clientX, e.clientY);
-      zoomAtAnchor(lbZoom * (e.deltaY < 0 ? 1.18 : 1 / 1.18), rel.x, rel.y);
-    },
-    { passive: false }
-  );
-
-  // Esc → <dialog> 的 cancel 事件统一走 VT 关闭动画
-  lightbox?.addEventListener("cancel", (e) => {
-    e.preventDefault();
-    closeLightbox();
-  });
-
-  document.addEventListener("keydown", (e) => {
-    if (!lightbox || !lightbox.open) return;
-    // Esc 与 Tab 焦点圈定由 <dialog> 原生处理，这里只留翻页
-    if (e.key === "ArrowLeft") step(-1);
-    if (e.key === "ArrowRight") step(1);
-  });
+  /* 灯箱全部事件监听（箭头 / 关闭 / 指针手势 / 滚轮 / Esc / 方向键）已随域迁入
+     src/lightbox.js，在 createLightbox 调用时完成装配。 */
 
   const siteNav = document.getElementById("siteNav");
   // 序厅门厅大字与顶栏馆名同屏重复：大字在场时隐去顶栏馆名，滚入展厅再浮现
@@ -1795,8 +1454,19 @@
 
   renderFilters();
   renderGallery();
-  loadFolderPhotos();
-  loadCustomPhotos();
+  // 浮空 Promise 必须落地：loadFolderPhotos 的 try/catch 只覆盖取清单那一段，
+  // 之后的 rebuildPhotos / decodeURIComponent / openLightboxFromHash 若抛错
+  // 会变成 unhandledrejection，且页面停在「骨架屏已隐藏但展厅空白」的状态。
+  // 这里兜底放开空状态，让用户看到提示而不是一片空墙。
+  loadFolderPhotos().catch((err) => {
+    (window.__lf || (window.__lf = [])).push("unhandled:" + (err && err.message));
+    galleryReady = true;
+    if (skeletonEl) skeletonEl.hidden = true;
+    if (emptyEl) emptyEl.hidden = false;
+  });
+  loadCustomPhotos().catch((err) => {
+    (window.__lf || (window.__lf = [])).push("custom-unhandled:" + (err && err.message));
+  });
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {

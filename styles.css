@@ -162,8 +162,11 @@ code {
   height: var(--nav-h);
   background: rgba(21, 28, 24, 0.94);
   border-bottom: 1px solid var(--rule);
-  backdrop-filter: saturate(120%) blur(12px);
-  -webkit-backdrop-filter: saturate(120%) blur(12px);
+
+  /* 不做 backdrop-filter：本条是 position:fixed 全宽，内容在其下方持续滚动，
+     模糊要每帧重算 52px × 视宽；而底色已是 94% 不透明，参与模糊的只剩 6%，
+     视觉上几乎不可辨。属于「付出滚动期合成成本换不可见收益」，故去掉。
+     若日后想要玻璃质感，必须同时把底色降到 ~0.72 并重新校验导航文字对比度。 */
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
@@ -261,15 +264,6 @@ code {
   pointer-events: none;
 }
 
-.hero-kicker {
-  margin: 0 0 12px;
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.34em;
-  text-transform: uppercase;
-  color: var(--gilt);
-}
-
 .hero-title {
   margin: 0;
   font-family: var(--display);
@@ -280,16 +274,6 @@ code {
   color: var(--gilt-bright);
   padding-left: 0.36em;
   text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
-}
-
-.hero-sub {
-  margin: 20px auto 0;
-  max-width: 24em;
-  font-family: var(--display);
-  font-size: clamp(13px, 1.8vw, 15px);
-  line-height: 1.9;
-  letter-spacing: 0.14em;
-  color: var(--ivory-dim);
 }
 
 .hero-carousel-track {
@@ -309,7 +293,15 @@ code {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.9s cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* 非活动 slide 必须移出 Tab 序列与无障碍树。
+     opacity:0 + pointer-events:none 挡不住键盘：slide 里现在有可聚焦的
+     .hero-art <button>，只有 visibility:hidden 能让它不被 Tab 到、
+     也不被读屏念出来。visibility 延迟到最后再翻转，不打断淡出。 */
+  visibility: hidden;
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 0.9s;
   pointer-events: none;
   background: transparent;
   padding: 8px 48px 4px;
@@ -317,6 +309,10 @@ code {
 
 .hero-carousel-slide.is-active {
   opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 0.61, 0.36, 1),
+    visibility 0s linear 0s;
   pointer-events: auto;
   z-index: 1;
 }
@@ -344,13 +340,20 @@ code {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
 
-/* 轮播画框旁无光 */
-.hero-art::after {
-  content: none;
-}
-
 .hero-art {
+  /* 这一层是 <button>（键盘可达），故先做按钮重置，再按原画心容器布局 */
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
   position: relative;
+
+  /* 画心在窄屏会宽于本容器（img 用 86vw，本容器用 86%），属既有设计；
+     显式声明不裁切，避免某些 UA 给 button 的 overflow 裁掉画心两侧。 */
+  overflow: visible;
   max-width: min(86%, 860px);
   max-height: min(70vh, 720px);
   display: flex;
@@ -359,41 +362,17 @@ code {
   z-index: 1;
 }
 
+.hero-art:focus-visible {
+  outline: 2px solid var(--gilt);
+  outline-offset: 10px;
+}
+
 .hero-carousel-caption {
   display: none !important;
 }
 
 .filter-bar::before {
   display: none !important;
-}
-
-.filter-bar {
-  margin-bottom: 20px;
-  justify-content: center;
-}
-
-.filter-chip {
-  letter-spacing: 0.08em;
-  color: var(--haze);
-  font-size: 12px;
-}
-
-.hero-carousel-caption h2 {
-  margin: 0;
-  font-family: var(--display);
-  font-size: clamp(15px, 2vw, 17px);
-  font-weight: 500;
-  letter-spacing: 0.22em;
-  line-height: 1.4;
-  color: var(--ivory);
-}
-
-.hero-carousel-caption p {
-  margin: 8px 0 0;
-  font-family: var(--display);
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  color: var(--haze);
 }
 
 .hero-carousel-arrow {
@@ -587,18 +566,11 @@ code {
     gap: 14px;
   }
 
+  /* 窄屏隐藏翻页箭头：画心 92% 视宽、左右仅约 15px 边距，
+     36px 箭头会压在画心上。翻页由横滑（heroCarousel pointerup，阈值 40px）
+     与分页点承担，二者都保留。 */
   .hero-carousel-arrow {
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
-  }
-
-  .hero-carousel-prev {
-    left: 6px;
-  }
-
-  .hero-carousel-next {
-    right: 6px;
+    display: none;
   }
 }
 
@@ -714,15 +686,6 @@ code {
   text-align: center;
 }
 
-.chapter-kicker {
-  margin: 0 0 12px;
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: var(--gilt);
-}
-
 .chapter-title {
   margin: 0;
   font-family: var(--display);
@@ -734,17 +697,14 @@ code {
   padding-left: 0.4em;
 }
 
-.chapter-sub {
-  margin: 18px 0 0;
-  font-family: var(--display);
-  font-size: 14px;
-  letter-spacing: 0.1em;
-  color: var(--haze);
-}
-
 /* —— 展厅：鎏金画框挂画 —— */
 .gallery-section {
   padding: 96px 0 88px;
+
+  /* 卡片射灯（.card-media::before）会向左右各溢出 34px；最外侧卡片会顶出视口造成
+     整页横向滚动。这里按展厅盒边界裁切：仍不影响 sticky 章节题（clip 不产生滚动容器，
+     且纵向保持 visible，画框上方的锥光完整保留）。 */
+  overflow-x: clip;
 
   /* 高光起点避开章节题遮罩带（遮罩为纯 --room），否则遮罩会盖出一块可见的矩形色差 */
   background:
@@ -752,7 +712,14 @@ code {
     var(--room);
 }
 
-.gallery {
+/* 骨架屏与真实展厅共用同一条盒模型/列定义/gap 规则 —— 故意写成同一组选择器，
+   而不是各写一份相同的值：这样两者不可能漂移。
+   历史问题：骨架屏曾自带一套 auto-fill minmax(260px) + 64px/40px，
+   在 390px 下算出 1 列，而真实展厅是 2 列 → 数据到达时正好在 LCP 窗口内发生列数跳变。
+   注意：三处断点（本处 sections 层基值、responsive 层「无字陈列」、≤560px）都必须带上
+   .gallery-skeleton，否则前两处会静默失效。 */
+.gallery,
+.gallery-skeleton {
   max-width: var(--max-wide);
   margin: 0 auto;
   padding: 28px 40px 8px;
@@ -780,11 +747,14 @@ code {
   display: flex;
   flex-direction: column;
   touch-action: manipulation;
-  content-visibility: auto;
 
-  /* 仅约束跳过渲染时的估算高度；单值 contain-intrinsic-size 会把宽度也设为 400px，
-     撑破手机端 1fr 网格并造成整页横向溢出。 */
-  contain-intrinsic-height: auto 400px;
+  /* 不做 content-visibility:auto —— 它隐含的 pain containment 会把子盒裁到卡片
+     自身盒内，直接裁掉 .card-media::before 溢出到画框外的那 58px 墙面射灯
+     （实测：加 paint containment 时画框上方墙面 hover 前后亮度差恒为 0.00，
+     移除后 hover 亮度 +31）。getComputedStyle().contain 报 none，属静默失效。
+     同时其 contain-intrinsic-height 估值（400px）远高于手机端实际卡高
+     （约 112–150px），滚动经过时会造成整行先撑高再塌缩的位移。
+     图片懒加载已由 loading="lazy" 承担，卡片级跳过渲染的收益不足以抵消这两项代价。 */
   isolation: isolate;
 }
 
@@ -805,7 +775,11 @@ code {
 
 .card-media {
   position: relative;
-  overflow: hidden;
+
+  /* 本盒不裁切：::before 的锥光必须能溢出到画框之外的墙面。
+     裁切职责交给 .card-media-glass（只包画心），否则 overflow:hidden
+     会把墙面色光一并裁掉，射灯就只剩框内 4px 可见。 */
+  overflow: visible;
 
   --card-wall: #2a2418;
   --card-glow: rgba(201, 169, 106, 0.12);
@@ -844,17 +818,19 @@ code {
   transition: background 0.7s var(--ease), opacity 0.7s var(--ease);
 }
 
-/* 光不落在画心 */
-.card-media::after {
-  content: none;
+/* 画心裁切盒：与 .card-media 分离，只承担「hover 缩放不出框」的裁剪。
+   inset = 框内边，与旧版 img 直接定位在 .card-media 上的几何等价。 */
+.card-media-glass {
+  position: absolute;
+  inset: var(--frame-inset);
+  overflow: hidden;
 }
 
 .card-media img {
   position: absolute;
-  top: var(--frame-inset, 7px);
-  left: var(--frame-inset, 7px);
-  width: calc(100% - 2 * var(--frame-inset, 7px));
-  height: calc(100% - 2 * var(--frame-inset, 7px));
+  inset: 0;
+  width: 100%;
+  height: 100%;
   max-width: none;
   object-fit: contain;
   object-position: center;
@@ -883,53 +859,6 @@ code {
   color: var(--gilt-bright);
   border: 1px solid var(--rule);
   pointer-events: none;
-}
-
-/* 象牙墙签 */
-.card-meta {
-  margin-top: 28px;
-  padding: 14px 14px 16px;
-  background: var(--ivory);
-  color: var(--room-deep);
-  border: 1px solid rgba(42, 36, 24, 0.12);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
-}
-
-.card-label {
-  margin: 0;
-  font-family: var(--display);
-  font-size: 10px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--gilt-dark);
-}
-
-.card-title {
-  margin: 6px 0 0;
-  font-family: var(--display);
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  line-height: 1.35;
-  color: var(--room-deep);
-}
-
-.card-caption {
-  margin: 6px 0 0;
-  font-family: var(--display);
-  font-size: 12px;
-  color: #6e6758;
-  line-height: 1.5;
-  letter-spacing: 0.06em;
-}
-
-.card-medium {
-  margin: 4px 0 0;
-  font-family: var(--display);
-  font-size: 11px;
-  color: #7a7362;
-  letter-spacing: 0.08em;
-  font-style: italic;
 }
 
 /* 展厅索引 */
@@ -1015,16 +944,6 @@ code {
   line-height: 1.25;
   color: var(--gilt-bright);
   padding-left: 0.28em;
-}
-
-.upload-sub {
-  margin: 12px auto 24px;
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  color: var(--haze);
-  line-height: 1.7;
-  max-width: 26em;
 }
 
 .upload-section #addPhotoBtn {
@@ -1144,16 +1063,6 @@ code {
   color: var(--gilt-bright);
 }
 
-.about-text {
-  margin: 24px auto 32px;
-  font-family: var(--display);
-  font-size: 15px;
-  line-height: 2;
-  letter-spacing: 0.08em;
-  color: var(--ivory-dim);
-  max-width: 28em;
-}
-
 /* —— 馆脚 —— */
 .footer {
   background: var(--night);
@@ -1175,25 +1084,6 @@ code {
   letter-spacing: 0.36em;
   color: var(--gilt-bright);
   padding-left: 0.36em;
-}
-
-.footer-museum-en {
-  margin: 8px 0 0;
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--gilt-dark);
-}
-
-.footer-note {
-  margin: 24px 0 0;
-  font-family: var(--display);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  line-height: 1.7;
-  padding-top: 20px;
-  border-top: 1px solid var(--rule-soft);
 }
 
 .footer-copy {
@@ -1335,26 +1225,14 @@ dialog.lightbox::backdrop {
   overflow: hidden;
 }
 
-/* 观画室：无金框反光，只有墙面微光 */
-.lightbox-frame::after {
-  content: none;
-}
-
-.lightbox-frame.is-lit {
-  animation: none;
-  box-shadow: 0 30px 64px rgba(0, 0, 0, 0.55);
-}
-
+/* 观画室：无金框反光，只有墙面微光。
+   .lightbox-frame.is-lit 本身的 animation/box-shadow 与基础规则同值（no-op），
+   连同无人引用的 @keyframes frame-lit 一并删除；
+   但 .lightbox-frame.is-lit img 的 animation:none 是**生效**的
+   ——它关掉 .lightbox-img 的 lb-in 入场动画，故保留。 */
 .lightbox-frame.is-lit img {
   animation: none;
   filter: none;
-}
-
-@keyframes frame-lit {
-  0%,
-  100% {
-    box-shadow: 0 30px 64px rgba(0, 0, 0, 0.55);
-  }
 }
 
 .lightbox-img {
@@ -1442,15 +1320,6 @@ dialog.lightbox::backdrop {
   overflow: auto;
 }
 
-.lb-index {
-  margin: 0;
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.28em;
-  color: var(--gilt);
-  font-variant-numeric: tabular-nums;
-}
-
 .lb-title {
   margin: 10px 0 0;
   font-family: var(--display);
@@ -1458,23 +1327,6 @@ dialog.lightbox::backdrop {
   font-weight: 500;
   letter-spacing: 0.2em;
   color: var(--ivory);
-}
-
-.lb-caption {
-  margin: 8px 0 0;
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  color: var(--ivory-dim);
-}
-
-.lb-medium {
-  margin: 6px 0 0;
-  font-family: var(--display);
-  font-size: 12px;
-  font-style: italic;
-  letter-spacing: 0.08em;
-  color: var(--haze);
 }
 
 body.lb-open {
@@ -1485,6 +1337,83 @@ body.lb-open {
 }
 
 @layer responsive {
+/* —— 无字陈列：只留金框画 ——
+   只隐藏文案装饰；功能性 UI（.upload-status 反馈、.gh-panel 同步设置、
+   .empty 空状态引导）必须可见，否则上传/同步流程不可达。
+
+   ⚠️ 位置敏感：本块必须留在 responsive 层的最前。
+   它不带媒体查询，靠「同层同权重 → 源序取胜」压过 components / sections 层的
+   基础值；但它同时也是 @media (max-width: 560px) 的「可被覆盖对象」——窄屏专用值
+   同层、同权重、写在后面，才能反过来赢。
+   本块此前位于窄屏断点之后，导致 .gallery gap / .chapter-head margin-bottom /
+   .filter-bar margin / .hero-plate padding-bottom 四处窄屏值被静默压死。
+   维护约定：本层新增断点规则一律写在本块之后，不要上移。 */
+.chapter-kicker,
+.chapter-sub,
+.hero-kicker,
+.hero-sub,
+.hero-carousel-caption,
+.card-meta,
+.lb-index,
+.lb-caption,
+.lb-medium,
+.lightbox-meta,
+.upload-sub,
+.footer-note,
+.footer-museum-en,
+.filter-bar::before {
+  display: none !important;
+}
+
+.hero-plate {
+  padding-bottom: 12px;
+}
+
+.chapter-head {
+  margin-bottom: 28px;
+}
+
+/* 与 .gallery 同组：骨架屏必须跟着走，否则桌面端骨架 gap 仍是 64px/40px */
+.gallery,
+.gallery-skeleton {
+  gap: 52px 36px;
+}
+
+.card-media {
+  /* 无墙签时画框外扩留白更稳 */
+  margin-bottom: 4px;
+}
+
+.about-text {
+  display: none !important;
+}
+
+.about-title {
+  margin-bottom: 24px;
+}
+
+.upload-inner {
+  padding: 12px 0;
+}
+
+.footer-inner {
+  padding: 4px 0;
+}
+
+.filter-bar {
+  margin-top: 0;
+  margin-bottom: 28px;
+}
+
+.filter-chip {
+  /* 比 --haze 更稳：采样墙变亮时仍可读 */
+  color: var(--ivory-dim);
+}
+
+.filter-chip.is-active {
+  color: var(--gilt-bright);
+}
+
 /* —— Responsive —— */
 @media (max-width: 834px) {
   .gallery-section {
@@ -1526,7 +1455,9 @@ body.lb-open {
     padding: 56px 0 48px;
   }
 
-  .gallery {
+  /* 与 .gallery 同组：窄屏骨架必须是 2 列，否则数据到达瞬间会从 1 列跳成 2 列 */
+  .gallery,
+  .gallery-skeleton {
     grid-template-columns: 1fr 1fr;
     gap: 40px 16px;
     padding: 20px 18px 8px;
@@ -1536,21 +1467,6 @@ body.lb-open {
     border-width: 1px;
 
     --frame-inset: 3px;
-  }
-
-  .card-meta {
-    margin-top: 18px;
-    padding: 10px 10px 12px;
-  }
-
-  .card-title {
-    font-size: 13px;
-    letter-spacing: 0.08em;
-  }
-
-  .card-caption,
-  .card-medium {
-    font-size: 10px;
   }
 
   .filter-bar {
@@ -1581,10 +1497,6 @@ body.lb-open {
     padding-left: 0.14em;
   }
 
-  .about-text {
-    font-size: 14px;
-  }
-
   .lightbox-stage {
     padding: 4px 8px;
   }
@@ -1595,17 +1507,10 @@ body.lb-open {
     --frame-max-h: min(70vh, 640px);
   }
 
+  /* 窄屏隐藏翻页箭头：frame 占 94vw、左右仅约 12px 边距，
+     36px 箭头会压在画心上。翻页由横滑承担（lightbox-stage pointerup，阈值 48px）。 */
   .lb-arrow {
-    width: 36px;
-    height: 36px;
-  }
-
-  .lb-prev {
-    left: 4px;
-  }
-
-  .lb-next {
-    right: 4px;
+    display: none;
   }
 
   .btn {
@@ -1632,73 +1537,6 @@ body.lb-open {
   .card:hover .card-media img {
     transform: none;
   }
-}
-
-/* —— 无字陈列：只留金框画 ——
-   只隐藏文案装饰；功能性 UI（.upload-status 反馈、.gh-panel 同步设置、
-   .empty 空状态引导）必须可见，否则上传/同步流程不可达。 */
-.chapter-kicker,
-.chapter-sub,
-.hero-kicker,
-.hero-sub,
-.hero-carousel-caption,
-.card-meta,
-.lb-index,
-.lb-caption,
-.lb-medium,
-.lightbox-meta,
-.upload-sub,
-.footer-note,
-.footer-museum-en,
-.filter-bar::before {
-  display: none !important;
-}
-
-.hero-plate {
-  padding-bottom: 12px;
-}
-
-.chapter-head {
-  margin-bottom: 28px;
-}
-
-.gallery {
-  gap: 52px 36px;
-}
-
-.card-media {
-  /* 无墙签时画框外扩留白更稳 */
-  margin-bottom: 4px;
-}
-
-.about-text {
-  display: none !important;
-}
-
-.about-title {
-  margin-bottom: 24px;
-}
-
-.upload-inner {
-  padding: 12px 0;
-}
-
-.footer-inner {
-  padding: 4px 0;
-}
-
-.filter-bar {
-  margin-top: 0;
-  margin-bottom: 28px;
-}
-
-.filter-chip {
-  /* 比 --haze 更稳：采样墙变亮时仍可读 */
-  color: var(--ivory-dim);
-}
-
-.filter-chip.is-active {
-  color: var(--gilt-bright);
 }
 
 /* —— 排版细节 —— */
@@ -1846,17 +1684,9 @@ p {
     transform: none;
   }
 
-  /* 首屏骨架：manifest 未到时占位，数据到达后隐藏 */
-  .gallery-skeleton {
-    max-width: var(--max-wide);
-    margin: 0 auto;
-    padding: 28px 40px 8px;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 64px 40px;
-    align-items: center;
-  }
-
+  /* 首屏骨架：manifest 未到时占位，数据到达后隐藏。
+     盒模型/列定义/gap 全部由上方 .gallery 同组规则提供（见 :753 注释），
+     本处只保留骨架自身的东西，避免两套值再次漂移。 */
   .gallery-skeleton span {
     display: block;
     aspect-ratio: 4 / 3;

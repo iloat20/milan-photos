@@ -319,4 +319,485 @@ test.describe("画廊冒烟", () => {
     await page.waitForTimeout(1000);
     expect(errors).toEqual([]);
   });
+
+  // —— 批次 1 修复的回归网（无字陈列层叠 / 画心裁切分层 / 窄屏箭头遮挡）——
+
+  test("展厅间距按断点取值（无字陈列层叠回归）", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    const readLayout = () =>
+      page.evaluate(() => {
+        const gallery = document.getElementById("galleryGrid");
+        const head = document.querySelector(".chapter-head");
+        const cs = getComputedStyle(gallery);
+        return {
+          rowGap: cs.rowGap,
+          columnGap: cs.columnGap,
+          headMarginBottom: getComputedStyle(head).marginBottom,
+        };
+      });
+
+    // 桌面：无字陈列块靠 responsive 层压过 sections 层的基础值
+    expect(await readLayout()).toEqual({
+      rowGap: "52px",
+      columnGap: "36px",
+      headMarginBottom: "28px",
+    });
+
+    // 窄屏：同层同权重下写在后面的 @media (max-width:560px) 必须反过来赢
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(readLayout).toEqual({
+      rowGap: "40px",
+      columnGap: "16px",
+      headMarginBottom: "36px",
+    });
+  });
+
+  test("画心裁切盒与墙面光分层（射灯回归）", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect(page.locator(".card-media")).toHaveCount(18);
+    await expect(page.locator(".card-media-glass")).toHaveCount(18);
+    await expect(page.locator(".card-media-glass img")).toHaveCount(18);
+
+    const geom = await page.evaluate(() => {
+      const media = document.querySelector(".card-media");
+      const glass = media.querySelector(".card-media-glass");
+      const img = glass.querySelector("img");
+      const border = parseFloat(getComputedStyle(media).borderLeftWidth);
+      const mediaBox = media.getBoundingClientRect();
+      return {
+        mediaOverflow: getComputedStyle(media).overflow,
+        glassOverflow: getComputedStyle(glass).overflow,
+        // content-visibility:auto 隐含 paint containment，会把 ::before 溢出的墙面光裁掉；
+        // 该 containment 在 getComputedStyle().contain 上不可见，只能锁 content-visibility 本身
+        cardContentVisibility: getComputedStyle(media.closest(".card"))
+          .contentVisibility,
+        gutter: mediaBox.width - img.getBoundingClientRect().width,
+        expected: border * 2 + 4 * 2,
+      };
+    });
+
+    // 光必须能溢出画框：外层不裁切，裁切收敛到只包画心的 glass
+    expect(geom.mediaOverflow).toBe("visible");
+    expect(geom.glassOverflow).toBe("hidden");
+    // 卡片不得开启会被动裁剪子盒的渲染跳过
+    expect(geom.cardContentVisibility).toBe("visible");
+    // 画心几何与拆分前一致：border 2px + --frame-inset 4px，两侧共 12px
+    expect(Math.abs(geom.gutter - geom.expected)).toBeLessThan(0.5);
+  });
+
+  test("窄屏箭头隐藏且不覆盖画心，翻页交回手势", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    await expect(page.locator(".hero-carousel-arrow")).toHaveCount(2);
+    await expect(page.locator(".hero-carousel-arrow").first()).toBeHidden();
+
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await expect(page.locator(".lb-arrow").first()).toBeHidden();
+    await page.waitForFunction(
+      () => {
+        const img = document.getElementById("lbImg");
+        return img && img.currentSrc;
+      },
+      null,
+      { timeout: 10_000 }
+    );
+
+    // 灯箱开启后约 0.5s 处于 View Transition 期间，此间 **命中测试会落到 HTML**
+    // （= pointerdown 打不到 .lightbox-stage），横滑手势不响应：swipeX 未初始化 →
+    // dx 为 NaN → 判定恒假。这是既有的开启动画窗口，与墙色/调色板改动无关；
+    // 图片被预载命中缓存时手势发得更早，就更容易落进这个窗口。
+    // 本用例要测的是「箭头隐藏后手势仍可用」，所以在手势前等**命中测试就绪**，
+    // 而不是等一个拍脑袋的时长。
+    await page.waitForFunction(
+      () => {
+        const stage = document.querySelector(".lightbox-stage");
+        if (!stage) return false;
+        const r = stage.getBoundingClientRect();
+        const el = document.elementFromPoint(
+          Math.round(r.x + r.width * 0.75),
+          Math.round(r.y + r.height / 2)
+        );
+        return Boolean(el) && (el === stage || stage.contains(el));
+      },
+      null,
+      { timeout: 5_000 }
+    );
+
+    // 箭头隐藏后翻页必须仍可用：灯箱横滑（app.js 阈值 48px）
+    const before = await page.locator("#lbImg").evaluate((img) => img.currentSrc);
+    const stage = await page.locator(".lightbox-stage").boundingBox();
+    const cy = stage.y + stage.height / 2;
+    await page.mouse.move(stage.x + stage.width * 0.75, cy);
+    await page.mouse.down();
+    await page.mouse.move(stage.x + stage.width * 0.25, cy, { steps: 8 });
+    await page.mouse.up();
+    await expect
+      .poll(
+        () => page.locator("#lbImg").evaluate((img) => img.currentSrc),
+        { timeout: 5_000 }
+      )
+      .not.toBe(before);
+
+    await page.locator("#close").click();
+    await expect(page.locator("#lightbox")).toBeHidden();
+  });
+
+  test("桌面端灯箱箭头让开画心", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+
+    const frame = await page.locator(".lightbox-frame").boundingBox();
+    const prev = await page.locator(".lb-prev").boundingBox();
+    const next = await page.locator(".lb-next").boundingBox();
+    expect(frame).not.toBeNull();
+    expect(prev.x + prev.width).toBeLessThanOrEqual(frame.x);
+    expect(next.x).toBeGreaterThanOrEqual(frame.x + frame.width);
+
+    await page.locator("#close").click();
+  });
+
+  test("骨架屏与真实展厅布局一致（列 / gap / 内边距 / 宽度）", async ({ page }) => {
+    // 骨架屏只在 manifest 到达前可见，等它出现再量一定会 flaky。
+    // 这里改成「数据到达后临时取消隐藏 → 读 computed style → 立刻还原」，
+    // 纯比较 CSS 计算结果，与网络时序完全无关。
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    const readPair = () =>
+      page.evaluate(() => {
+        const skel = document.getElementById("gallerySkeleton");
+        const grid = document.getElementById("galleryGrid");
+        const wasHidden = skel.hidden;
+        skel.hidden = false;
+        const pick = (el) => {
+          const cs = getComputedStyle(el);
+          return {
+            cols: cs.gridTemplateColumns,
+            rowGap: cs.rowGap,
+            columnGap: cs.columnGap,
+            padding: cs.padding,
+            maxWidth: cs.maxWidth,
+            alignItems: cs.alignItems,
+            display: cs.display,
+            width: Math.round(el.getBoundingClientRect().width),
+          };
+        };
+        const pair = { skeleton: pick(skel), gallery: pick(grid) };
+        skel.hidden = wasHidden;
+        return pair;
+      });
+
+    const desktop = await readPair();
+    expect(desktop.skeleton).toEqual(desktop.gallery);
+    // computed 值会把 auto-fill 解析成实际轨道（如 "260px 260px 260px"），
+    // 这里仍需确认轨道数 > 1，否则「两边都是 1 列」也能空洞地相等。
+    const trackCount = (cols) => cols.trim().split(/\s+/).length;
+    expect(trackCount(desktop.gallery.cols)).toBeGreaterThanOrEqual(3);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    // 窄屏真实展厅是 2 列；骨架屏曾经在这里是 1 列（auto-fill + 80px 内边距）
+    await expect.poll(async () => trackCount((await readPair()).gallery.cols)).toBe(2);
+    const mobile = await readPair();
+    expect(mobile.skeleton).toEqual(mobile.gallery);
+    expect(trackCount(mobile.skeleton.cols)).toBe(2);
+  });
+
+  test("缺元素时降级运行而非整站白屏（事件绑定守卫）", async ({ page }) => {
+    // 复现「HTML 结构变化 / SW 旧壳层配新页面」：直接把灯箱 <dialog> 整块删掉，
+    // 于是 #prev / #next / #close / .lightbox-stage / #lbImg 全部为 null。
+    // 修复前：`closeBtn.addEventListener` 抛 TypeError → IIFE 中断 →
+    //         骨架屏永不消失、展厅永久空白，控制台只有一个 TypeError。
+    // 修复后：绑定静默降级，展厅照常渲染。
+    const pageErrors = [];
+    page.on("pageerror", (err) => pageErrors.push(String(err)));
+
+    await page.route("**/*", async (route) => {
+      if (route.request().resourceType() !== "document") return route.continue();
+      const res = await route.fetch();
+      const html = (await res.text()).replace(/<dialog[\s\S]*?<\/dialog>/, "");
+      const headers = { ...res.headers() };
+      delete headers["content-length"];
+      await route.fulfill({ status: res.status(), headers, body: html });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+
+    // 核心断言：展厅必须照常渲染，且骨架屏必须退场
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect(page.locator("#gallerySkeleton")).toBeHidden();
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("序厅画作可键盘打开，且非活动 slide 不在 Tab 序列内", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    const arts = page.locator(".hero-art");
+    await expect(arts).toHaveCount(8);
+
+    // 8 张 slide 叠放在同一位置：只有活动那张能进 Tab 序列 / 无障碍树。
+    // 用 <button> 承载画作后，opacity:0 + pointer-events:none 已挡不住键盘，
+    // 必须靠活动态切换 visibility。
+    await expect(arts.nth(0)).toBeVisible();
+    for (let i = 1; i < 8; i += 1) {
+      await expect(arts.nth(i)).toBeHidden();
+    }
+
+    // 键盘可达：<button> 原生响应 Enter → 冒泡到 slide 的 click → 开灯箱
+    await arts.first().focus();
+    await expect(arts.first()).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.locator("#close").click();
+    await expect(page.locator("#lightbox")).toBeHidden();
+
+    // 再 Tab 一步：不得落到任何 .hero-art（那 7 张不可见的都必须被跳过）
+    await arts.first().focus();
+    await page.keyboard.press("Tab");
+    const landedOnArt = await page.evaluate(
+      () => document.activeElement?.classList?.contains("hero-art") ?? false
+    );
+    expect(landedOnArt).toBe(false);
+  });
+
+  test("筛选栏语义为 group，chip 仍是 aria-pressed 切换按钮", async ({ page }) => {
+    await page.goto("/");
+    // chip 由 manifest 数据决定，必须先等展厅就绪，否则只剩「全部展厅」一个
+    await expect(page.locator(".card")).toHaveCount(18);
+    // role="toolbar" 要求 roving tabindex + 方向键导航；这里并未实现，
+    // 故改用语义自洽的 group（一组 aria-pressed 按钮、全部在 Tab 序列内）。
+    await expect(page.locator("#filterBar")).toHaveAttribute("role", "group");
+
+    const chips = page.locator("#filterBar button");
+    await expect.poll(() => chips.count(), { timeout: 5_000 }).toBeGreaterThan(1);
+    await expect(chips.first()).toHaveAttribute("aria-pressed", "true");
+    // 仍在 Tab 序列内：可聚焦
+    await chips.nth(1).focus();
+    await expect(chips.nth(1)).toBeFocused();
+  });
+
+  test("墙色取自 manifest 预计算调色板，而非客户端采样（P1-6）", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    // 断言「取值 === manifest 里的 palette」，而不是「颜色不等于初始值」——
+    // 后者采样兜底同样满足，测不出 palette 字段被 loadFolderPhotos 的白名单吞掉。
+    // 这个坑真实发生过：manifest 里 18/18 都有值，页面却照旧跑采样。
+    const norm = (s) => {
+      const m = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(s || "");
+      return m ? `${m[1]},${m[2]},${m[3]}` : null;
+    };
+
+    const manifest = await page.evaluate(async () => {
+      const res = await fetch("/photos/manifest.json", { cache: "no-store" });
+      const data = await res.json();
+      return (data.photos || []).map((p) => p.palette || null);
+    });
+    expect(manifest).toHaveLength(18);
+    expect(manifest.every((p) => p && p.wall && p.glow && p.accent)).toBe(true);
+
+    // 卡片墙色是同步赋值的（不等图片解码），所以读到的就是终值，无时序问题
+    const applied = await page.evaluate(() =>
+      [...document.querySelectorAll("#galleryGrid .card-media")].map((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          wall: cs.getPropertyValue("--card-wall"),
+          glow: cs.getPropertyValue("--card-glow"),
+          accent: cs.getPropertyValue("--card-accent"),
+        };
+      })
+    );
+    expect(applied).toHaveLength(18);
+    for (let i = 0; i < 18; i += 1) {
+      for (const k of ["wall", "glow", "accent"]) {
+        expect(norm(applied[i][k]), `第${i}张 ${k}`).toBe(norm(manifest[i][k]));
+      }
+    }
+    // 且确实不是 CSS 初始墙色（防「manifest 与初始值恰好同色」的空洞通过）
+    expect(norm(applied[0].wall)).not.toBe("42,36,24");
+
+    // 序厅：--room-adapt 三变量同样来自首张的 palette
+    const hero = await page.evaluate(() => {
+      const cs = getComputedStyle(document.getElementById("heroCarousel"));
+      return {
+        wall: cs.getPropertyValue("--room-adapt"),
+        deep: cs.getPropertyValue("--room-adapt-deep"),
+        glow: cs.getPropertyValue("--room-adapt-glow"),
+      };
+    });
+    expect(norm(hero.wall)).toBe(norm(manifest[0].wall));
+    expect(norm(hero.deep)).toBe(norm(manifest[0].deep));
+    expect(norm(hero.glow)).toBe(norm(manifest[0].glow));
+  });
+
+  /* —— 灯箱「点击 / 缩放」手势 ——
+     设计文档：research/milan-museum-design/2026-09-26-lightbox-tap-zoom-design.md
+
+     覆盖两个既有缺陷：
+       ① 放大态双击只能进不能出 —— click 每次都先 step(±1)，而 step → sync →
+          resetZoom(false) 必把 zoom 打回 1，于是 toggleLbZoomAt 的 `if (zoom > 1)`
+          分支**永不可达**；触屏用户双击放大后只能靠捏合或关闭逃出。
+       ② 手慢双击跳过两张 —— tapTimer 的固定 450ms 与浏览器双击窗口不对齐
+          （系统可设 200–900ms），落在灰区时两次 click 各前进一张。
+
+     ⚠️ **Playwright 的 mouse.click 不产生 dblclick**：实测 mouse.dblclick 传
+     clickCount:2、mouse.click 传 1，detail 反映的是 API 参数而非时序。所以「手慢
+     双击」只能用 dispatchEvent 手工派发 —— 真实浏览器手慢双击发出的正是这一串。
+     同理，位置断言一律读 location.hash（sync 里同步写入），不读 img.currentSrc
+     （异步、需要轮询，且两次换图之间的中间值会让轮询误过）。 */
+
+  const hashOf = (page) => page.evaluate(() => location.hash);
+  const zoomOf = (page) =>
+    page.evaluate(() =>
+      Number(
+        getComputedStyle(document.getElementById("lbImg")).getPropertyValue("--lb-zoom")
+      )
+    );
+
+  async function openLightboxReady(page, size = { width: 1280, height: 900 }) {
+    await page.setViewportSize(size);
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.waitForFunction(() => document.getElementById("lbImg")?.currentSrc, null, {
+      timeout: 10_000,
+    });
+    // 开窗 VT 期间命中测试会落到 HTML（见「窄屏箭头隐藏」用例的说明），等它过去
+    await page.waitForFunction(
+      () => {
+        const s = document.querySelector(".lightbox-stage");
+        const r = s.getBoundingClientRect();
+        const el = document.elementFromPoint(
+          Math.round(r.x + r.width / 2),
+          Math.round(r.y + r.height / 2)
+        );
+        return Boolean(el) && s.contains(el);
+      },
+      null,
+      { timeout: 5_000 }
+    );
+  }
+
+  const frameCentre = async (page) => {
+    const b = await page.locator(".lightbox-frame").boundingBox();
+    return { cx: Math.round(b.x + b.width / 2), cy: Math.round(b.y + b.height / 2) };
+  };
+
+  /** 用滚轮建立缩放态：不经点击，didSwipe 与连击组都干净 */
+  const zoomByWheel = async (page, cx, cy, notches = 3) => {
+    await page.mouse.move(cx, cy);
+    for (let i = 0; i < notches; i += 1) await page.mouse.wheel(0, -100);
+    await expect.poll(() => zoomOf(page), { timeout: 3_000 }).toBeGreaterThan(1);
+  };
+
+  test("放大态单击缩回 1×，且不切图", async ({ page }) => {
+    await openLightboxReady(page);
+    const { cx, cy } = await frameCentre(page);
+    const startHash = await hashOf(page);
+    await zoomByWheel(page, cx, cy);
+
+    await page.mouse.click(cx, cy);
+
+    await expect.poll(() => zoomOf(page), { timeout: 3_000 }).toBe(1);
+    expect(await hashOf(page)).toBe(startHash);
+  });
+
+  test("放大态双击只缩回一次，不切图也不重新放大", async ({ page }) => {
+    await openLightboxReady(page);
+    const { cx, cy } = await frameCentre(page);
+    const startHash = await hashOf(page);
+    await zoomByWheel(page, cx, cy);
+
+    await page.mouse.dblclick(cx, cy);
+
+    await expect.poll(() => zoomOf(page), { timeout: 3_000 }).toBe(1);
+    expect(await hashOf(page)).toBe(startHash);
+  });
+
+  test("手慢双击不跳过两张（跨过旧 tapTimer 的 450ms 仍判为双击）", async ({ page }) => {
+    await openLightboxReady(page);
+    const { cx, cy } = await frameCentre(page);
+    const startHash = await hashOf(page);
+
+    await page.mouse.click(cx, cy); // 真实第一击：乐观切图
+    await expect.poll(() => hashOf(page), { timeout: 3_000 }).not.toBe(startHash);
+
+    // 越过旧实现的 450ms tapTimer（它过期后第二击会当成独立单击，再切一张）
+    await page.waitForTimeout(600);
+
+    await page.evaluate(
+      ({ x, y }) => {
+        const stage = document.querySelector(".lightbox-stage");
+        const init = { bubbles: true, detail: 2, clientX: x, clientY: y };
+        stage.dispatchEvent(new MouseEvent("click", init));
+        stage.dispatchEvent(new MouseEvent("dblclick", init));
+      },
+      { x: cx, y: cy }
+    );
+
+    // 回到第一击之前的位置（旧实现会停在「前进两张」），且确实完成了放大
+    await expect.poll(() => hashOf(page), { timeout: 3_000 }).toBe(startHash);
+    expect(await zoomOf(page)).toBeGreaterThan(1);
+  });
+
+  test("单击后键盘翻页再双击：落在键盘翻页后的位置（连击组不跨路径泄漏）", async ({ page }) => {
+    // 护栏（非红灯证明）：专盯连击组的 resetGroup() 有没有漏在非点击路径上。
+    // 漏了的话，dblclick 会回到「单击之前」的起点 —— 一次性倒回 4 张。
+    await openLightboxReady(page);
+    const { cx, cy } = await frameCentre(page);
+    const startHash = await hashOf(page);
+
+    await page.mouse.click(cx, cy);
+    await expect.poll(() => hashOf(page), { timeout: 3_000 }).not.toBe(startHash);
+    const afterClickHash = await hashOf(page);
+
+    await page.keyboard.press("ArrowRight"); // 非点击路径翻页，必须重置连击组
+    await expect
+      .poll(() => hashOf(page), { timeout: 3_000 })
+      .not.toBe(afterClickHash);
+    const afterKeyHash = await hashOf(page);
+
+    await page.mouse.dblclick(cx, cy);
+
+    await expect.poll(() => zoomOf(page), { timeout: 3_000 }).toBeGreaterThan(1);
+    expect(await hashOf(page)).toBe(afterKeyHash);
+  });
+
+  // 触屏是本次修复的**主场景**：移动端没有滚轮，双击放大后若无法缩回，用户只能靠捏合
+  // 或关闭灯箱逃出。上面几条全走鼠标合成输入，触屏路径必须单独覆盖。
+  test.describe("触屏手势", () => {
+    test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+
+    test("双击放大后可单击缩回，且两种手势都不切图", async ({ page }) => {
+      await openLightboxReady(page, { width: 390, height: 844 });
+      const { cx, cy } = await frameCentre(page);
+      const startHash = await hashOf(page);
+
+      await page.touchscreen.tap(cx, cy);
+      await page.waitForTimeout(90);
+      await page.touchscreen.tap(cx, cy);
+
+      await expect.poll(() => zoomOf(page), { timeout: 3_000 }).toBeGreaterThan(1);
+      expect(await hashOf(page)).toBe(startHash);
+
+      // 关键断言：触屏单击缩回。放大态单击若仍切图，这里 hash 会变
+      await page.touchscreen.tap(cx, cy);
+      await expect.poll(() => zoomOf(page), { timeout: 3_000 }).toBe(1);
+      expect(await hashOf(page)).toBe(startHash);
+    });
+  });
 });

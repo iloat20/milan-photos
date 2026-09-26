@@ -42,6 +42,7 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 
 - 展厅墙面取色：`sampleRoomColor()` 从当前画作采样，写入 `--room-adapt` / `--room-adapt-deep` / `--room-adapt-glow`；采样后会按与象牙字的对比度**压暗墙色**，避免亮画把 chrome 冲没。
 - 金框用 box-shadow / border 模拟；光晕应落在墙面（伪元素），**不要**打在画心上。
+- 框要退到照片**之后**：框面统一古铜金 `--gilt-dark`、勾边 `--gilt-edge` 再暗一档、框体窄（序厅 7px / 卡片 `--frame-inset` 4px / 灯箱 `--frame-pad` 6px）——**不要**改回亮金 `--gilt` 粗框，那会压过画心；`--gilt` 只留给文字、分页点与 hover 提边。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
 - 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
 - 卡片的光是「轨道射灯」：框顶边受光更亮、锥光落在画框**上方**的墙面、投影向下坠，hover 即打亮；`--display` 字体栈里 `Milan Serif` 是站内字形子集（Windows 无系统中文衬线时兜底），插在 `STSong` 后、`SimSun` 前。

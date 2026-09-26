@@ -57,6 +57,9 @@
   --gilt: #c9a96a;
   --gilt-bright: #e2c98a;
   --gilt-dark: #8a7348;
+
+  /* 框勾边：比框面再暗一档。框退到照片之后，靠它与墙面分界 */
+  --gilt-edge: color-mix(in oklab, var(--gilt-dark), #000 32%);
   --gilt-liner: #2a2418;
   --ivory: #f0ead8;
   --ivory-dim: #cfc6b0;
@@ -329,8 +332,8 @@ code {
   object-fit: contain;
   object-position: center;
   background: #111;
-  border: 12px solid var(--gilt);
-  outline: 2px solid var(--gilt-dark);
+  border: 7px solid var(--gilt-dark);
+  outline: 1px solid var(--gilt-edge);
   filter: none;
   transition: none;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
@@ -564,7 +567,7 @@ code {
   .hero-carousel-slide img {
     max-width: min(92vw, 620px);
     max-height: min(62vh, 560px);
-    border-width: 8px;
+    border-width: 5px;
   }
 
   .hero-carousel-caption {
@@ -805,17 +808,20 @@ code {
   overflow: hidden;
 
   --card-wall: #2a2418;
-  --card-glow: rgba(201, 169, 106, 0.18);
+  --card-glow: rgba(201, 169, 106, 0.12);
   --card-accent: rgba(201, 169, 106, 0.28);
 
-  background: var(--gilt);
+  /* 框退到照片之后：面用古铜金（明度低于照片中调），框体收窄让画心更大 */
+  --frame-inset: 4px;
+
+  background: var(--gilt-dark);
   width: 100%;
   aspect-ratio: 4 / 3;
-  border: 2px solid var(--gilt-dark);
+  border: 2px solid var(--gilt-edge);
 
   /* 轨道射灯从上方打来：框的上沿受光更亮，投影向下方坠实 */
   border-top-color: color-mix(in oklab, var(--gilt-dark), #fff 24%);
-  padding: 7px;
+  padding: var(--frame-inset);
   box-sizing: border-box;
   box-shadow:
     0 0 0 1px rgba(42, 36, 24, 0.35),
@@ -845,15 +851,15 @@ code {
 
 .card-media img {
   position: absolute;
-  top: 7px;
-  left: 7px;
-  width: calc(100% - 14px);
-  height: calc(100% - 14px);
+  top: var(--frame-inset, 7px);
+  left: var(--frame-inset, 7px);
+  width: calc(100% - 2 * var(--frame-inset, 7px));
+  height: calc(100% - 2 * var(--frame-inset, 7px));
   max-width: none;
   object-fit: contain;
   object-position: center;
-  transition: transform 0.7s var(--ease), opacity 0.4s var(--ease);
-  opacity: 0.98;
+  transition: transform 0.7s var(--ease);
+  opacity: 1;
 
   /* 画框内侧：比例不符时信箱化为墙面色，而非裁切 */
   background: var(--card-wall, #2a2418);
@@ -862,7 +868,6 @@ code {
 .card:hover .card-media img,
 .card:focus-visible .card-media img {
   transform: scale(1.02);
-  opacity: 1;
 }
 
 .card-badge {
@@ -1304,7 +1309,7 @@ dialog.lightbox::backdrop {
 
 /* 金框包住画心：图不得大于框 */
 .lightbox-frame {
-  --frame-pad: 10px;
+  --frame-pad: 6px;
   --frame-border: 2px;
 
   /* 观画室放足墙面：上限取 74vh，竖构图才撑得开（横构图先触 940px 宽度限），
@@ -1322,8 +1327,8 @@ dialog.lightbox::backdrop {
   align-items: center;
   justify-content: center;
   padding: var(--frame-pad);
-  background: var(--gilt);
-  border: var(--frame-border) solid var(--gilt-dark);
+  background: var(--gilt-dark);
+  border: var(--frame-border) solid var(--gilt-edge);
 
   /* 光从上方来：投影向下方坠得更深，画「离开」墙面 */
   box-shadow: 0 30px 64px rgba(0, 0, 0, 0.55);
@@ -1529,14 +1534,8 @@ body.lb-open {
 
   .card-media {
     border-width: 1px;
-    padding: 5px;
-  }
 
-  .card-media img {
-    top: 5px;
-    left: 5px;
-    width: calc(100% - 10px);
-    height: calc(100% - 10px);
+    --frame-inset: 3px;
   }
 
   .card-meta {
@@ -1591,7 +1590,7 @@ body.lb-open {
   }
 
   .lightbox-frame {
-    --frame-pad: 6px;
+    --frame-pad: 4px;
     --frame-max-w: min(94vw, 900px);
     --frame-max-h: min(70vh, 640px);
   }

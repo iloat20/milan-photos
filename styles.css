@@ -19,6 +19,25 @@
   initial-value: rgba(201, 169, 106, 0.28);
 }
 
+/* 序厅/观画室的随画采样墙色同样类型化：切画时墙面与射灯平滑过渡而非跳变 */
+@property --room-adapt {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #151c18;
+}
+
+@property --room-adapt-deep {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #0e1210;
+}
+
+@property --room-adapt-glow {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: rgba(201, 169, 106, 0.06);
+}
+
 @layer base {
 /* 米兰美术馆 — 油画展厅 */
 :root {
@@ -211,7 +230,13 @@ code {
   flex-direction: column;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--rule);
-  transition: background 1.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* 墙色过渡要写在采样变量本身上：background 的渐变不会被 var 色变化触发过渡 */
+  transition:
+    background 1.8s cubic-bezier(0.22, 0.61, 0.36, 1),
+    --room-adapt 1.8s cubic-bezier(0.22, 0.61, 0.36, 1),
+    --room-adapt-deep 1.8s cubic-bezier(0.22, 0.61, 0.36, 1),
+    --room-adapt-glow 1.8s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .hero-plate {
@@ -750,6 +775,16 @@ code {
   isolation: isolate;
 }
 
+/* 策展节奏：每 7 张的末张做「重点陈列」——独占一整行成为一面墙，
+   形成 3 列 × 2 行 → 一面大墙 → 的观展呼吸。
+   卡片宽度按画心比例反算（--fit 由 applyRowFit 写入），框与画同比例，
+   避免全宽大框里装小画撑出大片卡纸 */
+.card.is-feature {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(100%, calc(64vh * var(--fit, 1.333)));
+}
+
 .card:focus-visible {
   outline: 2px solid var(--gilt);
   outline-offset: 10px;
@@ -767,25 +802,30 @@ code {
   width: 100%;
   aspect-ratio: 4 / 3;
   border: 2px solid var(--gilt-dark);
+
+  /* 轨道射灯从上方打来：框的上沿受光更亮，投影向下方坠实 */
+  border-top-color: color-mix(in oklab, var(--gilt-dark), #fff 24%);
   padding: 7px;
   box-sizing: border-box;
   box-shadow:
     0 0 0 1px rgba(42, 36, 24, 0.35),
-    0 12px 28px var(--card-glow);
-  transition: box-shadow 0.7s var(--ease);
+    0 18px 36px rgba(0, 0, 0, 0.46),
+    0 6px 22px var(--card-glow);
+  transition: box-shadow 0.7s var(--ease), border-color 0.7s var(--ease);
 }
 
+/* 墙面上的射灯：锥光落在画框上沿之外的墙面，向下衰减（光不进画心） */
 .card-media::before {
   content: "";
   position: absolute;
-  inset: -24px;
+  inset: -58px -34px -26px;
   z-index: -1;
   background:
-    radial-gradient(ellipse 68% 40% at 32% 6%, rgba(255, 230, 172, 0.07), transparent 62%),
-    radial-gradient(ellipse at center, var(--card-accent), transparent 70%);
+    radial-gradient(ellipse 36% 52% at 50% -8%, rgba(255, 246, 222, 0.2), transparent 64%),
+    radial-gradient(ellipse 86% 66% at 50% 42%, var(--card-accent), transparent 72%);
   opacity: 0.9;
   pointer-events: none;
-  transition: opacity 0.7s var(--ease);
+  transition: background 0.7s var(--ease), opacity 0.7s var(--ease);
 }
 
 /* 光不落在画心 */
@@ -1176,6 +1216,8 @@ code {
   --room-adapt-glow: rgba(201, 169, 106, 0.06);
 
   background:
+    /* 天花射灯：光自顶部洒下，画上方墙面被照亮（光只在墙面，画心不加光） */
+    radial-gradient(ellipse 54% 52% at 50% -4%, rgba(255, 247, 226, 0.16), transparent 64%),
     radial-gradient(ellipse 70% 48% at 50% 42%, var(--room-adapt-glow), transparent 68%),
     linear-gradient(180deg, var(--room-adapt) 0%, var(--room-adapt-deep) 100%);
   color: var(--ivory);
@@ -1185,7 +1227,13 @@ code {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
   padding-top: env(safe-area-inset-top);
-  transition: background 0.65s var(--ease);
+
+  /* 同序厅：过渡写在采样变量本身上，墙面与射灯随之平滑换色 */
+  transition:
+    background 0.65s var(--ease),
+    --room-adapt 0.65s var(--ease),
+    --room-adapt-deep 0.65s var(--ease),
+    --room-adapt-glow 0.65s var(--ease);
 }
 
 .lightbox:not([open]) {
@@ -1266,7 +1314,9 @@ dialog.lightbox::backdrop {
   padding: var(--frame-pad);
   background: var(--gilt);
   border: var(--frame-border) solid var(--gilt-dark);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+
+  /* 光从上方来：投影向下方坠得更深，画「离开」墙面 */
+  box-shadow: 0 30px 64px rgba(0, 0, 0, 0.55);
   overflow: hidden;
 }
 
@@ -1277,7 +1327,7 @@ dialog.lightbox::backdrop {
 
 .lightbox-frame.is-lit {
   animation: none;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 30px 64px rgba(0, 0, 0, 0.55);
 }
 
 .lightbox-frame.is-lit img {
@@ -1288,7 +1338,7 @@ dialog.lightbox::backdrop {
 @keyframes frame-lit {
   0%,
   100% {
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 30px 64px rgba(0, 0, 0, 0.55);
   }
 }
 
@@ -1693,6 +1743,7 @@ p {
   .card-media::before,
   .hero-art::after {
     opacity: 0.5;
+    transition: none;
   }
 }
 
@@ -1742,13 +1793,22 @@ p {
     user-select: none;
   }
 
-  /* 卡片 hover 升级：金框提亮 + 光晕增强 */
+  /* 卡片 hover 升级 = 射灯打亮：锥光增强 + 顶边高光 + 投影下坠更深 */
   .card:hover .card-media,
   .card:focus-visible .card-media {
     border-color: var(--gilt);
+    border-top-color: var(--gilt-bright);
     box-shadow:
       0 0 0 1px rgba(42, 36, 24, 0.35),
-      0 16px 36px color-mix(in oklab, var(--card-glow) 62%, rgba(201, 169, 106, 0.42));
+      0 24px 48px rgba(0, 0, 0, 0.54),
+      0 8px 34px color-mix(in oklab, var(--card-glow) 62%, rgba(201, 169, 106, 0.42));
+  }
+
+  .card:hover .card-media::before,
+  .card:focus-visible .card-media::before {
+    background:
+      radial-gradient(ellipse 42% 60% at 50% -8%, rgba(255, 248, 230, 0.44), transparent 66%),
+      radial-gradient(ellipse 104% 84% at 50% 42%, var(--card-accent), transparent 76%);
   }
 
   /* 墙签浮层：默认无字，hover/键盘聚焦浮现 */

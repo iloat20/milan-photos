@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import datetime
 from pathlib import Path
@@ -81,6 +82,124 @@ def is_animated(path: Path) -> bool:
             return int(n) > 1
     except Exception:
         return path.suffix.lower() == ".gif"
+
+
+# ── 墙色调色板（P1-6）────────────────────────────────────────────────────────
+# 原先由 app.js 的 sampleRoomColor() 在浏览器里逐张 <img> 做
+# canvas 28×28 取色 + 饱和度打分 + 对比度迭代。三个问题：
+#   1. 每次 renderGallery 对全部卡片重跑一遍（筛选切换 = 全量重采样）；
+#   2. 采样必须等图解码，落地前 --card-wall 是初始值 → 首屏可见色跳；
+#   3. **结果不确定**：采的是 srcset 里浏览器实际选中的那一档（400/800/1200）
+#      与格式（AVIF/WebP），随时随设备而变 —— 同一张画在不同宽度下墙色不同。
+# 改为在 sync 阶段用 Pillow 一次性算好写进 manifest，客户端只做样式赋值。
+# 算法与 sampleRoomColor 逐行对齐（含 Math.round 的半数进位方向）。
+PALETTE_EDGE = 28
+_PALETTE_HALL = (31, 42, 36)
+_PALETTE_DIM = (12, 16, 14)
+_PALETTE_IVORY = (240, 234, 216)
+
+
+def _js_round(v: float) -> int:
+    """JS 的 Math.round 对 .5 恒向 +∞ 进位；Python round() 是银行家舍入，必须区分。"""
+    return math.floor(v + 0.5)
+
+
+def _mix(c: tuple, t: tuple, k: float) -> tuple:
+    return tuple(c[i] * (1 - k) + t[i] * k for i in range(3))
+
+
+def _rel_lum(c: tuple) -> float:
+    def f(v: float) -> float:
+        s = max(0.0, min(255.0, v)) / 255
+        return s / 12.92 if s <= 0.03928 else ((s + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2])
+
+
+def _contrast_with(c: tuple, fg: tuple) -> float:
+    l1, l2 = _rel_lum(c), _rel_lum(fg)
+    hi, lo = max(l1, l2), min(l1, l2)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _darken_for_ui(c: tuple, fg: tuple, min_ratio: float) -> tuple:
+    col = tuple(float(v) for v in c)
+    for _ in range(20):
+        if _contrast_with(col, fg) >= min_ratio:
+            return col
+        col = tuple(v * 0.9 for v in col)
+    return col
+
+
+def _css_rgba(c: tuple, a: float = 1) -> str:
+    return f"rgba({_js_round(c[0])}, {_js_round(c[1])}, {_js_round(c[2])}, {a})"
+
+
+def photo_palette(path: Path) -> dict | None:
+    """从原图算「展厅墙色」，输出与 sampleRoomColor 同形的四个 CSS 颜色。
+
+    取自**原图**而非缩略图：一次算好即与展示档位解耦，同一张画在卡片／序厅／
+    灯箱三处共用一套墙色（原先三处各采各的，同画三色）。
+    EXIF 旋转不必处理——旋转是像素集合的双射，均值与最饱和像素都不变。
+    无 Pillow 或解码失败返回 None，客户端会自动回落到采样路径。
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as im:
+            # 采样源取**原图**：调色板是画作的属性，不该随我们 WebP/AVIF 编码档位漂移。
+            # 滤波选 BILINEAR 是实测结果——与浏览器 drawImage 的缩放在同一张图上的
+            # 输出最接近：最大通道差 18（BOX 36 / BICUBIC 49 / LANCZOS 50 / NEAREST 42），
+            # 因为 accent 是「最饱和的单像素」argmax，滤波稍有不同就会翻转成另一个像素。
+            small = im.convert("RGBA").resize(
+                (PALETTE_EDGE, PALETTE_EDGE), Image.Resampling.BILINEAR
+            )
+            data = small.tobytes()
+    except Exception:
+        return None
+
+    total_r = total_g = total_b = 0
+    count = 0
+    best_score = 0.0
+    accent = (0, 0, 0)
+    for i in range(0, len(data), 4):
+        pr, pg, pb, pa = data[i], data[i + 1], data[i + 2], data[i + 3]
+        if pa < 32:
+            continue
+        total_r += pr
+        total_g += pg
+        total_b += pb
+        count += 1
+        mx = max(pr, pg, pb)
+        mn = min(pr, pg, pb)
+        sat = 0.0 if mx == 0 else (mx - mn) / mx
+        score = sat * (mx / 255)
+        if score > best_score:
+            best_score = score
+            accent = (pr, pg, pb)
+    if not count:
+        return None
+
+    avg = (total_r / count, total_g / count, total_b / count)
+    accent_rgb = accent if best_score > 0.08 else avg
+
+    # 画作色压进展厅深绿，保持油画馆气质。混合度取高（墙 0.72 / 光晕 0.45）：
+    # 采样只贡献明暗与色相差，否则亮米色画作会把序厅/观画室的墙拉成发灰的棕墙。
+    wall = _mix(_mix(avg, accent_rgb, 0.35), _PALETTE_HALL, 0.72)
+    glow = _mix(_mix(avg, accent_rgb, 0.55), _PALETTE_HALL, 0.45)
+    deep = _mix(wall, _PALETTE_DIM, 0.52)
+    # 采样墙再亮也不牺牲 chrome 文字对比（对照象牙字）
+    wall = _darken_for_ui(wall, _PALETTE_IVORY, 4.5)
+    deep = _darken_for_ui(deep, _PALETTE_IVORY, 4.5)
+    glow = _darken_for_ui(glow, _PALETTE_IVORY, 3)
+    return {
+        "wall": _css_rgba(wall),
+        "deep": _css_rgba(deep),
+        "glow": _css_rgba(glow, 0.55),
+        "accent": _css_rgba(_mix(accent_rgb, _PALETTE_HALL, 0.4), 0.75),
+    }
 
 
 def _try_save_avif(im, out: Path, quality: int) -> bool:
@@ -192,6 +311,12 @@ def ensure_medium(src: Path) -> tuple[str, str | None] | None:
 
 
 def list_photo_files() -> list[Path]:
+    """列出 photos/ 下的图片文件。
+
+    ⚠️ 这里的排序**不是**展厅陈列顺序的来源（见 build_photos 的显式排序）。
+    它只提供一个稳定的枚举起点；mtime 只是本机可见量，git 不保存它，
+    因此绝不能拿它当顺序键。
+    """
     files = [
         p
         for p in PHOTOS.iterdir()
@@ -273,10 +398,33 @@ def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None)
             item["mediumAvif"] = medium[1]
     if size:
         item["width"], item["height"] = size
+    palette = photo_palette(path)
+    if palette:
+        # 客户端只做样式赋值；缺失（无 Pillow / 解码失败）时回落浏览器采样
+        item["palette"] = palette
     return item
+
+
+def manifest_order_key(item: dict) -> tuple[str, str]:
+    """展厅陈列顺序键：date 倒序，同日按文件名倒序。
+
+    为什么不能用 mtime：git 不保留文件 mtime。本机按「真实上传时间」排，
+    CI checkout 后所有照片 mtime 相同、退化成「文件名倒序」——同一批图在两处
+    排布完全不同，导致
+      · 本地预览无法复现线上的策展观感；
+      · 「每 7 张独占一面墙」的重点墙落在不同作品上；
+      · index.html 的序厅首图 preload 会指向与线上不同的那张（白拉一次高优先级图）。
+    date 的回退链（手写 meta > 已入馆日期 prev_dates > EXIF > mtime）里，
+    prev_dates 直接来自已提交的 manifest，因此对「已入馆」的照片是完全环境无关的；
+    新入馆照片在首次 CI 跑完后也会被 prev_dates 钉住。
+    """
+    return (item.get("date") or "", item.get("file") or "")
 
 
 def build_photos() -> list[dict]:
     meta = load_meta()
     prev_dates = load_prev_dates()
-    return [photo_item(p, meta, prev_dates) for p in list_photo_files()]
+    items = [photo_item(p, meta, prev_dates) for p in list_photo_files()]
+    # 显式排序：顺序是策展结果，必须环境无关（见 manifest_order_key）
+    items.sort(key=manifest_order_key, reverse=True)
+    return items

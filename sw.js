@@ -1,5 +1,5 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v32";
+const VERSION = "milan-v33";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
@@ -18,6 +18,13 @@ self.addEventListener("install", (event) => {
       try {
         const res = await fetch("./photos/manifest.json");
         if (res && res.ok) await cache.put("./photos/manifest.json", res);
+      } catch {
+        /* 快照失败不阻断安装 */
+      }
+      // 字体同样不进 addAll 原子组：装饰性资源缺了不该让整个 SW 装不上
+      try {
+        const res = await fetch("./assets/fonts/milan-serif.woff2");
+        if (res && res.ok) await cache.put("./assets/fonts/milan-serif.woff2", res);
       } catch {
         /* 快照失败不阻断安装 */
       }
@@ -67,6 +74,7 @@ function isShellRequest(url) {
     path.endsWith("/styles.css") ||
     path.endsWith("/app.js") ||
     path.endsWith("/index.html") ||
+    path.endsWith(".woff2") ||
     path.endsWith("/") ||
     path.endsWith("/milan") ||
     path.endsWith("/milan-photos")

@@ -38,6 +38,16 @@
   initial-value: rgba(201, 169, 106, 0.06);
 }
 
+/* 站内可见字形的思源宋体（Noto Serif SC）子集：只含页面真正渲染的 257 字，
+   权重 400–600 可变。Windows 无系统中文衬线时用它兜底，标题不再落到 SimSun */
+@font-face {
+  font-family: "Milan Serif";
+  src: url("assets/fonts/milan-serif.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
 /* 米兰美术馆 — 油画展厅 */
 :root {
@@ -63,7 +73,7 @@
   --font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --display: "Songti SC", "Source Han Serif SC", "Noto Serif SC", "STSong",
-    "SimSun", Georgia, "Times New Roman", serif;
+    "Milan Serif", "SimSun", Georgia, "Times New Roman", serif;
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 
   /* 系统控件/滚动条跟随暗色（另在 <meta name="color-scheme"> 声明） */

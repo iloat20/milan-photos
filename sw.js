@@ -1,11 +1,22 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v34";
+const VERSION = "milan-v40";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
 const OWNED_CACHE_RE = /^milan-v\d+-(?:shell|media)$/;
 
-const SHELL_ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest"];
+// P2-2 起 app.js 是 ESM，src/ 下的模块必须一并预缓存：
+// 模块加载失败会连坐 app.js（它 import 不进来就整个不执行），
+// 表现为离线时停在骨架屏。新增 src 模块时记得同步这里。
+const SHELL_ASSETS = [
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app.js",
+  "./src/util.js",
+  "./src/lightbox.js",
+  "./manifest.webmanifest",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -73,6 +84,9 @@ function isShellRequest(url) {
   return (
     path.endsWith("/styles.css") ||
     path.endsWith("/app.js") ||
+    // ESM 模块（P2-2 拆出的 src/*.js）：同样走壳层 SWR，
+    // 否则 app.js 命中缓存但它的 import 图拉不到 → 离线整站停摆
+    path.includes("/src/") ||
     path.endsWith("/index.html") ||
     path.endsWith(".woff2") ||
     path.endsWith("/") ||
@@ -94,9 +108,24 @@ async function trimMediaCache(maxEntries = MEDIA_MAX_ENTRIES) {
   }
 }
 
+/* putMedia 原先每次 put 都调 trimMediaCache()，而后者全量 cache.keys()：
+   一次页面加载（约 108 个缩略图/中图请求）会触发同等次数的全量枚举，
+   100 条上限下累计约 10⁴ 次 key 对象分配。
+
+   改用**时间节流**而不是报告建议的「计数阈值」——后者在本馆规模下会失效：
+   单次浏览的媒体请求约 18 个（18 张卡片），永远到不了 24 的阈值，于是永不裁剪；
+   且 SW 被回收重启后计数器归零，同样可能长期不触发。
+   时间节流无此退化：lastTrimAt 初值 0，SW 每次重启后第一次 put 必然裁剪一次。
+   赋值语句与判断之间没有 await，天然并发安全（只有第一个 put 通过）。 */
+const TRIM_MS = 5000;
+let lastTrimAt = 0;
+
 async function putMedia(request, response) {
   const cache = await caches.open(CACHE_MEDIA);
   await cache.put(request, response);
+  const now = Date.now();
+  if (now - lastTrimAt < TRIM_MS) return;
+  lastTrimAt = now;
   await trimMediaCache();
 }
 

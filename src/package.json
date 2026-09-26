@@ -1,0 +1,4 @@
+{
+  "//": "仅用于告诉 Node「本目录下的 .js 是 ESM」。浏览器不读这个文件，仓库根的 package.json 保持无 type（CJS），以免破坏 playwright.config.js 的 require。",
+  "type": "module"
+}

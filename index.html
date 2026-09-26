@@ -47,6 +47,14 @@
   <title>米兰美术馆 · 油画展厅</title>
   <link rel="preload" href="styles.css" as="style" />
   <link rel="preload" href="app.js" as="script" />
+  <!-- 标题子集字体提前到 HTML 解析期取回，首屏馆名大字不等 CSS 解析 -->
+  <link
+    rel="preload"
+    href="assets/fonts/milan-serif.woff2"
+    as="font"
+    type="font/woff2"
+    crossorigin
+  />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>

@@ -696,8 +696,10 @@ code {
 /* —— 展厅：鎏金画框挂画 —— */
 .gallery-section {
   padding: 96px 0 88px;
+
+  /* 高光起点避开章节题遮罩带（遮罩为纯 --room），否则遮罩会盖出一块可见的矩形色差 */
   background:
-    radial-gradient(ellipse 90% 40% at 50% 0%, rgba(201, 169, 106, 0.04), transparent 60%),
+    radial-gradient(ellipse 90% 46% at 50% 6%, rgba(201, 169, 106, 0.05), transparent 62%),
     var(--room);
 }
 
@@ -708,7 +710,10 @@ code {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 64px 40px;
-  align-items: start;
+
+  /* 中线挂画：同排画心对齐同一水平中线（真实画廊挂画规则），
+     而非顶部对齐——竖横混排时底部参差会撑出大片空洞 */
+  align-items: center;
 }
 
 .card {
@@ -1232,8 +1237,11 @@ dialog.lightbox::backdrop {
 .lightbox-frame {
   --frame-pad: 10px;
   --frame-border: 2px;
-  --frame-max-w: min(86vw, 900px);
-  --frame-max-h: min(58vh, 560px);
+
+  /* 观画室放足墙面：上限取 74vh，竖构图才撑得开（横构图先触 940px 宽度限），
+     比早先的 58vh/560px 明显少留空墙 */
+  --frame-max-w: min(86vw, 940px);
+  --frame-max-h: min(74vh, 780px);
 
   position: relative;
   box-sizing: border-box;
@@ -1277,8 +1285,8 @@ dialog.lightbox::backdrop {
   display: block;
   width: auto;
   height: auto;
-  max-width: calc(var(--frame-max-w, 900px) - 2 * var(--frame-pad, 10px) - 2 * var(--frame-border, 2px));
-  max-height: calc(var(--frame-max-h, 560px) - 2 * var(--frame-pad, 10px) - 2 * var(--frame-border, 2px));
+  max-width: calc(var(--frame-max-w, 940px) - 2 * var(--frame-pad, 10px) - 2 * var(--frame-border, 2px));
+  max-height: calc(var(--frame-max-h, 780px) - 2 * var(--frame-pad, 10px) - 2 * var(--frame-border, 2px));
   object-fit: contain;
   animation: lb-in 0.4s var(--ease) both;
   transform: translate(var(--lb-tx, 0), var(--lb-ty, 0)) scale(var(--lb-zoom, 1));
@@ -1316,6 +1324,10 @@ dialog.lightbox::backdrop {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+
+  /* 画框在 .lb-prev 之后绘制：画作放大到贴近两侧时（窄屏），箭头须显式压在画框之上，
+     否则左箭头会被画框盖住、与右箭头不对称 */
+  z-index: 2;
   width: 42px;
   height: 42px;
   border: 1px solid var(--rule);
@@ -1509,8 +1521,8 @@ body.lb-open {
 
   .lightbox-frame {
     --frame-pad: 6px;
-    --frame-max-w: min(92vw, 900px);
-    --frame-max-h: min(62vh, 560px);
+    --frame-max-w: min(94vw, 900px);
+    --frame-max-h: min(70vh, 640px);
   }
 
   .lb-arrow {
@@ -1528,6 +1540,11 @@ body.lb-open {
 
   .btn {
     width: 100%;
+  }
+
+  /* 文字按钮（如「进入展厅」）不拉满：全宽下划线会横贯半屏，语义也不再是文字链 */
+  .btn-text {
+    width: auto;
   }
 
   .gh-actions .btn {
@@ -1677,8 +1694,12 @@ p {
 
   .chapter-head::before {
     content: "";
+
+    /* 横向铺满视口：遮罩与滚动区同宽，左右不露边；
+       底部渐隐让卡片从标题下方透出 */
     position: absolute;
-    inset: -16px -40px -30px;
+    inset-block: -16px -30px;
+    inset-inline: calc(50% - 50vw);
     background: linear-gradient(to bottom, var(--room) 62%, transparent 100%);
     pointer-events: none;
     z-index: -1;
@@ -1749,6 +1770,7 @@ p {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 64px 40px;
+    align-items: center;
   }
 
   .gallery-skeleton span {

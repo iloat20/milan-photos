@@ -154,6 +154,17 @@ code {
   letter-spacing: 0.28em;
   color: var(--gilt-bright);
   text-decoration: none;
+
+  /* 序厅门厅大字在场时由 .is-at-hero 隐去（见下），滚入展厅再浮现 */
+  transition: opacity 0.4s var(--ease), visibility 0s;
+}
+
+/* 隐藏态把 visibility 推迟到渐隐结束；浮现时回到基础规则立即可见，
+   否则渐显会整体被 visibility 的延时卡住 */
+.site-nav.is-at-hero .site-nav-logo {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s var(--ease), visibility 0s 0.4s;
 }
 
 .site-nav-logo:hover {
@@ -1656,6 +1667,10 @@ p {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  .site-nav-logo {
+    transition: none;
   }
 
   .card-media img,

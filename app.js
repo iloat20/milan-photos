@@ -87,10 +87,12 @@
       });
       const hall = { r: 31, g: 42, b: 36 };
       const dim = { r: 12, g: 16, b: 14 };
-      // 画作色压进展厅深绿，保持油画馆气质
-      let wall = mix(mix(avg, accent, 0.35), hall, 0.62);
-      let glow = mix(mix(avg, accent, 0.55), hall, 0.35);
-      let deep = mix(wall, dim, 0.45);
+      // 画作色压进展厅深绿，保持油画馆气质。
+      // 混合度取高（墙 0.72 / 光晕 0.45）：采样只贡献明暗与色相差，
+      // 否则亮米色画作会把序厅/观画室的墙拉成发灰的棕墙，脱离展厅深绿基调
+      let wall = mix(mix(avg, accent, 0.35), hall, 0.72);
+      let glow = mix(mix(avg, accent, 0.55), hall, 0.45);
+      let deep = mix(wall, dim, 0.52);
       // 采样墙再亮也不牺牲 chrome 文字对比（对照象牙字）
       const ivory = { r: 240, g: 234, b: 216 };
       const relLum = (c) => {
@@ -124,11 +126,45 @@
         wall: css(wall),
         glow: css(glow, 0.55),
         deep: css(deep),
-        accent: css(mix(accent, hall, 0.25), 0.75),
+        accent: css(mix(accent, hall, 0.4), 0.75),
       };
     } catch {
       return null;
     }
+  }
+
+  /* 卡片墙色采样排进空闲时段：几十张缩略图的 load 回调会扎堆，
+     逐张做 canvas 取色 + 对比度迭代会把主线程一帧打满；
+     队列按 requestIdleCallback 分片跑，renderGallery 重建时代际作废旧任务 */
+  const roomJobs = [];
+  let roomEpoch = 0;
+  let roomScheduled = false;
+  const scheduleIdle = (fn) => {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(fn, { timeout: 600 });
+    } else {
+      setTimeout(fn, 32);
+    }
+  };
+  const flushRoomJobs = (deadline) => {
+    roomScheduled = false;
+    const timedOut = !deadline || deadline.didTimeout === true;
+    while (roomJobs.length) {
+      const job = roomJobs.shift();
+      if (job.epoch === roomEpoch) job.run();
+      if (timedOut) continue;
+      if (deadline.timeRemaining() < 4) break;
+    }
+    if (roomJobs.length) queueRoomFlush();
+  };
+  const queueRoomFlush = () => {
+    if (roomScheduled) return;
+    roomScheduled = true;
+    scheduleIdle(flushRoomJobs);
+  };
+  function queueRoomJob(run) {
+    roomJobs.push({ run, epoch: roomEpoch });
+    queueRoomFlush();
   }
 
   function applyRoomToHero(palette) {
@@ -1071,6 +1107,9 @@
   function renderGallery() {
     if (!gallery) return;
     gallery.innerHTML = "";
+    // 旧卡片脱离文档：作废它们排队中的墙色采样
+    roomEpoch += 1;
+    roomJobs.length = 0;
     emptyEl.hidden = !galleryReady || visible.length > 0;
     const wallIndexes = new Map(photos.map((photo, index) => [photo, index]));
 
@@ -1140,11 +1179,14 @@
       }
 
       const bindCardRoom = () => {
-        const palette = sampleRoomColor(img);
-        if (!palette) return;
-        media.style.setProperty("--card-wall", palette.wall);
-        media.style.setProperty("--card-glow", palette.glow);
-        media.style.setProperty("--card-accent", palette.accent);
+        // 采样进空闲队列：命中主线程的只有这一行 canvas 取色
+        queueRoomJob(() => {
+          const palette = sampleRoomColor(img);
+          if (!palette || !media.isConnected) return;
+          media.style.setProperty("--card-wall", palette.wall);
+          media.style.setProperty("--card-glow", palette.glow);
+          media.style.setProperty("--card-accent", palette.accent);
+        });
       };
       if (img.complete) bindCardRoom();
       else img.addEventListener("load", bindCardRoom, { once: true });
@@ -1724,11 +1766,24 @@
   });
 
   const siteNav = document.getElementById("siteNav");
+  // 序厅门厅大字与顶栏馆名同屏重复：大字在场时隐去顶栏馆名，滚入展厅再浮现
+  let heroEnd = Infinity;
+  const measureHeroEnd = () => {
+    heroEnd = heroCarousel
+      ? heroCarousel.offsetTop + heroCarousel.offsetHeight - siteNav.offsetHeight
+      : Infinity;
+  };
   const onScrollNav = () => {
     if (!siteNav) return;
     siteNav.classList.toggle("is-scrolled", window.scrollY > 40);
+    siteNav.classList.toggle("is-at-hero", window.scrollY < heroEnd);
   };
+  measureHeroEnd();
   window.addEventListener("scroll", onScrollNav, { passive: true });
+  window.addEventListener("resize", () => {
+    measureHeroEnd();
+    onScrollNav();
+  }, { passive: true });
   onScrollNav();
 
   renderFilters();

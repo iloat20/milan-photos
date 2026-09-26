@@ -1,6 +1,6 @@
 # AGENTS.md
 
-纯静态 GitHub Pages 照片墙（当前视觉：油画馆陈列）。**无打包/构建步骤**（源码直出）；工程化 dev 工具：ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` + `app.js` + `styles.css` + `sw.js`。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 部署 `main` 分支根目录。
+纯静态 GitHub Pages 照片墙（当前视觉：油画馆陈列）。**无打包/构建步骤**（源码直出）；工程化 dev 工具：ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` + `app.js`（`<script type="module">`）+ `src/*.js`（原生 ESM，同样零构建）+ `styles.css` + `sw.js`。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 部署 `main` 分支根目录。
 
 ## 命令
 
@@ -8,13 +8,17 @@
 python tools/serve.py          # 本地预览 http://127.0.0.1:8080
 python tools/sync_photos.py    # 生成 manifest + thumbs + medium（需 Pillow；通常只由 CI 跑）
 npm run lint                   # ESLint + Stylelint
-npm run test:e2e               # Playwright 冒烟（自动起 serve.py，5 项）
+npm run test:unit              # 纯函数单测（node --test，零新依赖，毫秒级）
+npm run test:e2e               # Playwright 冒烟（自动起 serve.py，19 项）
 npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
 node tools/build-font-subset.js # 改文案后重生成标题字体子集（需网络；不跑则新字逐字回退 SimSun）
 ```
 
 - 本地预览：`serve.py` 对 `/photos/manifest.json` 做 mtime 戳缓存（`photos/` 变了自动重建），新图刷新即见，**不要**为预览去跑 sync。
-- 校验 UI：改完跑 `npm run lint && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；截图类视觉验证前确认窗口前台（rAF ≈16ms）。
+- 端口默认 8080，可覆盖：`python tools/serve.py --port 8099` 或 `MILAN_PORT=8099 npm run test:e2e`（`playwright.config.js` 的 `baseURL`/`webServer` 与 `serve.py` 同源，改一处即可）。Windows 下 `serve.py` 用 `SO_EXCLUSIVEADDRUSE`：端口被占用时**直接启动失败**，不会两个进程共享同一端口。
+- **e2e 有资产来源自检**（`tests/e2e/global-setup.js`）：跑用例前把服务返回的 `index.html`/`app.js`/`styles.css`/`sw.js` 与磁盘文件做 sha256 比对，**并检查 manifest 是否带 `thumbAvifSrcset` / `palette`**，任一不符即中止。前者防「端口上是另一个目录的服务，而 `reuseExistingServer` 静默复用了它」——那种情况下全绿或全红都与本仓库无关；后者防「服务其实在无 Pillow 降级模式下跑」。
+- 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；截图类视觉验证前确认窗口前台（rAF ≈16ms）。
+- e2e 起的服务必须**装了 Pillow**：缺 Pillow 时 `serve.py` 会静默降级（不生成缩略图、不算 `palette`），而 manifest 仍返回 200 —— 用例不是报错，是被测对象悄悄变成降级版，红点会散落到互不相关的地方。本机实测 `python`（托管 3.13）与 `py`（系统 3.12）是**两个解释器**且只有后者有 Pillow。`global-setup.js` 会明确报出这种情况；临时换解释器：`MILAN_PY=py npx playwright test`。CI 在 `setup-python` 后显式 `pip install "Pillow>=11"`，线上不受影响。
 - CI 两条链：`sync-photos.yml`（photos/sync 脚本变更时生成并 bot 回写 manifest/thumbs/medium）；`ci.yml`（**所有 push**：lint → e2e → lhci）。
 
 ## 数据与生成物
@@ -23,7 +27,7 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 |------|------|
 | `photos/*.{jpg,png,webp,gif,avif}` | 原图（源） |
 | `photos/meta.json` | 可选：按**文件名**写 `title` / `caption` / `date` |
-| `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` 字段 |
+| `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
 | `assets/fonts/milan-serif.woff2` | 标题字体子集（站内 257 字形 / ~95KB / 可变 400–600），`tools/build-font-subset.js` 生成；只含**可见**文本，改文案后重跑 |
@@ -32,15 +36,57 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 - 日期优先 EXIF（DateTimeOriginal / DateTime），否则文件 mtime。
 - 上传页可把压缩图写进 IndexedDB 本机预览；GitHub Token 只存浏览器 `localStorage`，勿写入仓库。
 
+## 必做：src/ 模块的三条约束
+
+`src/*.js` 是**原生 ESM**（`app.js` 以 `<script type="module">` 加载，仍然零构建），`tests/unit/*.test.mjs` 直接 import 它们做单测。往 `src/` 加模块或搬函数时：
+
+1. **零副作用**：import 时不得触碰 DOM / `window` / `localStorage` / `matchMedia`。碰了的话 Node 端 `import` 会抛错，单测根本加载不起来 —— 这是 `util.js` 只装纯函数的**唯一**原因。
+   依赖 DOM 的域要拆出去，就得先解决状态注入 —— **`lightbox.js` 给出的既有范式：工厂 + 端口注入**。
+   `createLightbox(ports)` 在 import 期不碰任何 DOM，只有被调用时才开始用宿主传进来的引用；状态全收进工厂闭包，`app.js` 侧不再有该域的任何 `let`。
+   做法：① 纯计算抽成**具名导出**（`clampPan` / `anchorZoom` …），单测直接 import；② DOM 引用与跨域能力（墙色 / 深链 / 视图过渡 / 预载 / 卡片反查 / 导航序列）走 `ports` 注入，**不**反向 import `app.js`；③ 装配点放在宿主顶部（工厂调用即绑事件，放晚了会撞 `const` 的 TDZ）。
+   仍留在 `app.js` 的 `sampleRoomColor` / `applyRowFit` / `renderGallery` 尚未拆，原因是没有独立状态域或收益不足 —— 拆之前先确认能划出「自成一域 + 有回归网」的边界。
+2. **同步 `sw.js` 的 `SHELL_ASSETS`**：模块加载失败会**连坐** `app.js`（import 不进来就整个不执行），症状是**离线时停在骨架屏**。`isShellRequest()` 已用 `path.includes("/src/")` 兜住 SWR 分支，但 `SHELL_ASSETS` 是显式清单，漏加就不预缓存。**`tests/unit/sw-assets.test.mjs` 会枚举 `src/` 下的实际文件做契约检查**，漏加即红（放在单测层而非 e2e，原因见该文件头注释）。
+3. **`src/package.json` 的 `{"type":"module"}` 不要动**：仓库根 `package.json` 必须保持**无** `type`（否则 `playwright.config.js` 的 `require` 失效），所以由 `src/` 单独向 Node 声明 ESM 身份；浏览器不读这个文件。
+
+`npm run test:unit` 就是 `node --test`（自动发现 `**/*.test.mjs`，不会误扫 `tests/e2e/*.spec.js`）。写测试注意三个坑：
+
+1. **时区** —— `new Date("2026-09-26")` 按 UTC 午夜解析，在西半球会回退一天，要用 `new Date(2026, 8, 26)` 本地构造。
+2. **断言要按实现既有语义写，别按直觉** —— `safeFileName({})` 得到的是 `…-photo`（无扩展名），因为 `(file.name || "photo")` 先兜了底，`"photo.jpg"` 那层兜底只在 base 被清空时才生效（已被 `tests/unit/util.test.mjs` 钉住）。
+3. **`page.waitForFunction` 里包 async 回调会假绿** —— 实测同一个「查 SW 缓存里有没有 src/util.js」，在 `page.evaluate` 里返回 `MISS`（正确），包进 `waitForFunction` 却 **29ms 就判 true**。要轮询用 `expect.poll`。更重要的是：**新断言一律做一次红态验证**（临时破坏被测条件，确认它真的会红）——这条假绿断言就是靠红态验证才被抓出来的。
+
 ## 必做：Service Worker 版本
 
 改 `index.html` / `styles.css` / `app.js` 后，**必须**把 `sw.js` 里的 `VERSION`（当前形如 `milan-vN`）往上抬。否则旧壳层缓存会让线上更新失效。
 
+## 必做：manifest 新字段要接进白名单
+
+`loadFolderPhotos()` 把 manifest 条目**逐字段拷进新对象**，不在那段映射里的字段会被静默丢弃——不报错、不走兜底，只是功能安静失效。P1-6 的 `palette` 就被这样吞过一次：manifest 里 18/18 都有值，页面却照旧跑客户端采样。
+
+新增 manifest 字段时，除 `photos_lib.photo_item()` 与 `app.js` 的消费点外，**必须**同步改这段白名单。验证也要针对性：断言「颜色不等于初始值」是测不出来的（采样兜底同样会给出非初始值），得断言取值等于 manifest 里的值。
+
+## 必做：CSS 只保留有消费者的选择器
+
+`styles.css` 的每条规则都要有 HTML 或 JS 消费者（`createElement` + `className` / `classList`）。「无字陈列」改造删掉了一批文案节点，样式定义却留了下来 —— P2-1 因此清掉 **218 行**（`styles.css` 1988 → 1770），涉及 `.hero-kicker` / `.chapter-kicker` / `.card-meta`~`.card-medium` / `.lb-index`~`.lb-medium` / `.upload-sub` / `.about-text` / `.footer-museum-en` / `.footer-note` 等。核对选择器是否有消费者，用 `\.selector\s*\{`，参考命令：
+
+```bash
+for c in card-title lb-caption footer-note; do
+  printf '%s: html=%s js=%s\n' "$c" "$(grep -c "$c" index.html)" "$(grep -c "$c" app.js)"
+done
+```
+
+三个易踩点（P2-1 实证）：
+
+1. **带缩进的 `@media` 内覆盖最容易漏。** 用 `^\.selector` 锚定行首核对，会漏掉 media query 里缩进两格的同名规则——`.card-meta` / `.card-title` / `.card-caption` / `.about-text` 的窄屏覆盖就是这么漏过第一轮的。核对一律用 `\.selector\s*\{` 且**不限行首**。
+2. **`!important` 会反转 `@layer` 优先级。** 同一属性都带 `!important` 时，**低优先级层胜出**——`components` 层的 `display: none !important` 强于 `responsive` 层的同类声明。`.filter-bar::before` 在 components（`:374`）与隐藏清单（responsive）各有一条，**生效的是前者**。判断「哪条赢」时不能只看层顺序。
+3. **墓碑要连消费者一起看。** `.hero-art::after { content: none }` / `.card-media::after { content: none }` / `.lightbox-frame::after { content: none }` 可删（全文再无任何地方为这些伪元素定义 `content`，属于纯 no-op）；但 `.lightbox-frame.is-lit img { animation: none }` **不可删**——它实际关掉了 `.lightbox-img` 的 `lb-in` 入场动画。同一块里 `.lightbox-frame.is-lit`（与基础规则同值）是 no-op、`@keyframes frame-lit` 无人引用，两者已删。**删 CSS 前先确认它是否被 JS 隐式依赖。**
+
 ## 设计意图（勿当 bug「修好」）
 
-当前是**无字油画馆**：`styles.css` 末尾用 `display: none !important` 故意藏掉墙签、画作说明、章节 kicker、上传文案、GitHub 面板、页脚说明等。`app.js` 里仍有对应文案节点——那是保留的结构，不是渲染失败。**不要**改成浅色机构馆藏站（Met/卢浮宫式有标签馆藏 UI）——那是外部对标结论里的「不建议」项，不是缺陷。
+当前是**无字油画馆**：`@layer responsive` 块**最前**（不是文件末尾；位置敏感，见该处注释）用一份 `display: none !important` 清单藏掉墙签、画作说明、章节 kicker、上传文案、页脚说明等。**不要**改成浅色机构馆藏站（Met/卢浮宫式有标签馆藏 UI）——那是外部对标结论里的「不建议」项，不是缺陷。
 
-- 展厅墙面取色：`sampleRoomColor()` 从当前画作采样，写入 `--room-adapt` / `--room-adapt-deep` / `--room-adapt-glow`；采样后会按与象牙字的对比度**压暗墙色**，避免亮画把 chrome 冲没。
+⚠️ 该清单是**意图声明**：其中多数选择器（`.hero-kicker` / `.chapter-sub` / `.card-meta` / `.lb-index` / `.upload-sub` / `.footer-note` …）在 `index.html` 与 `app.js` 中**已无对应节点**，因此是 no-op 声明。**保留清单本身**（它是「这些元素被有意隐藏」的记录，且位置敏感），但**不要再为它们写样式定义**——P2-1 已按此清掉 218 行死 CSS。
+
+- 展厅墙面取色：**在 sync 阶段预计算**（`photos_lib.photo_palette()` → manifest 的 `palette` 字段，四值 `wall` / `deep` / `glow` / `accent`），客户端只做样式赋值。同一张画在卡片／序厅／灯箱共用一套墙色（P1-6 之前三处各采各的，同画三色）。`app.js` 的 `sampleRoomColor()` 退居**回退**，只服务浏览器内上传的图（`photo.custom`，没有 manifest 条目）。取色值会按与象牙字的对比度**压暗墙色**，避免亮画把 chrome 冲没。
 - 金框用 box-shadow / border 模拟；光晕应落在墙面（伪元素），**不要**打在画心上。
 - 框要退到照片**之后**：框面统一古铜金 `--gilt-dark`、勾边 `--gilt-edge` 再暗一档、框体窄（序厅 7px / 卡片 `--frame-inset` 4px / 灯箱 `--frame-pad` 6px）——**不要**改回亮金 `--gilt` 粗框，那会压过画心；`--gilt` 只留给文字、分页点与 hover 提边。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
@@ -61,6 +107,16 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 - 轮播：可暂停按钮（`aria-pressed`）、pointer/focus/hover 暂停；`prefers-reduced-motion` 时不自动转。
 - 筛选 chip 有 `aria-pressed`；卡片 button 的可见文本须进 `aria-label`。
 - Hero/展厅图 `alt` 使用 `displayTitle()`；可见墙签可藏，**等价文本不要删**。
+
+### 灯箱点击手势契约（`src/lightbox.js`）
+
+舞台上的点击与双击共享同一个目标，而 `click` **无法预知自己是不是双击的第一击**。契约如下，改动前先读 `research/milan-museum-design/2026-09-26-lightbox-tap-zoom-design.md`：
+
+- **1× 态单击 = 切下一张**（乐观、立即）；**放大态单击 = 缩回 1×，不切图** —— 后者是 `styles.css` 里 `.lightbox-img.is-zoomed { cursor: zoom-out }` 早已声明的意图，不是新交互。
+- **双击 = 回到「连击组起点」的绝对位置，再切缩放**。回退目标是**绝对位置**而非 `step(-1)` 的相对步数 —— 这才是「浏览器何时认定双击都不跳张」的原因。
+- **不要用固定时长计时器去猜双击**。旧 `tapTimer` 的 450ms 与浏览器双击窗口（系统可设 200–900ms）不对齐，典型后果是手慢双击跳过两张。现在由 `dblclick` 事件权威裁决，`GROUP_MS = 1000` 只用于「记不记得起点」，没有 `dblclick` 时起点信息不产生任何效果。
+- **`step()`（箭头 / 键盘 / 横滑）必须 `resetGroup()`**；`open()` / `close()` 同理。漏了会让挂在旧起点上的 `dblclick` 一次性倒回好几张 —— 这条有专门护栏（e2e「连击组不跨路径泄漏」）。
+- **不要用 `e.detail` 判连击**：实测 Playwright 的 `mouse.dblclick` 传 `clickCount:2`、`mouse.click` 传 `1`，该值反映 API 参数而非时序，**在本仓库不可测**。
 
 ## Git
 

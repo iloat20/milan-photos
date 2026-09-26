@@ -27,3 +27,6 @@ playwright-report/
 
 # 设计过程稿
 tools/preview-*.png
+
+# Agent 工作记忆（非站点资产；保留在本地，不入公开仓库）
+.workbuddy/

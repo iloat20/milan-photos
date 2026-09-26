@@ -198,6 +198,9 @@
     const ar = width > 0 && height > 0 ? width / height : 4 / 3;
     const clamped = Math.max(0.55, Math.min(ar, 1.9));
     if (media) media.style.aspectRatio = String(clamped);
+
+    // 重点陈列（.is-feature 独占一行）用它反算卡片宽度，见 .card.is-feature
+    if (card) card.style.setProperty("--fit", String(clamped));
   }
 
   function looksLikeFileTitle(title) {
@@ -1117,6 +1120,10 @@
       const card = document.createElement("button");
       card.type = "button";
       card.className = "card";
+
+      // 策展节奏：每 7 张的末张做「重点陈列」，独占一行成为一面墙
+      if ((i + 1) % 7 === 0) card.classList.add("is-feature");
+
       const titleText = displayTitle(photo, i);
       const wallIdx = wallIndexes.get(photo) ?? 0;
       const wallNo = wallNumber(wallIdx);

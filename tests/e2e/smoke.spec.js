@@ -609,7 +609,9 @@ test.describe("画廊冒烟", () => {
     expect(manifest).toHaveLength(18);
     expect(manifest.every((p) => p && p.wall && p.glow && p.accent)).toBe(true);
 
-    // 卡片墙色是同步赋值的（不等图片解码），所以读到的就是终值，无时序问题
+    // 卡片墙色是同步赋值的（不等图片解码），且 `.card-media` 的 transition 只列了
+    // background、**未**列 --card-wall，所以 computed 即终值，读一次即可，无时序问题。
+    // （序厅则相反，见下方注释——差别就在这里。）
     const applied = await page.evaluate(() =>
       [...document.querySelectorAll("#galleryGrid .card-media")].map((el) => {
         const cs = getComputedStyle(el);
@@ -629,18 +631,48 @@ test.describe("画廊冒烟", () => {
     // 且确实不是 CSS 初始墙色（防「manifest 与初始值恰好同色」的空洞通过）
     expect(norm(applied[0].wall)).not.toBe("42,36,24");
 
-    // 序厅：--room-adapt 三变量同样来自首张的 palette
-    const hero = await page.evaluate(() => {
-      const cs = getComputedStyle(document.getElementById("heroCarousel"));
-      return {
-        wall: cs.getPropertyValue("--room-adapt"),
-        deep: cs.getPropertyValue("--room-adapt-deep"),
-        glow: cs.getPropertyValue("--room-adapt-glow"),
-      };
-    });
-    expect(norm(hero.wall)).toBe(norm(manifest[0].wall));
-    expect(norm(hero.deep)).toBe(norm(manifest[0].deep));
-    expect(norm(hero.glow)).toBe(norm(manifest[0].glow));
+    // 序厅：--room-adapt 三变量同样来自首张的 palette。
+    //
+    // ⚠️ 这里**不能**读一次 computed 就比：`.hero-carousel` 把 --room-adapt 三个变量
+    // 都列进了 transition（1.8s，且 styles.css 有对应的 @property 注册），
+    // 于是 getComputedStyle 返回的是**插值中的瞬时值**。实测（写入后计时）：
+    //   t=0     rgb(51, 58, 50)
+    //   t=0.4s  rgb(66, 69, 59)
+    //   t=1.0s  rgb(73, 74, 64)
+    //   t=2.2s  rgb(74, 75, 65)  ← 收敛，等于 manifest[0].wall
+    // 这个竞态在 CI 上真实爆过：本地读在过渡之后（过绿），CI 读在过渡之中（红），
+    // 且两次读数不同（41,49,43 / 58,63,55）——两者都精确落在「CSS 初始值 #1f2a24
+    // → manifest[0].wall」的插值线上。
+    //
+    // 先断言 **inline 值**（app.js 写进去的那一个）：它不受过渡影响，精确、无竞态，
+    // 且正是本用例要查的东西——palette 有没有被 loadFolderPhotos 的白名单吞掉
+    // （被吞则 applyRoomToHero 走采样分支或不被调用，inline 就不会是 manifest 的值）。
+    const heroInline = await page.evaluate(() =>
+      ["--room-adapt", "--room-adapt-deep", "--room-adapt-glow"].map((n) =>
+        document.getElementById("heroCarousel").style.getPropertyValue(n)
+      )
+    );
+    expect(norm(heroInline[0])).toBe(norm(manifest[0].wall));
+    expect(norm(heroInline[1])).toBe(norm(manifest[0].deep));
+    expect(norm(heroInline[2])).toBe(norm(manifest[0].glow));
+
+    // 再确认动画层**确实收敛**到同一值（证明它不只是被写进 style、还真的生效到
+    // 用户可见层）。轮询而非固定 sleep：过渡时长由 CSS 决定，写死等待会随样式漂移。
+    await expect
+      .poll(
+        async () => {
+          const s = await page.evaluate(() =>
+            getComputedStyle(document.getElementById("heroCarousel"))
+              .getPropertyValue("--room-adapt")
+          );
+          return norm(s);
+        },
+        {
+          timeout: 5_000,
+          message: "序厅 --room-adapt 的 computed 值未收敛到 manifest[0].wall",
+        }
+      )
+      .toBe(norm(manifest[0].wall));
   });
 
   /* —— 灯箱「点击 / 缩放」手势 ——

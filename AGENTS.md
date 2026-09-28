@@ -9,7 +9,7 @@ python tools/serve.py          # 本地预览 http://127.0.0.1:8080
 python tools/sync_photos.py    # 生成 manifest + thumbs + medium（需 Pillow；通常只由 CI 跑）
 npm run lint                   # ESLint + Stylelint
 npm run test:unit              # 纯函数单测（node --test，零新依赖，毫秒级）
-npm run test:e2e               # Playwright 冒烟（自动起 serve.py，19 项）
+npm run test:e2e               # Playwright 冒烟（自动起 serve.py，24 项）
 npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
 node tools/build-font-subset.js # 改文案后重生成标题字体子集（需网络；不跑则新字逐字回退 SimSun）
 ```

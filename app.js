@@ -991,6 +991,12 @@ import { createLightbox } from "./src/lightbox.js";
         img.width = photo.width;
         img.height = photo.height;
         applyRowFit(card, media, photo.width, photo.height);
+      } else if (img.complete && img.naturalWidth) {
+        // 缓存命中的图不会再派发 load：直接同步量一次。否则 applyRowFit 永不执行，
+        // 重点墙反算宽度用的 --fit 就没有任何写入点（它只在这里被写）。
+        // 仅在缺宽高的条目上走到 —— manifest 条目与新建的 custom 记录都带宽高，
+        // 走上面的同步分支；实际可达路径是 IndexedDB 里早于宽高字段的旧记录。
+        applyRowFit(card, media, img.naturalWidth, img.naturalHeight);
       } else {
         img.addEventListener(
           "load",
@@ -1383,6 +1389,9 @@ import { createLightbox } from "./src/lightbox.js";
     if (ghReady && okGh) {
       let msg = `本机 +${okLocal} 张，GitHub +${okGh} 张。Pages 会在 Actions 构建后更新（约 1 分钟）。`;
       if (ghFail) msg += ` 另有 ${ghFail} 张远端同步失败，已在本机保留。`;
+      // fail 只在本机阶段累加（文件过大 / 解码失败）。不给文案的话，
+      // Boolean(ghFail || fail) 会把状态条点成红灯却不说明原因。
+      if (fail) msg += ` 另有 ${fail} 张本地失败（文件过大）。`;
       setStatus(msg, Boolean(ghFail || fail));
     } else if (okLocal && ghFail) {
       setStatus(`本机 +${okLocal} 张已保存，但 GitHub 同步失败 ${ghFail} 张，请稍后重试。`, true);

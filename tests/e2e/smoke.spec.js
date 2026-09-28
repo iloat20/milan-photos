@@ -832,4 +832,112 @@ test.describe("画廊冒烟", () => {
       expect(await hashOf(page)).toBe(startHash);
     });
   });
+
+  /* —— 序厅→灯箱 的视图过渡源 ——
+     设计文档：research/milan-museum-design/2026-09-28-hero-lightbox-vt-design.md
+
+     原实现 open()/close() 各写一遍 `list ? null : cardImageAt(index)`，把「没有可
+     配对的元素」与「会话跟随 list 索引」混成一个判据。序厅点击传 list 的前提恰恰是
+     该画**不在 visible 里**（前面已有 `if (inFilter >= 0) return` 短路），于是：
+       · 默认路径（无筛选，走 inFilter 分支、list 为空）→ 配到**屏外的展厅卡片**；
+         实测桌面 card0 top=1184（vh 900，溢出 284px）、移动 top=1080（vh 844，溢出 236px），
+         过渡中途露出空画框（桌面）与重影（移动）。
+       · 筛选路径（list = photos）→ 完全无源。
+     用户真正点击的**序厅画面**从不参与。
+
+     权威判据是「谁拿到了 view-transition-name」——直接观察它，不做几何推断。
+     ⚠️ 必须在 goto 之前装 observer（addInitScript 只对之后的导航生效），
+     且用 expect.poll 而非 waitForFunction（后者包 async 回调会假绿，见 AGENTS.md）。 */
+  test.describe("序厅→灯箱 过渡源", () => {
+    const watchVtName = (page) =>
+      page.addInitScript(() => {
+        window.__vtLog = [];
+        const start = () => {
+          new MutationObserver((muts) => {
+            for (const m of muts) {
+              const el = m.target;
+              if (!el || el.nodeType !== 1 || !el.style) continue;
+              if (el.style.viewTransitionName !== "milan-lightbox-img") continue;
+              window.__vtLog.push({
+                inHero: Boolean(el.closest("#heroCarousel")),
+                inGallery: Boolean(el.closest("#galleryGrid")),
+                inLightbox: Boolean(el.closest("#lightbox")),
+              });
+            }
+          }).observe(document.documentElement, {
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["style"],
+          });
+        };
+        if (document.documentElement) start();
+        else document.addEventListener("DOMContentLoaded", start, { once: true });
+      });
+
+    /** 除掉灯箱自身，第一个拿到该 name 的元素即配对源；一个都没有则 null */
+    const observedSource = (page) =>
+      page.evaluate(() => window.__vtLog.find((r) => !r.inLightbox) || null);
+
+    const openFromHero = async (page) => {
+      // 序厅画面在两种路径下都必须成为配对源：默认路径此前配到屏外卡片，
+      // 筛选路径此前没有任何源。断言序厅内外各一遍，避免「恰好都是 null」空洞通过。
+      await page.locator(".hero-carousel-slide.is-active .hero-art").click();
+      await expect(page.locator("#lightbox")).toBeVisible();
+      await expect.poll(() => observedSource(page), { timeout: 5_000 }).not.toBeNull();
+      return observedSource(page);
+    };
+
+    test("无筛选点序厅：配对源是序厅画面，不是屏外的展厅卡片", async ({ page }) => {
+      await watchVtName(page);
+      await page.goto("/");
+      await expect(page.locator(".card")).toHaveCount(18);
+
+      const src = await openFromHero(page);
+      expect(src.inHero, "配对源应落在序厅轮播内").toBe(true);
+      expect(src.inGallery, "不得再配到展厅卡片（实测那张在屏外 284px）").toBe(false);
+    });
+
+    test("筛选不含该画时点序厅：同样以序厅画面作配对源", async ({ page }) => {
+      await watchVtName(page);
+      await page.goto("/");
+      await expect(page.locator(".card")).toHaveCount(18);
+
+      // 序厅 8 张全是 2026-09，筛到 2026年8月 必然进入「筛选不含该画」那条路径
+      await page.locator("#filterBar button", { hasText: "2026年8月" }).click();
+      await expect(page.locator(".card")).toHaveCount(2);
+
+      const src = await openFromHero(page);
+      expect(src.inHero, "配对源应落在序厅轮播内").toBe(true);
+      expect(src.inGallery).toBe(false);
+    });
+
+    test("灯箱会话期间序厅停止自动轮播，关闭后恢复", async ({ page }) => {
+      // 关灯箱时要缩回「用户点的那幅序厅画面」，轮播若在模态框背后继续转，
+      // 被点的 slide 会变成 opacity:0 / visibility:hidden，配对到隐形状比不配对更糟。
+      await page.goto("/");
+      await expect(page.locator(".hero-carousel-slide")).toHaveCount(8);
+      const activeIndex = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll(".hero-carousel-slide")].findIndex((s) =>
+            s.classList.contains("is-active")
+          )
+        );
+
+      await page.locator(".hero-carousel-slide.is-active .hero-art").click();
+      await expect(page.locator("#lightbox")).toBeVisible();
+
+      // 越过一个轮播周期（4200ms）：期间活动 slide 必须不变
+      const atOpen = await activeIndex();
+      await page.waitForTimeout(5_000);
+      expect(await activeIndex(), "灯箱开着时序厅不该轮播").toBe(atOpen);
+
+      await page.locator("#close").click();
+      await expect(page.locator("#lightbox")).toBeHidden();
+      // 关闭后恢复：不再悬停、给足一个周期，活动 slide 必须动起来
+      await page.mouse.move(0, 0);
+      await expect
+        .poll(activeIndex, { timeout: 12_000, message: "关灯箱后序厅未恢复轮播" })
+        .not.toBe(atOpen);
+    });
+  });
 });

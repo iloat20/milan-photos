@@ -1,17 +1,25 @@
 /**
- * src/lightbox.js 的纯数学单测 —— Node 内置 test runner，零新增依赖。
+ * src/lightbox.js 的纯函数单测 —— Node 内置 test runner，零新增依赖。
  *
- * 只覆盖从工厂里**具名导出**的四段计算（clampPan / anchorRel / anchorZoom /
- * pinchZoom）。它们此前埋在 app.js 的 IIFE 里，只能靠 e2e 端到端撞；抽出来之后
- * 边界条件（缩放钳制 1–4、平移钳到溢出半幅、锚点不变性）可以直接钉住。
+ * 覆盖从工厂里**具名导出**的计算：四段手势数学（clampPan / anchorRel / anchorZoom /
+ * pinchZoom）与视图过渡源的选取规则（resolveVtSource）。它们此前埋在 app.js 的 IIFE 里，
+ * 只能靠 e2e 端到端撞；抽出来之后边界条件（缩放钳制 1–4、平移钳到溢出半幅、锚点不变性、
+ * 「list 非空时绝不反查展厅卡片」）可以直接钉住。
  *
  * 工厂本体（createLightbox）不在这里测：它调用即绑事件、要真实 DOM，
- * 归 e2e 管（tests/e2e/smoke.spec.js 有开合 / 深链 / 手势 / 窄屏 / 键盘 5 条）。
+ * 归 e2e 管（tests/e2e/smoke.spec.js 有开合 / 深链 / 手势 / 窄屏 / 键盘 / 过渡源 等条目）。
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { MAX_ZOOM, clampPan, anchorRel, anchorZoom, pinchZoom } from "../../src/lightbox.js";
+import {
+  MAX_ZOOM,
+  clampPan,
+  anchorRel,
+  anchorZoom,
+  pinchZoom,
+  resolveVtSource,
+} from "../../src/lightbox.js";
 
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg ?? ""} (${a} !== ${b})`);
 
@@ -90,4 +98,44 @@ test("pinchZoom：z0 已缩放时倍率按 z0 累积（相对当前值，而非�
   // 中点在中心 → 增量项为 0，只保留 T0
   close(next.tx, 10, "T0 应保留");
   close(next.ty, 20, "T0 应保留");
+});
+
+/* ─────────────── 视图过渡源的选取（序厅→灯箱，2026-09-28） ───────────────
+   背景：原实现 open()/close() 各写一遍 `list ? null : cardImageAt(index)`，把
+   「没有可配对的元素」与「会话跟随 list 索引」混成一个判据，结果序厅点击配到了
+   屏外 284px 的展厅卡片。规则抽成纯函数后由本组钉住。 */
+
+test("resolveVtSource：显式源优先，命中时不得再反查展厅卡片", () => {
+  const explicit = { tagName: "IMG", from: "hero" };
+  let called = 0;
+  const cardAtIndex = () => {
+    called += 1;
+    return { tagName: "IMG", from: "card" };
+  };
+
+  assert.equal(resolveVtSource({ explicit, allowCard: true, cardAtIndex }), explicit);
+  assert.equal(called, 0, "显式源命中时仍调用 cardAtIndex，会把源覆盖成屏外卡片");
+});
+
+test("resolveVtSource：无显式源且跟随 list → 无源，且不得反查卡片", () => {
+  let called = 0;
+  const cardAtIndex = () => {
+    called += 1;
+    return { tagName: "IMG", from: "card" };
+  };
+
+  assert.equal(resolveVtSource({ explicit: null, allowCard: false, cardAtIndex }), null);
+  assert.equal(called, 0, "list 非空时 index 索引 list 而非 visible，反查必配错卡片");
+});
+
+test("resolveVtSource：无显式源且不跟随 list → 回退展厅卡片（画廊点击路径不变）", () => {
+  const card = { tagName: "IMG", from: "card" };
+  let called = 0;
+  const cardAtIndex = () => {
+    called += 1;
+    return card;
+  };
+
+  assert.equal(resolveVtSource({ explicit: null, allowCard: true, cardAtIndex }), card);
+  assert.equal(called, 1, "展厅点击路径必须仍然反查到卡片");
 });

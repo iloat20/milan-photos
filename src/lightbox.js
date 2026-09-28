@@ -64,6 +64,29 @@ export function pinchZoom(pinch, mx, my, d) {
 }
 
 /**
+ * 选定视图过渡（View Transition）的配对源。规则按优先级：
+ *  ① **显式源优先** —— 用户点击的那幅画（序厅 hero 画面）。它必然在视野内，
+ *     且语义上就是「画作本体」；
+ *  ② 否则仅当会话**不**跟随 `list` 索引时才反查展厅卡片；
+ *  ③ 否则无源（返回 null）。
+ *
+ * ②③ 的 `allowCard` 判据是必需的、不是防御性写法：`list` 非空时 `index` 索引的是
+ * `list` 而非 `visible`，此时反查 `cardImageAt(index)` 会**配错卡片**。
+ *
+ * 抽出为具名导出的原因：这条规则原先是 `open()` / `close()` 各写一遍的三元表达式
+ * （`list ? null : cardImageAt(index)`），两处重复正是它被误解成「序厅路径该反查
+ * visible」的土壤 —— 而序厅传 `list` 的前提恰恰是该画不在 `visible` 里，反查恒为 -1。
+ * 集中一处后由 `tests/unit/lightbox.test.mjs` 直接钉住。
+ *
+ * @param {{explicit: any, allowCard: boolean, cardAtIndex: () => any}} args
+ * @returns {any} 应被赋予 `milan-lightbox-img` 的元素，或 null
+ */
+export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
+  if (explicit) return explicit;
+  return allowCard ? cardAtIndex() : null;
+}
+
+/**
  * 创建一个观画室控制器。调用即完成事件装配（按钮 / 手势 / 滚轮 / Esc / 方向键），
  * 宿主随后只需要 `open()`。
  *
@@ -79,6 +102,10 @@ export function pinchZoom(pinch, mx, my, d) {
  * @param {(index:number) => HTMLImageElement|null} ports.cardImageAt
  *        视图过渡配对：把展厅第 index 张卡片的 `<img>` 与灯箱画心连成同一个
  *        `view-transition-name`，让「画心从卡片位置放大到灯箱」有连续动画。
+ * @param {(paused: boolean) => void} ports.pauseHero
+ *        灯箱会话期间暂停序厅自动轮播（open 传 true / close 传 false）。
+ *        ⚠️ 宿主须用**独立于 hover / 拖拽暂停**的标志实现：共用会让关闭时把用户
+ *        当时正持有的 hover 暂停一并清掉。
  * @param {(href:string, priority:string) => void} ports.preload   图片预载（rel=preload）
  * @param {(palette:object|null) => void} ports.applyRoom          把墙色写进 `<dialog>` 的 CSS 变量
  * @param {(img:HTMLImageElement) => object|null} ports.sampleRoom 无预计算调色板时的兜底采样
@@ -86,7 +113,18 @@ export function pinchZoom(pinch, mx, my, d) {
  * @param {() => string} ports.filterHash                          当前筛选对应的 `#f` 值
  * @param {() => boolean} ports.prefersVT
  * @param {(update:()=>void) => object} ports.startVT
- * @returns {{open:(index:number, invoker?:Element|null, list?:object[]|null)=>void, isOpen:()=>boolean}}
+ * @returns {{open:(index:number, invoker?:Element|null, list?:object[]|null, source?:((photoId:string|null)=>Element|null)|null)=>void, isOpen:()=>boolean}}
+ *          `open` 的第 4 参数是**本会话的显式过渡源提供者**：宿主回答「这张画此刻
+ *          是否正由某个可见元素承载」。序厅（hero 轮播）点击时传它，从而以用户点中
+ *          的那幅画面作配对源，而不是展厅里那张可能在屏外的卡片。
+ *          ⚠️ 必须传**函数**而非元素快照，且宿主须在调用时刻判断：序厅轮播没有模态
+ *          门控（`heroAutoAllowed` 只看 reduceMotion / 用户暂停 / document.hidden），
+ *          灯箱开着时它仍每 4.2s 转走，届时被点的 slide 变成 `opacity:0 /
+ *          visibility:hidden` —— 配对到隐形状比不配对更糟。故 `open()` 与 `close()`
+ *          各自求值一次。
+ *          ⚠️ 也刻意**不做成端口**：端口只能按 photoId 查，会误伤「从展厅卡片打开
+ *          灯箱、而该画恰好也是序厅当前那张」的情形（卡片源会被序厅画面覆盖）。
+ *          会话级传参把作用域限死在序厅点击那一次调用上。
  *          `close` 刻意不导出：关闭路径只有三条（关闭按钮 / Esc cancel / 无），全在本域内闭环。
  */
 export function createLightbox({
@@ -100,6 +138,7 @@ export function createLightbox({
   on,
   getList,
   cardImageAt,
+  pauseHero,
   preload,
   applyRoom,
   sampleRoom,
@@ -113,6 +152,8 @@ export function createLightbox({
   /** 导航序列；null 表示跟随当前筛选 */
   let list = null;
   let returnFocus = null;
+  /** 本会话的显式过渡源提供者（序厅点击时由宿主传入）；null = 走展厅卡片配对 */
+  let sessionSource = null;
   let zoom = 1;
   let tx = 0;
   let ty = 0;
@@ -216,16 +257,28 @@ export function createLightbox({
 
   /* ────────────────────────── 开 / 关 ────────────────────────── */
 
-  function open(index, invoker, nextList) {
+  function open(index, invoker, nextList, source) {
     // 灯箱 DOM 缺失（HTML 结构变化 / SW 旧壳层配新页面）时静默降级
     if (!lightbox) return;
     // 连击组不跨会话（同 close）
     resetGroup();
     list = nextList && nextList.length ? nextList : null;
-    const sourceImg = list ? null : cardImageAt(index);
+    // 显式源提供者只在本会话内有效（做成端口会误伤展厅卡片路径，见 @returns 注释）
+    sessionSource = typeof source === "function" ? source : null;
+    // 配对源：显式源（用户点的那幅序厅画面）优先；否则仅在会话不跟随 list 时反查卡片。
+    // 这里**当场**求值一次，且 close() 会再求值一次 —— 不能把元素存下来复用。
+    const openedPhoto = photos()[index];
+    const sourceImg = resolveVtSource({
+      explicit: sessionSource ? sessionSource(openedPhoto ? openedPhoto.id : null) : null,
+      allowCard: !list,
+      cardAtIndex: () => cardImageAt(index),
+    });
     if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
     pos = index;
     returnFocus = invoker || sourceImg?.closest(".card") || null;
+    // 会话期间停掉序厅轮播：它没有模态门控（heroAutoAllowed 只看 reduceMotion /
+    // 用户暂停 / document.hidden），转走会让关闭时的配对目标变成 opacity:0 的隐形状。
+    pauseHero(true);
 
     const finish = () => {
       if (sourceImg) sourceImg.style.viewTransitionName = "";
@@ -261,10 +314,19 @@ export function createLightbox({
     resetGroup();
     // 瞬时复位缩放：VT 的 old 快照要以完整画面回卡片
     resetZoom(true);
-    const sourceImg = list ? null : cardImageAt(pos);
+    // 回程配对目标**当场**求值：序厅若已转走，sourceFor 返回 null，宁可不配对也不给错动画
+    const closingPhoto = photos()[pos];
+    const sourceImg = resolveVtSource({
+      explicit: sessionSource ? sessionSource(closingPhoto ? closingPhoto.id : null) : null,
+      allowCard: !list,
+      cardAtIndex: () => cardImageAt(pos),
+    });
     const returnEl = returnFocus || sourceImg?.closest(".card") || null;
     returnFocus = null;
     list = null;
+    sessionSource = null;
+    // 会话结束，恢复序厅轮播
+    pauseHero(false);
 
     const restoreFocus = () => {
       if (returnEl && typeof returnEl.focus === "function") {

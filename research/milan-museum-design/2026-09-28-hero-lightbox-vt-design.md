@@ -87,23 +87,34 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
 `allowCard` 由调用方传 `!list`。`open()` 与 `close()` 共用这一条规则，不再各自重复
 三元表达式——原先两处各写一遍，正是这条规则被误解成「hero 反查」的土壤。
 
-### 3.2 新端口 `sourceFor(photoId) => HTMLImageElement | null`
+### 3.2 会话级显式源：`open()` 的第 4 参数
 
-宿主在**调用时刻**回答「这张画此刻是否正由某个可见元素承载」：
+宿主在**调用时刻**回答「这张画此刻是否正由某个可见元素承载」，以函数形式作为 `open()`
+的第 4 参数传入，由工厂收进闭包供本会话的 `close()` 复用：
 
 ```js
-sourceFor: (photoId) => {
+// app.js
+lb.open(inFilter, slide, null, heroSourceFor);          // 无筛选路径
+lb.open(allIdx, slide, photos, heroSourceFor);          // 筛选不含该画路径
+
+function heroSourceFor(photoId) {
   const i = heroList.findIndex((p) => p.id === photoId);
   if (i < 0) return null;
   const slide = heroSlides[i];
   // 轮播已转走 / 序厅已重建时拒绝配对 —— 配到「看不见的画面」比不配对更糟
   if (!slide || !slide.classList.contains("is-active")) return null;
   return slide.querySelector(".hero-art img");
-},
+}
 ```
 
 `open()` 与 `close()` **各自重新求值一次**，而不是把元素存起来。这是本方案的核心，
-直接消解 2.1 的隐患：`close()` 以**当前**照片 id 再问一次，轮播若已转走自然返回 `null`。
+直接消解 2.1 的隐患：`close()` 以**当前**照片 id 再问一次，轮播若已转走（或已被 3.3
+暂停、根本无法转走）自然得到正确的答案。
+
+**为什么不做成端口**（这是定稿时的修正）：端口只能按 `photoId` 查，会误伤
+「从展厅卡片打开灯箱、而该画恰好也是序厅当前那张」的情形 —— 正确的卡片源会被序厅画面
+覆盖。做成 `open()` 的参数把作用域限死在序厅点击那一次调用上；画廊卡片路径
+（`lb.open(i, card)`）不传该参数，行为完全不变。
 
 ### 3.3 灯箱会话期间暂停序厅轮播
 
@@ -147,20 +158,25 @@ sourceFor: (photoId) => {
 |---|---|
 | E1 | 无筛选点序厅 → 承载该 name 的是**序厅内的 `<img>`**，且展厅 `<img>` 不承载 |
 | E2 | 筛到「2026年8月」（序厅 8 张全是 2026-09，必然进入 Path B）→ 同上 |
+| E3 | 灯箱开着时越过一个轮播周期（4200ms）活动 slide 不变；关灯箱后恢复轮播 |
 
 E1 在修复前应为**红**（现状承载者是展厅卡片），构成红→绿证明。
-E2 在修复前亦为红（现状无任何元素承载）。
+E2 在修复前亦为红（现状无任何元素承载）。E3 在修复前为红（`heroModalPaused` 尚不存在）。
+
+三项已实测红态：把 `heroSourceFor` 改为恒返回 `null`、并把 `setHeroModalPaused` 改为空实现
+（即精确复现修复前行为），三例全红；恢复后全绿。
 
 ## 6. 改动面
 
 | 文件 | 改动 |
 |---|---|
-| `src/lightbox.js` | 新增具名导出 `resolveVtSource`；`open()`/`close()` 改用之；新增端口 `sourceFor`、`pauseHero`（含 JSDoc 端口表） |
-| `app.js` | 序厅点击两个调用点传 `slide` 内 `<img>` 语境（经 `sourceFor`）；装配 `sourceFor` / `pauseHero` 两个端口；`heroAutoAllowed()` 增加 `heroModalPaused`；新增该标志与置位函数 |
+| `src/lightbox.js` | 新增具名导出 `resolveVtSource`；`open()`/`close()` 改用之；`open()` 增加第 4 参数（会话级显式源提供者）与闭包态 `sessionSource`；新增端口 `pauseHero`（含 JSDoc） |
+| `app.js` | 序厅点击两个调用点传 `heroSourceFor`；装配 `pauseHero` 端口；`heroAutoAllowed()` 增加 `heroModalPaused`；新增该标志、`setHeroModalPaused()`、`heroSourceFor()` |
 | `tests/unit/lightbox.test.mjs` | +3 例（U1–U3） |
-| `tests/e2e/smoke.spec.js` | +2 例（E1–E2），24 → 26 项 |
+| `tests/e2e/smoke.spec.js` | +3 例（E1–E3），24 → 27 项 |
 | `sw.js` | `VERSION` v41 → **v42** |
-| `AGENTS.md` | 端口清单处补「序厅画面反查」；e2e 项数 24 → 26 |
+| `AGENTS.md` | 端口清单补「序厅轮播暂停」与 `resolveVtSource`；新增「按会话注入的能力走 `open()` 参数、不要做成端口」一条；e2e 项数 24 → 27 |
+
 
 **验证顺序**：单测 → e2e → 用同一支探针复测（把「同一时刻画作从屏外飞入」变成
 「起点等于序厅画面位置」）。探针 `probe-vt-hero.mjs` 为临时未跟踪文件，验证后删除。

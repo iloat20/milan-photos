@@ -9,7 +9,7 @@ python tools/serve.py          # 本地预览 http://127.0.0.1:8080
 python tools/sync_photos.py    # 生成 manifest + thumbs + medium（需 Pillow；通常只由 CI 跑）
 npm run lint                   # ESLint + Stylelint
 npm run test:unit              # 纯函数单测（node --test，零新依赖，毫秒级）
-npm run test:e2e               # Playwright 冒烟（自动起 serve.py，24 项）
+npm run test:e2e               # Playwright 冒烟（自动起 serve.py，27 项）
 npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
 node tools/build-font-subset.js # 改文案后重生成标题字体子集（需网络；不跑则新字逐字回退 SimSun）
 ```
@@ -43,7 +43,8 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 1. **零副作用**：import 时不得触碰 DOM / `window` / `localStorage` / `matchMedia`。碰了的话 Node 端 `import` 会抛错，单测根本加载不起来 —— 这是 `util.js` 只装纯函数的**唯一**原因。
    依赖 DOM 的域要拆出去，就得先解决状态注入 —— **`lightbox.js` 给出的既有范式：工厂 + 端口注入**。
    `createLightbox(ports)` 在 import 期不碰任何 DOM，只有被调用时才开始用宿主传进来的引用；状态全收进工厂闭包，`app.js` 侧不再有该域的任何 `let`。
-   做法：① 纯计算抽成**具名导出**（`clampPan` / `anchorZoom` …），单测直接 import；② DOM 引用与跨域能力（墙色 / 深链 / 视图过渡 / 预载 / 卡片反查 / 导航序列）走 `ports` 注入，**不**反向 import `app.js`；③ 装配点放在宿主顶部（工厂调用即绑事件，放晚了会撞 `const` 的 TDZ）。
+   做法：① 纯计算抽成**具名导出**（`clampPan` / `anchorZoom` / `resolveVtSource` …），单测直接 import；② DOM 引用与跨域能力（墙色 / 深链 / 视图过渡 / 预载 / 卡片反查 / 导航序列 / 序厅轮播暂停）走 `ports` 注入，**不**反向 import `app.js`；③ 装配点放在宿主顶部（工厂调用即绑事件，放晚了会撞 `const` 的 TDZ）。
+   **按会话注入的能力走 `open()` 的参数，不要做成端口**：视图过渡的「显式源」只对一次序厅点击有效，若做成端口（只能按 photoId 查），从展厅卡片打开灯箱而该画恰好也是序厅当前那张时，卡片源会被序厅画面覆盖。同理，跨 open/close 存活的会话态（如该提供者）留在工厂闭包内。
    仍留在 `app.js` 的 `sampleRoomColor` / `applyRowFit` / `renderGallery` 尚未拆，原因是没有独立状态域或收益不足 —— 拆之前先确认能划出「自成一域 + 有回归网」的边界。
 2. **同步 `sw.js` 的 `SHELL_ASSETS`**：模块加载失败会**连坐** `app.js`（import 不进来就整个不执行），症状是**离线时停在骨架屏**。`isShellRequest()` 已用 `path.includes("/src/")` 兜住 SWR 分支，但 `SHELL_ASSETS` 是显式清单，漏加就不预缓存。**`tests/unit/sw-assets.test.mjs` 会枚举 `src/` 下的实际文件做契约检查**，漏加即红（放在单测层而非 e2e，原因见该文件头注释）。
 3. **`src/package.json` 的 `{"type":"module"}` 不要动**：仓库根 `package.json` 必须保持**无** `type`（否则 `playwright.config.js` 的 `require` 失效），所以由 `src/` 单独向 Node 声明 ESM 身份；浏览器不读这个文件。

@@ -75,6 +75,7 @@ import { createLightbox } from "./src/lightbox.js";
     // 视图过渡配对：把展厅第 index 张卡片的 <img> 与灯箱画心连成同一个 name
     cardImageAt: (index) =>
       gallery?.querySelectorAll(".card")[index]?.querySelector("img") || null,
+    pauseHero: setHeroModalPaused,
     preload: preloadImage,
     applyRoom: applyRoomToLightbox,
     sampleRoom: sampleRoomColor,
@@ -381,6 +382,8 @@ import { createLightbox } from "./src/lightbox.js";
   let heroSwiped = false;
   let heroUserPaused = false;
   let heroTempPaused = false;
+  /** 观画室会话期间暂停。**独立于** heroTempPaused（后者由 hover / 拖拽持有），见 setHeroModalPaused */
+  let heroModalPaused = false;
 
   /* 观画室的导航序列 / 焦点回归 / 缩放平移状态与全部手势，已迁往 src/lightbox.js —— 
      本文件自 P2-2 第二步起不再持有任何灯箱态。 */
@@ -466,6 +469,7 @@ import { createLightbox } from "./src/lightbox.js";
       !reduceMotion &&
       !heroUserPaused &&
       !heroTempPaused &&
+      !heroModalPaused &&
       !document.hidden &&
       heroSlides.length >= 2
     );
@@ -486,6 +490,40 @@ import { createLightbox } from "./src/lightbox.js";
   function setHeroTempPaused(on) {
     heroTempPaused = !!on;
     startHeroAuto();
+  }
+
+  /**
+   * 观画室会话期间暂停序厅轮播（由 src/lightbox.js 的 `pauseHero` 端口驱动）。
+   *
+   * ⚠️ 刻意**不复用** `heroTempPaused`：那个标志由 hover / 拖拽持有，共用会在关灯箱时
+   * 把用户当时正持有的 hover 暂停一并清掉。
+   *
+   * 为什么必须暂停：序厅轮播没有任何模态门控（`heroAutoAllowed` 只看 reduceMotion /
+   * 用户暂停 / `document.hidden`），灯箱开着时它仍每 4.2s 转走。而灯箱关闭时的视图过渡
+   * 要缩回「用户点的那幅序厅画面」—— 转走后该 slide 变成 `opacity:0 / visibility:hidden`，
+   * 配对到隐形状比不配对更糟。顺带省掉模态框背后毫无意义的轮播与图片预载。
+   */
+  function setHeroModalPaused(on) {
+    heroModalPaused = !!on;
+    startHeroAuto();
+  }
+
+  /**
+   * 本会话的显式视图过渡源提供者（作为 `lb.open()` 的第 4 参数传入）。
+   * 回答「photoId 此刻是否正由序厅某个**可见**画面承载」：是则返回该 `<img>`，
+   * 灯箱便以它作 `view-transition-name` 的配对源 —— 那是用户实际点击的元素，且必然
+   * 在视野内；而展厅里对应的那张卡片可能远在首屏之外（实测桌面溢出 284px、移动 236px）。
+   *
+   * 必须是**函数**而非元素快照：灯箱在 open 与 close 各调用一次，序厅在此期间可能已
+   * 轮播（见 setHeroModalPaused），转走后须返回 null，宁可不配对也不给错动画。
+   */
+  function heroSourceFor(photoId) {
+    if (!photoId) return null;
+    const i = heroList.findIndex((p) => p.id === photoId);
+    if (i < 0) return null;
+    const slide = heroSlides[i];
+    if (!slide || !slide.classList.contains("is-active")) return null;
+    return slide.querySelector(".hero-art img");
   }
 
   function setHeroIndex(next) {
@@ -570,12 +608,13 @@ import { createLightbox } from "./src/lightbox.js";
         }
         const inFilter = visible.findIndex((p) => p.id === photo.id);
         if (inFilter >= 0) {
-          lb.open(inFilter, slide);
+          // 第 4 参数：以**序厅这幅画面**作过渡源，而不是展厅里那张可能在屏外的卡片
+          lb.open(inFilter, slide, null, heroSourceFor);
           return;
         }
         // 筛选不含该画时，按全量馆藏打开，避免静默无响应
         const allIdx = photos.findIndex((p) => p.id === photo.id);
-        if (allIdx >= 0) lb.open(allIdx, slide, photos);
+        if (allIdx >= 0) lb.open(allIdx, slide, photos, heroSourceFor);
       });
 
       heroTrack.appendChild(slide);

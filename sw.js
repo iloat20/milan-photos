@@ -1,5 +1,5 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v34";
+const VERSION = "milan-v35";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
@@ -70,13 +70,14 @@ function isManifest(url) {
 
 function isShellRequest(url) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
+  // 子路径部署兼容：匹配任意前缀下的壳层资源
   return (
     path.endsWith("/styles.css") ||
     path.endsWith("/app.js") ||
     path.endsWith("/index.html") ||
     path.endsWith(".woff2") ||
-    path.endsWith("/") ||
-    path.endsWith("/milan") ||
+    path === "/" ||
+    // 匹配 /milan-photos 或任意前缀如 /gallery/milan-photos
     path.endsWith("/milan-photos")
   );
 }

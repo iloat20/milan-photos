@@ -966,7 +966,18 @@
 
   function openLightbox(index, invoker, list) {
     lbList = list && list.length ? list : null;
-    const sourceImg = lbList ? null : cardImageAt(index);
+    let sourceImg = null;
+    if (lbList) {
+      // 从 hero 打开时，尝试在 visible 中找对应卡片作 VT 源；
+      // 筛选不含该画时 sourceImg 为 null，closeLightbox 回退到 invoker
+      const photo = lbList[index];
+      if (photo) {
+        const visIdx = visible.findIndex((p) => p.id === photo.id);
+        if (visIdx >= 0) sourceImg = cardImageAt(visIdx);
+      }
+    } else {
+      sourceImg = cardImageAt(index);
+    }
     if (sourceImg) sourceImg.style.viewTransitionName = "milan-lightbox-img";
     lbPos = index;
     lbReturnFocus =
@@ -1007,7 +1018,17 @@
     }
     // 瞬时复位缩放：VT 的 old 快照要以完整画面回卡片
     resetLbZoom(true);
-    const sourceImg = lbList ? null : cardImageAt(lbPos);
+    let sourceImg = null;
+    if (lbList) {
+      // 从 hero 关闭时，尝试在 visible 中找对应卡片作 VT 源
+      const photo = lbList[lbPos];
+      if (photo) {
+        const visIdx = visible.findIndex((p) => p.id === photo.id);
+        if (visIdx >= 0) sourceImg = cardImageAt(visIdx);
+      }
+    } else {
+      sourceImg = cardImageAt(lbPos);
+    }
     const returnEl =
       lbReturnFocus ||
       sourceImg?.closest(".card") ||
@@ -1175,6 +1196,9 @@
         img.width = photo.width;
         img.height = photo.height;
         applyRowFit(card, media, photo.width, photo.height);
+      } else if (img.complete && img.naturalWidth) {
+        // 缓存图片不会触发 load 事件，直接应用
+        applyRowFit(card, media, img.naturalWidth, img.naturalHeight);
       } else {
         img.addEventListener(
           "load",
@@ -1188,6 +1212,9 @@
       const bindCardRoom = () => {
         // 采样进空闲队列：命中主线程的只有这一行 canvas 取色
         queueRoomJob(() => {
+          // 图片可能尚未布局完成（content-visibility: auto 的卡片在屏外），
+          // naturalWidth 为 0 时跳过，等 load 事件重试
+          if (!img.naturalWidth) return;
           const palette = sampleRoomColor(img);
           if (!palette || !media.isConnected) return;
           media.style.setProperty("--card-wall", palette.wall);
@@ -1195,7 +1222,7 @@
           media.style.setProperty("--card-accent", palette.accent);
         });
       };
-      if (img.complete) bindCardRoom();
+      if (img.complete && img.naturalWidth) bindCardRoom();
       else img.addEventListener("load", bindCardRoom, { once: true });
       media.appendChild(mediaEl);
       if (photo.animated) {
@@ -1409,15 +1436,7 @@
 
     const payload = JSON.stringify({ photos: merged }, null, 2);
     const payloadBytes = new TextEncoder().encode(payload);
-    let bin = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < payloadBytes.length; i += chunk) {
-      bin += String.fromCharCode.apply(
-        null,
-        payloadBytes.subarray(i, i + chunk)
-      );
-    }
-    await ghPutFile(cfg, path, btoa(bin), "chore: update photos manifest");
+    await ghPutFile(cfg, path, b64FromBuffer(payloadBytes), "chore: update photos manifest");
   }
 
   async function uploadToGitHub(file, meta) {
@@ -1547,6 +1566,7 @@
     if (ghReady && okGh) {
       let msg = `本机 +${okLocal} 张，GitHub +${okGh} 张。Pages 会在 Actions 构建后更新（约 1 分钟）。`;
       if (ghFail) msg += ` 另有 ${ghFail} 张远端同步失败，已在本机保留。`;
+      if (fail) msg += ` 另有 ${fail} 张本地失败（文件过大）。`;
       setStatus(msg, Boolean(ghFail || fail));
     } else if (okLocal && ghFail) {
       setStatus(`本机 +${okLocal} 张已保存，但 GitHub 同步失败 ${ghFail} 张，请稍后重试。`, true);
@@ -1727,9 +1747,9 @@
       return;
     }
     if (tapTimer) {
+      // 第二击：只清 timer，不执行 step(-1)，让 dblclick 处理缩放
       clearTimeout(tapTimer);
       tapTimer = 0;
-      step(-1);
       return;
     }
     step(1);

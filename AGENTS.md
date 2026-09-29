@@ -7,6 +7,8 @@
 ```powershell
 python tools/serve.py          # 本地预览 http://127.0.0.1:8080
 python tools/sync_photos.py    # 生成 manifest + thumbs + medium（需 Pillow；通常只由 CI 跑）
+python tools/downscale_photos.py [--check]  # 母版长边上限 2560（超限即降采样；--check 只检不写）
+python tools/sanitize_photos.py  [--check]  # 字节级剥离 JPEG GPS EXIF（零像素改动；--check 只检）
 npm run lint                   # ESLint + Stylelint
 npm run test:unit              # 纯函数单测（node --test，零新依赖，毫秒级）
 npm run test:e2e               # Playwright 冒烟（自动起 serve.py，27 项）
@@ -19,22 +21,44 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 - **e2e 有资产来源自检**（`tests/e2e/global-setup.js`）：跑用例前把服务返回的 `index.html`/`app.js`/`styles.css`/`sw.js` 与磁盘文件做 sha256 比对，**并检查 manifest 是否带 `thumbAvifSrcset` / `palette`**，任一不符即中止。前者防「端口上是另一个目录的服务，而 `reuseExistingServer` 静默复用了它」——那种情况下全绿或全红都与本仓库无关；后者防「服务其实在无 Pillow 降级模式下跑」。
 - 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；截图类视觉验证前确认窗口前台（rAF ≈16ms）。
 - e2e 起的服务必须**装了 Pillow**：缺 Pillow 时 `serve.py` 会静默降级（不生成缩略图、不算 `palette`），而 manifest 仍返回 200 —— 用例不是报错，是被测对象悄悄变成降级版，红点会散落到互不相关的地方。本机实测 `python`（托管 3.13）与 `py`（系统 3.12）是**两个解释器**且只有后者有 Pillow。`global-setup.js` 会明确报出这种情况；临时换解释器：`MILAN_PY=py npx playwright test`。CI 在 `setup-python` 后显式 `pip install "Pillow>=11"`，线上不受影响。
-- CI 两条链：`sync-photos.yml`（photos/sync 脚本变更时生成并 bot 回写 manifest/thumbs/medium）；`ci.yml`（**所有 push**：lint → e2e → lhci）。
+- CI 两条链：`sync-photos.yml`（photos/sync 脚本变更时**先治母版**再生成，bot 回写 `photos/` 全量）；`ci.yml`（**所有 push**：母版两条不变量检查 → lint → e2e → lhci）。
 
 ## 数据与生成物
 
 | 路径 | 角色 |
 |------|------|
-| `photos/*.{jpg,png,webp,gif,avif}` | 原图（源） |
-| `photos/meta.json` | 可选：按**文件名**写 `title` / `caption` / `date` |
+| `photos/*.{jpg,png,webp,gif,avif}` | 原图（源）— **长边 ≤2560px、不含 GPS EXIF**（见下「必做」） |
+| `photos/meta.json` | 可选：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此** |
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
 | `assets/fonts/milan-serif.woff2` | 标题字体子集（站内 257 字形 / ~95KB / 可变 400–600），`tools/build-font-subset.js` 生成；只含**可见**文本，改文案后重跑 |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
-- 日期优先 EXIF（DateTimeOriginal / DateTime），否则文件 mtime。
+- 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
+- 原图**从不被访客请求**：`src/util.js` 的 `heroSrc` / `lightboxSrc` 都是 `medium || thumb || src`，只有动图才回落原文件。所以母版只是「生成派生图的源 + 留档」，其体积不进入访客的关键路径——这正是它该被限长的原因。
 - 上传页可把压缩图写进 IndexedDB 本机预览；GitHub Token 只存浏览器 `localStorage`，勿写入仓库。
+
+## 必做：母版的两条不变量（长边上限 + 无 GPS）
+
+`photos/` 下的源图会随 Pages 公开发布，且可被任意 URL 直接取回。因此有两条硬约束，**由 CI 在每次 push 时强制**：
+
+1. **长边 ≤2560px**（`tools/downscale_photos.py --check`）
+2. **不含 GPS EXIF**（`tools/sanitize_photos.py --check`）
+
+背景（2026-09-29 治理，见 `research/milan-museum-design/2026-09-29-original-photo-remediation-design.md`）：
+入库的 5 张手机原图是 6144×8192 / 29.3 MB 量级，且**带 GPS EXIF 与蜂窝基站号（CELLID）**——
+站内展示只用 1600px 的 medium，那 73 MB 原图从未被访客下载，却把拍摄地点公开发布了出去。
+
+新增照片时：
+
+- **上限必须 > `photos_lib.MEDIUM_MAX_EDGE`（1600）**。低于或等于该值时 `ensure_medium()`
+  会直接不生成 medium，灯箱回落原文件、**反而更糊**。工具自身对此有断言（`--max` 小于等于 1600 报错退出）。
+- 降采样会**丢弃全部 EXIF**（JPEG 重编码的副作用，也是有意为之的「去定位」路径）；
+  对不超限、只想清 GPS 的文件用 `sanitize_photos.py`——它做字节级手术，**不重压缩像素、保留 Orientation**。
+  这一区别很关键：8 张 1024×901 的图长边 ≤1600、没有 medium，灯箱**直接加载原图**并依赖 EXIF 方向。
+- `sync-photos.yml` 会在生成派生图**之前**先跑这两个工具，并用 `git add -A -- photos` 提交，
+  所以新入馆的超限/GPS 图片会被 CI 自动治好后落库，而不是等人发现。
 
 ## 必做：src/ 模块的三条约束
 

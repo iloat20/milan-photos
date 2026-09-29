@@ -6,6 +6,8 @@ on:
       - "photos/**"
       - "tools/sync_photos.py"
       - "tools/photos_lib.py"
+      - "tools/sanitize_photos.py"
+      - "tools/downscale_photos.py"
       - ".github/workflows/sync-photos.yml"
   workflow_dispatch:
 
@@ -22,17 +24,26 @@ jobs:
           python-version: "3.12"
       - name: Install deps
         run: pip install "Pillow>=11"
+      # 先治理母版、再生成派生图：顺序不可颠倒——thumbs/medium 是从母版算出来的，
+      # 先治母版才能得到与之一致的生成物。两者都会随下面的提交一起落库，
+      # 因此新入馆的手机原图既不会超限、也不会把 GPS 带进公开仓库。
+      - name: Enforce master size cap
+        run: python tools/downscale_photos.py
+      - name: Strip GPS EXIF from source photos
+        run: python tools/sanitize_photos.py
       - name: Generate manifest + thumbs
         run: python tools/sync_photos.py
       - name: Commit if changed
         run: |
-          git add photos/manifest.json photos/thumbs photos/medium
+          # 母版自身也可能被上面两步改写，故这里必须 -A 覆盖 photos/ 全量，
+          # 而不只是 manifest + 两个生成目录。
+          git add -A -- photos
           # 新生成的 avif 是 untracked，工作区 git diff 看不见——必须 add 后比 index
-          if git diff --cached --quiet -- photos/manifest.json photos/thumbs photos/medium; then
-            echo "manifest/thumbs/medium unchanged"
+          if git diff --cached --quiet -- photos; then
+            echo "photos unchanged"
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "chore: sync photos manifest, thumbs and medium"
+            git commit -m "chore: sync photos (母版治理 + manifest/thumbs/medium)"
             git push
           fi

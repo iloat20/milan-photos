@@ -95,7 +95,7 @@ Content-Length: 30749827
    验证历史零图片 blob、工作树逐字节一致
 9. force-push main → 删远端 `dependabot/github_actions/actions/setup-python-7`、
    `fix/bug-fixes` → 向 GitHub 申请清理悬挂对象
-10. 线上复测：旧原图 URL 应 404，取回的图无 GPS
+10. 线上复测：原图 URL 路径**不变**（是内容被替换），故预期 200 + **降采样后的体积** + 无 GPS EXIF
 
 **历史重写形态**：整目录移除而非逐文件匹配——`--path photos/ --invert-paths` 后，
 全部历史零图片 blob，再把清理后的 `photos/` 作为**单个提交**加回。
@@ -111,7 +111,7 @@ Content-Length: 30749827
 | 原图 EXIF | 18/18 无 GPS、无 EXIF |
 | 派生图 | thumbs/medium 逐张仍存在且可解码 |
 | 代码质量门槛 | lint clean + unit 全绿 + e2e 全绿 |
-| 线上 | 旧原图 URL 404；`curl` 取回的图解析不出 GPS |
+| 线上 | 原图 URL 200 且 `Content-Length` 等于降采样后体积（845,515 等）；`curl` 取回的图解析不出 GPS |
 | 体积 | `photos/` 81 → 约 13 MB；`.git` 152 → 约 20–30 MB |
 
 ## 6. 风险与回退
@@ -130,3 +130,77 @@ Content-Length: 30749827
 - app.js / styles.css minify（P3，与「零构建」价值观冲突）
 - 8 张 1024×901 不生成 medium，灯箱回落 900w 缩略图，放大会糊（P3）
 - 按画作的 OG 图 / 分享卡片（P3）
+
+## 8. 执行记录（2026-09-29，已全部完成）
+
+### 8.1 治理（HEAD）
+
+| 项 | 前 | 后 |
+|---|---|---|
+| 5 张 >2560 母版 | 70.65 MB | **2.66 MB** |
+| 原图总计（18 张） | 73.28 MB | **5.30 MB**（-92.8%） |
+| `photos/` | 81 MB | 13 MB |
+
+- 全 18 张实测 `exif_tags=0 / gps=False`。**13 张未动的本来就没有 EXIF**，
+  故口径天然统一——之前担心的「5 张无 EXIF、13 张保留设备信息」的混合状态并不存在。
+- `date` 固化进 `photos/meta.json`（18 条，原有 8 条 title/caption 完好）。
+- 一处参数修正：原本建议「全部剥离 EXIF」，实际检查 EXIF 全貌后发现**唯一具备定位性质的
+  只有 GPS IFD（内含 `CELLID` 蜂窝基站号）**，其余为 `Make/Model/Software/DateTime`
+  等通用设备指纹，而 `DateTime` 本就以 `date` 公开在 manifest 里。若为此给 13 张不超限的图
+  做一次 JPEG 重编码，是拿真实画质损失换零安全收益。故 13 张走零像素改动的
+  `sanitize_photos.py`；结果为 18/18 零 EXIF，该修正无需保留分歧。
+
+### 8.2 验证
+
+| 判据 | 结果 |
+|---|---|
+| `date` 逐张比对 | 18/18 **完全不变** |
+| `palette`（18 张 × 4 字段 = 72 分量） | 仅 5 个变化，**最大差 3** |
+| 宽高比 | Δ = 0.000000 |
+| 派生字段（thumb/thumbSrcset/thumbAvifSrcset/medium/mediumAvif） | 零丢失；medium 9 → 9 |
+| 派生文件可解码 | 88/88 |
+| lint / unit / e2e | clean / **30 / 30** / **27 passed** |
+| 真实页面 | 18 张卡片全解码、零 HTTP 错误，序厅与灯箱取到新 medium |
+
+> 过程坑：视觉探针首版未滚动就读 `naturalWidth`，把 4 张**懒加载**图误报为损坏
+> （展厅卡片绝对定位 + `loading=lazy`，首屏外不解码）。修正为「滚到底再回顶 + 同步回调
+> `waitForFunction`」后全绿。再次印证：新断言必须先做红态/反例验证。
+
+### 8.3 历史重写
+
+本地提交 `25257b4` → 重写后 `c457847` → 回填 photos 后 **`84e7519`**。
+
+| 项 | 前 | 后 |
+|---|---|---|
+| 提交数（含各分支） | 65 | 53 |
+| 历史中 `photos/` 对象 | 222 | 144（**全部来自加回的那一个提交**） |
+| 历史中 >1 MB 的 blob | 24 个 / 144.5 MB | **0** |
+| `.git` | 157 MB | **14 MB** |
+| 远端分支 | `main` + `fix/bug-fixes` + `dependabot/…` | **仅 `main`** |
+
+- 内容零改动：重写前后 `git ls-tree -r HEAD` 逐行 diff，199 条目 **0 差异**（blob 哈希全同）。
+- 两个预演已识别的坑在正式执行时都出现且已处理：① filter-repo 把工作树 checkout 成
+  「无 photos」，已从仓库外副本恢复；② 它**自动移除了 `origin` remote**，已重新添加。
+- 另有一处预演未覆盖的现象：filter-repo 把原来的**远程跟踪分支转成了本地分支**
+  （`fix/bug-fixes`、`dependabot/…`），已一并清理。
+- 推送用 `--force-with-lease=refs/heads/main:9305b2c…` 锁定远端旧值，避免并发覆盖。
+  **未向 GitHub 申请清理悬挂对象**（用户决定）：仓库 `forks=0 / stars=0 / watchers=0`，
+  旧 commit 已不可达，实际暴露面极小。
+
+### 8.4 线上复测
+
+| 检查 | 结果 |
+|---|---|
+| Pages 部署（`84e7519`） | success |
+| CI（`84e7519`） | success，含新增的 `Verify photo privacy` 与 `Verify photo master size cap` 两条护栏 |
+| 原图 URL `photos/IMG20260817155311.jpg` | 200 / **845,515 B**（原 30,749,827 B） |
+| 下载后解析 | 1920×2560，EXIF tag **0**，GPS **false** |
+| 其余 4 张带 GPS 的原图 | 均已为新体积（731,074 / 993,941 / 135,498 / 87,750 B） |
+| `index.html` / `manifest.json` | 200 / 200 |
+
+### 8.5 回退路径
+
+- **全分辨率母版**：`C:/Users/Administrator/milan-photo-masters-backup-20260929/`
+  （5 张 + `SHA256SUMS.txt` + 重写前的 `manifest-before.json`）。这是母版的**唯一**副本。
+- **重写前的完整仓库**（含已删除的 `fix/bug-fixes` 分支与旧 `.git`）：
+  `%TEMP%/milan-prerewrite-20260929/`，属一次性快照，确认无需求后可删。

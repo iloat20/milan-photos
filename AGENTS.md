@@ -32,7 +32,7 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
-| `assets/fonts/milan-serif.woff2` | 标题字体子集（站内 257 字形 / ~95KB / 可变 400–600），`tools/build-font-subset.js` 生成；只含**可见**文本，改文案后重跑 |
+| `assets/fonts/milan-serif.woff2` | 标题字体子集（200 字形 / ~74KB / 可变 400–600），`tools/build-font-subset.js` 生成，字形来源在 `tools/font-glyphs.js`；只含**可见**文本，改文案后重跑（见下「必做」） |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
 - 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
@@ -82,6 +82,23 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 ## 必做：Service Worker 版本
 
 改 `index.html` / `styles.css` / `app.js` 后，**必须**把 `sw.js` 里的 `VERSION`（当前形如 `milan-vN`）往上抬。否则旧壳层缓存会让线上更新失效。
+
+例外：只替换 `assets/fonts/milan-serif.woff2` 时**不要**抬。理由有三：① `.woff2` 走 `shellSwr`（stale-while-revalidate），下次加载就会把新字体换进缓存，不会长期滞留；② 换字体只减不增「已渲染字形」（旧字体是超集），视觉上新旧等价，晚一次生效无影响；③ 而抬 `VERSION` 会让 `activate` 删掉旧 cache —— **连 `CACHE_MEDIA` 一起清空**，回访者要重下全部缩略图，代价远大于省下的那点字体体积。
+
+## 必做：字体子集的字形来源要跟着模块走
+
+`assets/fonts/milan-serif.woff2` 只含**站内可见**字形；子集外的字会**逐个回落 SimSun**，同一串文字里出现两种字体，而脚本与页面都不报错 —— 属于静默故障。字形来源的收集在 `tools/font-glyphs.js`，契约由 `tests/unit/font-subset.test.mjs` 钉住。
+
+两条已经踩过的坑：
+
+1. **`src/*.js` 也是文案来源，不能漏扫。** P2-2 把 `displayTitle`（产出 `《无题 · NN》`）与 `ymLabel`（产出 `NNNN年N月`）从 `app.js` 搬进 `src/util.js`，而当时脚本的来源清单没跟上。线上字体是**搬迁之前**生成的，靠巧合没暴露。
+2. **改文案后必须重跑脚本，且这条没有自动护栏。** 实证：`app.js:1433` 的上传失败文案 `另有 N 张本地失败（文件过大）。` 被加进来之后没重跑，导致 `大` / `过` 两个字**在线上一直是 SimSun**——`.upload-status` 用的是 `var(--display)`（本站字体栈），所以这串字里确实混着两种字体。2026-09-29 重新生成后修复（新旧 cmap 差集实测：仅新字体多 `大过` 两字形）。
+
+所以：**改任何可见文案 → 重跑 `node tools/build-font-subset.js`**（需网络）。重跑后可用 `fontTools` + `brotli` 解析 woff2 的 cmap 做核实：必须命中 `无题《》年月`，且 **不含** `meta.json` 里 caption 独有的字（caption 无处渲染，见下）。
+
+`meta.json` 只取 **`title`** 值：`caption` 站内**无处渲染**（`.hero-carousel-caption` / `.card-meta` / `.lb-caption` / `.lb-index` / `.lb-medium` / `.lightbox-meta` 全在隐藏清单里，`app.js` 里 `caption` 只被搬运）。收进来会多带 59 个独占字形（实测 254 → 200，字体 97,180 → 75,300 B）。而 `title` **会**渲染：`.card-anno` 用 `var(--display)` 承接 `${wallNo} ${titleText}`。
+
+顺带记一条**不是**杠杆的：字重轴。实测 `wght@400..600` 与 `wght@400..500` 的产物字节完全相同，Google Fonts 的 `text=` 子集只按**字形数**打包。要瘦身只能改来源，别动字重档位。
 
 ## 必做：manifest 新字段要接进白名单
 

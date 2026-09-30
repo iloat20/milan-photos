@@ -16,12 +16,12 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 # 列表用多档缩略图：小屏 400、常规 800、回退 1200
 THUMB_STEPS = (400, 800, 1200)
 THUMB_MAX_EDGE = 1200
-THUMB_QUALITY = 82
-MEDIUM_MAX_EDGE = 1600
-MEDIUM_QUALITY = 85
+THUMB_QUALITY = 78
+MEDIUM_MAX_EDGE = 1280
+MEDIUM_QUALITY = 78
 # AVIF 同主观质量体积约为 WebP 的 60-70%，质量参数独立调
-AVIF_THUMB_QUALITY = 62
-AVIF_MEDIUM_QUALITY = 65
+AVIF_THUMB_QUALITY = 55
+AVIF_MEDIUM_QUALITY = 55
 
 
 def title_from_name(name: str) -> str:

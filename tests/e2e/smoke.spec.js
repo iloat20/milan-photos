@@ -130,6 +130,11 @@ test.describe("画廊冒烟", () => {
       slides.evaluateAll((els) =>
         els.findIndex((el) => el.classList.contains("is-active"))
       );
+    // 先暂停自动轮播：本用例只测手动切换，而 4.2s 的 auto tick 可能落在
+    // 「断言 0」与「点击」之间，把索引悄悄推到 1，next 一点就成了 2（实测红）。
+    const pauseBtn = page.locator("#heroPause");
+    await pauseBtn.click();
+    await expect(pauseBtn).toHaveAttribute("aria-pressed", "true");
     expect(await activeIdx()).toBe(0);
     await page.locator("#heroNext").click();
     await expect.poll(activeIdx, { timeout: 3_000 }).toBe(1);

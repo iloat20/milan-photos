@@ -110,6 +110,40 @@ export function heroSrc(photo) {
   return photo?.medium || photo?.thumb || photo?.src || "";
 }
 
+// 与 tools/photos_lib.py 的 MEDIUM_MAX_EDGE 对齐；
+// tests/unit/medium-width.test.mjs 读 python 源钉住一致性，改一边忘另一边即红
+const MEDIUM_MAX_EDGE = 1280;
+
+/** 序厅画心的响应式布局宽度（与 styles.css 的 .hero-art img max-width 同值） */
+export const HERO_SIZES = "min(86vw, 880px)";
+
+/** 中图实际像素宽：manifest 不存中图尺寸，由原图宽高按长边上限反推 */
+export function mediumWidth(photo) {
+  // 中图与 AVIF 变体总是同生同灭，两者任一在场即认为有中图
+  if (!(photo?.medium || photo?.mediumAvif) || !(photo.width > 0) || !(photo.height > 0)) return 0;
+  const long = Math.max(photo.width, photo.height);
+  if (long <= MEDIUM_MAX_EDGE) return photo.width;
+  return Math.round((photo.width * MEDIUM_MAX_EDGE) / long);
+}
+
+/** 序厅 <img> 响应式候选：缩略图各档 + 中图（大屏兜底），无候选返回空串 */
+export function heroSrcset(photo) {
+  const parts = [];
+  if (photo?.thumbSrcset) parts.push(photo.thumbSrcset);
+  const mw = mediumWidth(photo);
+  if (photo?.medium && mw) parts.push(`${photo.medium} ${mw}w`);
+  return parts.filter(Boolean).join(", ");
+}
+
+/** 序厅 AVIF <source> 响应式候选：与 heroSrcset 同构，只换 AVIF 变体 */
+export function heroAvifSrcset(photo) {
+  const parts = [];
+  if (photo?.thumbAvifSrcset) parts.push(photo.thumbAvifSrcset);
+  const mw = mediumWidth(photo);
+  if (photo?.mediumAvif && mw) parts.push(`${photo.mediumAvif} ${mw}w`);
+  return parts.filter(Boolean).join(", ");
+}
+
 /** 灯箱用图：动图走原文件保证能播，其余优先中图 */
 export function lightboxSrc(photo) {
   if (photo?.animated) return photo.src || "";

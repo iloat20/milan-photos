@@ -53,6 +53,18 @@
   <!-- app.js 是模块脚本（CORS 模式取回），预载必须带 crossorigin 才与真实请求同键，
        否则预载落空、脚本再下载一次。 -->
   <link rel="preload" href="app.js" as="script" crossorigin />
+  <!-- 模块图并行发现：否则 import 要等 app.js 下载解析完才发起（串行多一跳 RTT，
+       simulate 模式下每跳 ~150ms，直接垫高 LCP 的 Load Delay） -->
+  <link rel="modulepreload" href="src/util.js" crossorigin />
+  <link rel="modulepreload" href="src/lightbox.js" crossorigin />
+  <!-- 清单请求提前到 HTML 解析期：等 app.js 下载完再发 fetch 会在模拟图里
+       串出 app.js → manifest → 序厅图 的三跳链（LCP 的 Load Delay 实测 334ms，
+       每跳 ~150ms）。这里先发，app.js 用 window.__milanManifest 消费同一 Promise，
+       不重复请求；.catch 空接是防 app.js 启动前 rejection 冒 unhandledrejection。 -->
+  <script>
+    window.__milanManifest = fetch("photos/manifest.json", { cache: "no-store" });
+    window.__milanManifest.catch(() => {});
+  </script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -64,6 +76,15 @@
         <a href="#about">前言</a>
         <a href="#archive">库房</a>
       </nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题" title="切换主题">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
     </div>
   </header>
 
@@ -92,6 +113,9 @@
           <path d="M9 6.5 18 12l-9 5.5z" fill="currentColor"/>
         </svg>
       </button>
+    </div>
+    <div class="hero-carousel-progress" aria-hidden="true">
+      <div class="hero-carousel-progress-bar" id="heroProgressBar"></div>
     </div>
   </section>
 

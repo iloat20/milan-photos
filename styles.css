@@ -109,7 +109,7 @@
   }
 
   @media (prefers-color-scheme: light) {
-    :root {
+    :root:not([data-theme="dark"]) {
       --bg: #fff;
       --bg-1: #f5f5f7;
       --surface: #f5f5f7;
@@ -131,6 +131,46 @@
       --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.08);
       --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.08), 0 30px 70px rgba(0, 0, 0, 0.16);
     }
+  }
+
+  /* 手动主题切换：亮色主题（覆盖系统暗色） */
+  :root[data-theme="light"] {
+    --bg: #fff;
+    --bg-1: #f5f5f7;
+    --surface: #f5f5f7;
+    --surface-2: #e8e8ed;
+    --glass: rgba(255, 255, 255, 0.72);
+    --text: #1d1d1f;
+    --text-2: #6e6e73;
+    --text-3: #86868b;
+    --accent: #06c;
+    --danger: #d70015;
+    --hairline: rgba(0, 0, 0, 0.16);
+    --hairline-soft: rgba(0, 0, 0, 0.07);
+    --fill: rgba(120, 120, 128, 0.16);
+    --fill-strong: rgba(120, 120, 128, 0.28);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.08);
+    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.08), 0 30px 70px rgba(0, 0, 0, 0.16);
+  }
+
+  /* 手动主题切换：暗色主题（覆盖系统亮色） */
+  :root[data-theme="dark"] {
+    --bg: #000;
+    --bg-1: #0a0a0a;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --glass: rgba(10, 10, 11, 0.72);
+    --text: #f5f5f7;
+    --text-2: #a1a1a6;
+    --text-3: #86868b;
+    --accent: #0a84ff;
+    --danger: #ff453a;
+    --hairline: rgba(255, 255, 255, 0.16);
+    --hairline-soft: rgba(255, 255, 255, 0.07);
+    --fill: rgba(120, 120, 128, 0.28);
+    --fill-strong: rgba(120, 120, 128, 0.44);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 30px 70px rgba(0, 0, 0, 0.55);
   }
 
   html {
@@ -258,6 +298,70 @@
     text-decoration: none;
   }
 
+  /* 主题切换按钮 */
+  .theme-toggle {
+    appearance: none;
+    border: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: color 0.25s var(--ease), background 0.25s var(--ease);
+  }
+
+  .theme-toggle:hover {
+    color: var(--text);
+    background: var(--fill);
+  }
+
+  .theme-toggle svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* 图标切换：亮色主题显月亮（点击切暗），暗色主题显太阳（点击切亮） */
+  .theme-icon-moon {
+    display: none;
+  }
+
+  :root[data-theme="light"] .theme-icon-sun,
+  :root[data-theme="dark"] .theme-icon-moon {
+    display: block;
+  }
+
+  :root[data-theme="light"] .theme-icon-moon,
+  :root[data-theme="dark"] .theme-icon-sun {
+    display: none;
+  }
+
+  /* 跟随系统时，根据系统主题显示对应图标 */
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme]) .theme-icon-sun {
+      display: none;
+    }
+
+    :root:not([data-theme]) .theme-icon-moon {
+      display: block;
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .theme-icon-sun {
+      display: block;
+    }
+
+    :root:not([data-theme]) .theme-icon-moon {
+      display: none;
+    }
+  }
+
   /* —— 序厅：全屏重点陈列 —— */
   .hero-carousel {
     position: relative;
@@ -296,6 +400,41 @@
     text-align: center;
     padding: calc(var(--nav-h) + 34px) 24px 14px;
     pointer-events: none;
+  }
+
+  /* 首屏入场动画：标题与第一张画作 */
+  .hero-carousel.is-initial .hero-title {
+    animation: hero-title-in 0.8s var(--ease) 0.2s both;
+  }
+
+  .hero-carousel.is-initial .hero-carousel-slide.is-active .hero-art {
+    animation: hero-art-in 0.8s var(--ease) 0.4s both;
+  }
+
+  @keyframes hero-title-in {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* 入场只做「升起 + 缩放」，不碰 opacity。
+     实测（412px 移动视口）：图 230ms 已解码就绪，但 `opacity: 0 → 1` 的入场
+     会把 LCP 压到动画整体结束（is-initial 摘除、主线程重新 paint）才报，
+     本地 LCP 1652 → 260ms，Lighthouse 移动模拟下同样量级。位移动画不影响。 */
+  @keyframes hero-art-in {
+    from {
+      transform: translateY(30px) scale(0.96);
+    }
+
+    to {
+      transform: none;
+    }
   }
 
   .hero-title {
@@ -342,6 +481,19 @@
     transition: opacity 0.6s var(--ease), visibility 0s linear 0s;
     pointer-events: auto;
     z-index: 1;
+  }
+
+  /* slide 切换视差：非活动 slide 的画作轻微放大，增加层次感 */
+  .hero-carousel-slide img {
+    transition: transform 0.6s var(--ease);
+  }
+
+  .hero-carousel-slide:not(.is-active) img {
+    transform: scale(1.05);
+  }
+
+  .hero-carousel-slide.is-active img {
+    transform: scale(1);
   }
 
   /* 画心：照片压在环境底色上，圆角 + 深投影（苹果式「抬起」而非镶框） */
@@ -439,6 +591,29 @@
     padding: 12px 16px 6px;
   }
 
+  /* 轮播进度指示器 */
+  .hero-carousel-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: color-mix(in oklab, var(--text) 12%, transparent);
+    overflow: hidden;
+  }
+
+  /* 进度条用 transform: scaleX 而非 width：width 每帧都触发布局与重排，
+     恰好横跨 hero 首图的 paint 窗口（实测 LCP Render Delay 占 89%）；
+     scaleX 只走合成器，不进主线程 Style & Layout。 */
+  .hero-carousel-progress-bar {
+    height: 100%;
+    width: 100%;
+    background: var(--text);
+    opacity: 0.6;
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+
   .hero-carousel-dots {
     display: flex;
     justify-content: center;
@@ -504,7 +679,16 @@
     touch-action: manipulation;
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
-    transition: background 0.25s var(--ease);
+    transition: background 0.25s var(--ease), transform 0.25s var(--ease);
+  }
+
+  .hero-carousel-pause:hover {
+    background: var(--fill-strong);
+    transform: scale(1.08);
+  }
+
+  .hero-carousel-pause:active {
+    transform: scale(0.94);
   }
 
   .hero-carousel-pause svg {
@@ -527,10 +711,6 @@
 
   .hero-carousel-pause[hidden] {
     display: none !important;
-  }
-
-  .hero-carousel-pause:hover {
-    background: var(--fill-strong);
   }
 
   .hero-carousel:empty,
@@ -740,8 +920,9 @@
       transparent 72%
     );
     opacity: 0.45;
+    transform: scale(0.92);
     pointer-events: none;
-    transition: opacity 0.45s var(--ease);
+    transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
   }
 
   /* 画心裁切盒：只承担「hover 缩放不出框」的裁剪 */
@@ -777,6 +958,7 @@
   .card:hover .card-media::before,
   .card:focus-visible .card-media::before {
     opacity: 0.85;
+    transform: scale(1);
   }
 
   .card:hover .card-media img,
@@ -1129,6 +1311,14 @@
     cursor: zoom-out;
   }
 
+  /* 缩放视觉反馈：画框阴影加深 */
+  @media (prefers-reduced-motion: no-preference) {
+    .lightbox-frame:has(.lightbox-img.is-zoomed) {
+      box-shadow: 0 60px 140px rgba(0, 0, 0, 0.65);
+      transition: box-shadow 0.35s var(--ease);
+    }
+  }
+
   /* 只动 opacity：fill both 的 transform 会永久盖掉缩放手势的 transform */
   @keyframes lb-in {
     from {
@@ -1137,6 +1327,25 @@
 
     to {
       opacity: 1;
+    }
+  }
+
+  /* 入场动画增强：scale + fade 组合（首次打开时播放） */
+  @media (prefers-reduced-motion: no-preference) {
+    .lightbox-frame.is-lit .lightbox-img {
+      animation: lb-enter 0.45s var(--ease) both;
+    }
+
+    @keyframes lb-enter {
+      from {
+        opacity: 0;
+        transform: scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
     }
   }
 
@@ -1188,6 +1397,25 @@
     padding: 12px 20px calc(22px + env(safe-area-inset-bottom));
     max-height: 24vh;
     overflow: auto;
+  }
+
+  /* 标题栏动画：首次打开时淡入 */
+  @media (prefers-reduced-motion: no-preference) {
+    .lightbox-frame.is-lit ~ .lightbox-meta .lb-title {
+      animation: lb-title-in 0.4s var(--ease) 0.15s both;
+    }
+
+    @keyframes lb-title-in {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
   }
 
   .lb-title {
@@ -1612,6 +1840,25 @@
           opacity: 1;
           transform: none;
         }
+      }
+    }
+  }
+
+  /* 入场 stagger：卡片按序入场（仅首次渲染，由 JS 添加 is-enter 类） */
+  @media (prefers-reduced-motion: no-preference) {
+    .card.is-enter {
+      animation: card-enter 0.5s var(--ease) both;
+    }
+
+    @keyframes card-enter {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
       }
     }
   }

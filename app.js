@@ -11,6 +11,9 @@ import {
   stripExt,
   safeFileName,
   heroSrc,
+  heroSrcset,
+  heroAvifSrcset,
+  HERO_SIZES,
   lightboxAvifOrFallback,
 } from "./src/util.js";
 import { createLightbox } from "./src/lightbox.js";
@@ -262,7 +265,20 @@ import { createLightbox } from "./src/lightbox.js";
     if (card) card.style.setProperty("--fit", String(clamped));
   }
 
-  function rebuildPhotos() {
+  /**
+   * @param {() => void} [afterGallery] 展厅渲染完成后回调（深链开灯箱 / 隐藏骨架屏等
+   *   依赖 `visible` 已就绪的收尾必须挂这里——rebuildPhotos 现在等序厅画心画完才渲染展厅）
+   *
+   * 序厅先渲染、**展厅延后到序厅画心可立刻 paint 之后**（首图 load + decode + 双 rAF：
+   * 第一帧只画序厅，第二帧才动展厅；300ms 兜底防慢网/后台标签页）。
+   * 动机是 LCP：lantern 的 LCP 图以**观察 LCP** 为截止，此前的主线程工作全部 ×4 CPU
+   * 计入 Render Delay。实测首图 82ms 就 load 完，但 decoding="async" 的 decode 任务
+   * 排在展厅 18 卡渲染之后，画心 paint 被顶到 266ms 才结算（element render delay
+   * 168ms），整厅 style/layout 与全部卡片图请求都落在截止线内（Render Delay 占
+   * LCP 67%）。同步连跑两者不会在中间产生 paint——必须等 decode 完成再让序厅先
+   * 完成一帧，否则 paint 照样被展厅渲染压住。
+   */
+  function rebuildPhotos(afterGallery) {
     const folderKeys = new Set(
       folderPhotos.map(baseFileName).filter(Boolean)
     );
@@ -272,8 +288,37 @@ import { createLightbox } from "./src/lightbox.js";
       return !folderKeys.has(key);
     });
     photos = folderPhotos.concat(extras);
-    applyFilter();
     renderHeroCarousel();
+    // 后台标签页 rAF 不派发：没有兜底的话骨架屏会永久不退场（展厅空转）。
+    // go 幂等，谁先到谁生效。
+    let gallerySettled = false;
+    const go = () => {
+      if (gallerySettled) return;
+      gallerySettled = true;
+      applyFilter();
+      if (afterGallery) afterGallery();
+    };
+    // 展厅渲染排到序厅画心**能立刻画出来之后**：lantern 的 LCP 图以观察 LCP 为截止，
+    // 此前的一切网络 + 主线程工作（×4 CPU）都计入 Render Delay。只让出一帧不够——
+    // 实测 load 完 ≠ 能画：decoding="async" 的 decode 任务排在展厅渲染后面，
+    // 画心 paint 被顶到 266ms（观察 element render delay 168ms），整厅 18 卡的
+    // style/layout 与全部卡片图请求照样落在截止线内（Render Delay 占 LCP 67%）。
+    // 现在等首图 **decode 完成**再双 rAF：第一帧只画画心（LCP 在此结算），第二帧才动展厅。
+    const heroImg = heroTrack?.querySelector(".hero-carousel-slide.is-active img");
+    const schedule = () => requestAnimationFrame(() => requestAnimationFrame(go));
+    if (heroImg) {
+      const loaded = heroImg.complete
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            heroImg.addEventListener("load", resolve, { once: true });
+            heroImg.addEventListener("error", resolve, { once: true });
+          });
+      // decode() 自带失败分支（加载错误 / 不支持），.then(schedule, schedule) 两头都落
+      loaded.then(() => heroImg.decode(), () => 0).then(schedule, schedule);
+    } else {
+      schedule();
+    }
+    setTimeout(go, 300);
   }
 
   /* preload 的 <link> 只增不减：每次 hover/focus/翻页都往 <head> 追加，
@@ -292,8 +337,14 @@ import { createLightbox } from "./src/lightbox.js";
     }
   }
 
-  function preloadImage(href, priority = "high") {
-    if (!href) return;
+  /**
+   * @param {string} href 回退 URL（不支持 imagesrcset 的老浏览器用）
+   * @param {"high"|"auto"|"low"} priority
+   * @param {{srcset?:string,sizes?:string}} [opts] 响应式候选：与 <picture> 用同一
+   *   字符串同 sizes，选中结果才一致；否则预载中图、picture 选缩略图，白下一倍字节
+   */
+  function preloadImage(href, priority = "high", opts = {}) {
+    if (!href && !opts.srcset) return;
     // 用属性比较而非拼选择器：href 含引号会让 querySelector 抛 SyntaxError，
     // 而这里在 loadFolderPhotos 的 try 内，异常会连带把整个图库清空
     const already = [...document.head.querySelectorAll('link[rel="preload"][as="image"]')]
@@ -302,10 +353,16 @@ import { createLightbox } from "./src/lightbox.js";
     const link = document.createElement("link");
     link.rel = "preload";
     link.as = "image";
-    link.href = href;
-    // 声明 type：不支持该格式的浏览器跳过预载，避免 AVIF 在老浏览器白下
-    if (/\.avif$/i.test(href)) link.type = "image/avif";
-    else if (/\.webp$/i.test(href)) link.type = "image/webp";
+    link.href = href || "";
+    if (opts.srcset) {
+      link.setAttribute("imagesrcset", opts.srcset);
+      if (opts.sizes) link.setAttribute("imagesizes", opts.sizes);
+    }
+    // 声明 type：不支持该格式的浏览器跳过预载，避免 AVIF 在老浏览器白下。
+    // 有 imagesrcset 时按候选判定——候选才是实际会被选中下载的格式
+    const fmt = opts.srcset || href;
+    if (/\.avif$/i.test(fmt)) link.type = "image/avif";
+    else if (/\.webp$/i.test(fmt)) link.type = "image/webp";
     link.setAttribute("fetchpriority", priority);
     document.head.appendChild(link);
     if (priority !== "high") {
@@ -401,26 +458,63 @@ import { createLightbox } from "./src/lightbox.js";
     // 不再用 ‖ / ▶ 文本字形——字形渲染依赖字体，图标不该依赖字体
   }
 
-  /** 只给当前/前后一张挂 src——绝对定位会让 loading=lazy 全部失效 */
+  /* —— 序厅邻张解锁（LCP 友好）—— */
+  let heroNeighborsReady = false;
+  function unlockHeroNeighbors() {
+    if (heroNeighborsReady) return;
+    heroNeighborsReady = true;
+    if (heroSlides.length) applyHeroSources();
+  }
+  // 解锁 = 观察到带 url 的 LCP entry（序厅图已结算、离开 lantern 截止线）
+  // 或 800ms 兜底（不支持该 entry 类型 / 图迟迟不来）。此后切换照常一次挂三张
+  //（自动轮播 4.2s 远晚于解锁；手动秒切换时目标张本身必有 src）。
+  try {
+    const lcpObs = new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        if (e.url) {
+          lcpObs.disconnect();
+          unlockHeroNeighbors();
+          break;
+        }
+      }
+    });
+    lcpObs.observe({ type: "largest-contentful-paint", buffered: true });
+  } catch {
+    /* 老浏览器没有该 entry 类型：只靠下面的超时兜底 */
+  }
+  setTimeout(unlockHeroNeighbors, 800);
+
+  /**
+   * 只给「已解锁的 near 集合」挂 src——绝对定位会让 loading=lazy 全部失效。
+   *
+   * 邻张（前后各一）**延后到首图 LCP 结算后再挂**：这两张首访合计 ~184KB，
+   * 发起时间落在观察 LCP 之前，simulate 的 LCP 图会把它们算进 Load/Render Delay。
+   * A/B 实测摘掉它们：Load Delay 302→221、Render Delay 1751→1526、
+   * LCP 2562→2247（过 2500 断言线）。解锁条件见 unlockHeroNeighbors。
+   */
   function applyHeroSources() {
     const n = heroSlides.length;
     if (!n) return;
-    const near = new Set([
-      heroPos,
-      (heroPos + 1) % n,
-      (heroPos - 1 + n) % n,
-    ]);
+    const near = new Set([heroPos]);
+    if (heroNeighborsReady) {
+      near.add((heroPos + 1) % n);
+      near.add((heroPos - 1 + n) % n);
+    }
     heroSlides.forEach((slide, i) => {
       const img = slide.querySelector("img");
       const source = slide.querySelector("source");
       const photo = heroList[i];
       if (!img || !photo) return;
       const src = heroSrc(photo);
-      const avif = photo.mediumAvif || "";
+      const avif = heroAvifSrcset(photo);
+      const webpSrcset = heroSrcset(photo);
       if (near.has(i)) {
         const srcChanged = img.getAttribute("src") !== src;
         if (srcChanged) {
+          // 响应式候选：序厅画心只显示 min(86vw,880px)，喂中图（960w）在手机上
+          // 是 40% 的体积浪费；候选由缩略图各档 + 中图（大屏兜底）组成
           if (source) source.srcset = avif;
+          img.srcset = webpSrcset;
           img.src = src;
         }
         if (i === heroPos) {
@@ -452,6 +546,7 @@ import { createLightbox } from "./src/lightbox.js";
       } else if (img.getAttribute("src")) {
         // 摘 src 才能让 lazy 失效省流——source 同步摘，否则浏览器仍会从 source 取
         if (source) source.srcset = "";
+        img.removeAttribute("srcset");
         img.removeAttribute("src");
       }
     });
@@ -462,6 +557,7 @@ import { createLightbox } from "./src/lightbox.js";
       clearInterval(heroTimer);
       heroTimer = 0;
     }
+    stopHeroProgress();
   }
 
   function heroAutoAllowed() {
@@ -475,16 +571,44 @@ import { createLightbox } from "./src/lightbox.js";
     );
   }
 
+  const HERO_INTERVAL = 4200;
+  let heroProgressTimer = 0;
+
+  function startHeroProgress() {
+    stopHeroProgress();
+    const bar = document.getElementById("heroProgressBar");
+    if (!bar) return;
+    bar.style.transition = "none";
+    bar.style.transform = "scaleX(0)";
+    void bar.offsetWidth;
+    bar.style.transition = `transform ${HERO_INTERVAL}ms linear`;
+    bar.style.transform = "scaleX(1)";
+  }
+
+  function stopHeroProgress() {
+    if (heroProgressTimer) {
+      clearTimeout(heroProgressTimer);
+      heroProgressTimer = 0;
+    }
+    const bar = document.getElementById("heroProgressBar");
+    if (bar) {
+      bar.style.transition = "none";
+      bar.style.transform = "scaleX(0)";
+    }
+  }
+
   function startHeroAuto() {
     stopHeroAuto();
     if (!heroAutoAllowed()) return;
+    startHeroProgress();
     heroTimer = setInterval(() => {
       if (!heroAutoAllowed()) {
         stopHeroAuto();
         return;
       }
       setHeroIndex(heroPos + 1);
-    }, 4200);
+      startHeroProgress();
+    }, HERO_INTERVAL);
   }
 
   function setHeroTempPaused(on) {
@@ -559,6 +683,12 @@ import { createLightbox } from "./src/lightbox.js";
       return;
     }
     heroCarousel.classList.remove("is-empty");
+    // 首屏入场动画：首次渲染时添加 is-initial，动画完成后移除
+    if (!heroCarousel.dataset.initialized) {
+      heroCarousel.dataset.initialized = "1";
+      heroCarousel.classList.add("is-initial");
+      setTimeout(() => heroCarousel.classList.remove("is-initial"), 1500);
+    }
     heroList = list;
 
     list.forEach((photo, i) => {
@@ -574,6 +704,8 @@ import { createLightbox } from "./src/lightbox.js";
       img.decoding = "async";
       img.loading = "lazy";
       img.fetchPriority = "low";
+      // 响应式候选的布局宽度（与 .hero-art img max-width 对应），随 near/far 挂摘 srcset
+      img.sizes = HERO_SIZES;
       if (photo.width && photo.height) {
         img.width = photo.width;
         img.height = photo.height;
@@ -581,6 +713,7 @@ import { createLightbox } from "./src/lightbox.js";
       // AVIF 候选：applyHeroSources 随 near/far 一起挂摘
       const heroSource = document.createElement("source");
       heroSource.type = "image/avif";
+      heroSource.sizes = HERO_SIZES;
       const picture = document.createElement("picture");
       picture.appendChild(heroSource);
       picture.appendChild(img);
@@ -777,7 +910,10 @@ import { createLightbox } from "./src/lightbox.js";
     try {
       let data = null;
       try {
-        const res = await fetch("photos/manifest.json", { cache: "no-store" });
+        // 清单请求已由 index.html 的内联脚本在解析期发起（window.__milanManifest），
+        // 这里复用同一 Promise——直连 fallback 只服务「内联脚本被拦截/未执行」的残障态
+        const res = await (window.__milanManifest ||
+          fetch("photos/manifest.json", { cache: "no-store" }));
         if (!res.ok) throw new Error("manifest missing");
         data = await res.json();
         mark("fetch-ok");
@@ -821,8 +957,15 @@ import { createLightbox } from "./src/lightbox.js";
           palette: item.palette || null,
         };
       });
-      if (folderPhotos[0]) {
-        preloadImage(folderPhotos[0].mediumAvif || heroSrc(folderPhotos[0]));
+      // 只预载序厅首图（= LCP 元素）：候选与 <picture> 同串同 sizes，选中即命中。
+      // 第 2/3 张不预载——在 lantern 的 LCP 图里非低优先级图会计入 max(endTime)，
+      // 与首图争模拟带宽反而拉长 LCP；它们本就会由 near 集合以低优先级加载。
+      const firstHero = folderPhotos[0];
+      if (firstHero) {
+        preloadImage(heroSrc(firstHero), "high", {
+          srcset: heroAvifSrcset(firstHero) || heroSrcset(firstHero),
+          sizes: HERO_SIZES,
+        });
       }
       mark("parsed:" + folderPhotos.length);
     } catch (e) {
@@ -831,18 +974,21 @@ import { createLightbox } from "./src/lightbox.js";
     }
     // 数据到达（无论成败）后才允许显示空状态
     galleryReady = true;
-    if (skeletonEl) skeletonEl.hidden = true;
     // 深链初始解析：#f 在数据重建前套用（非法/过期年月由 renderFilters 兜底退 all）
     const hm = location.hash.slice(1);
     const fm0 = hm.match(HASH_FILTER_RE);
     if (fm0) activeFilter = fm0[1];
-    rebuildPhotos();
-    mark("done:" + folderPhotos.length);
-    const pm0 = hm.match(HASH_PHOTO_RE);
-    // 与 hashchange 路径一致用 safeDecode：`#p=%` 这类被改坏的 hash 会让裸
-    // decodeURIComponent 抛 URIError，异常穿出 loadFolderPhotos 后被调用点的
-    // catch 当成「取清单失败」处理——展厅其实已渲染，却会再盖一层空状态提示。
-    if (pm0) openLightboxFromHash(safeDecode(pm0[1]));
+    // 骨架屏与 #p 深链都挪进 afterGallery：展厅现在延后一帧渲染，
+    // 若在重建前就摘骨架屏，会出现「骨架屏没了、卡片也没进来」的空档（CLS）
+    rebuildPhotos(() => {
+      if (skeletonEl) skeletonEl.hidden = true;
+      mark("done:" + folderPhotos.length);
+      const pm0 = hm.match(HASH_PHOTO_RE);
+      // 与 hashchange 路径一致用 safeDecode：`#p=%` 这类被改坏的 hash 会让裸
+      // decodeURIComponent 抛 URIError，异常穿出 loadFolderPhotos 后被调用点的
+      // catch 当成「取清单失败」处理——展厅其实已渲染，却会再盖一层空状态提示。
+      if (pm0) openLightboxFromHash(safeDecode(pm0[1]));
+    });
   }
 
   const DB_NAME = "milan-photos";
@@ -933,6 +1079,13 @@ import { createLightbox } from "./src/lightbox.js";
     } catch {
       customPhotos = [];
     }
+    /* 启动期与 loadFolderPhotos 的首次重建撞车：两个异步入口都无条件
+       rebuildPhotos，带卡展厅就会渲染两次（实测第二次落在 manifest 重建后
+       ~50ms）。卡片 <img> 跟着取两遍——首访页面尚未被 SW 接管时第一遍直连、
+       第二遍再经 sw.js thumbSwr 走一次网络，两批请求全落在观测 LCP 之前，
+       被 lantern 全算进 Render Delay；重复的 hero/展厅渲染也是同窗口内的
+       主线程工作（×4 CPU）。两边都没有自定义图时状态零变化，直接跳过。 */
+    if (!previous.length && !customPhotos.length) return;
     previous.forEach(revokePhotoUrls);
     rebuildPhotos();
   }
@@ -973,6 +1126,12 @@ import { createLightbox } from "./src/lightbox.js";
       const card = document.createElement("button");
       card.type = "button";
       card.className = "card";
+
+      // 入场 stagger：首次渲染时按序入场（筛选切换不播放，已有 VT 动画）
+      if (!gallery.dataset.enterBound && !reduceMotion) {
+        card.classList.add("is-enter");
+        card.style.animationDelay = `${Math.min(i * 60, 600)}ms`;
+      }
 
       // 策展节奏：每 7 张的末张做「重点陈列」，独占一行成为一面墙
       if ((i + 1) % 7 === 0) card.classList.add("is-feature");
@@ -1017,13 +1176,12 @@ import { createLightbox } from "./src/lightbox.js";
       }
       img.alt = titleText;
       img.decoding = "async";
-      if (i < 2) {
-        img.loading = "eager";
-        img.fetchPriority = "high";
-      } else {
-        img.loading = "lazy";
-        img.fetchPriority = "low";
-      }
+      // 展厅恒在序厅之后（首屏被 hero 占满）：卡片一律 lazy + 低优先级。
+      // 曾把前 2 张设 eager/high——在 lantern 的 LCP 图里非低优先级图才计入
+      // max(endTime)，eager/high 的卡片会与首图争模拟带宽并抬高 LCP 估值。
+      // 浏览器的 lazy 阈值（视口外 ~1250px）仍会在滚动接近时提前拉取。
+      img.loading = "lazy";
+      img.fetchPriority = "low";
       if (photo.width && photo.height) {
         img.width = photo.width;
         img.height = photo.height;
@@ -1083,6 +1241,8 @@ import { createLightbox } from "./src/lightbox.js";
       card.addEventListener("focus", prefetchLightbox, { once: true });
       gallery.appendChild(card);
     });
+    // 首次渲染完成后标记，后续筛选切换不再播放入场动画
+    gallery.dataset.enterBound = "1";
   }
 
   function setStatus(msg, isError) {
@@ -1519,6 +1679,22 @@ import { createLightbox } from "./src/lightbox.js";
       navigator.serviceWorker.register("sw.js").catch(() => {
         /* file:// or unsupported — ignore */
       });
+    });
+  }
+
+  /* —— 主题切换：跟随系统 + 手动覆盖 —— */
+  const THEME_KEY = "milan-theme";
+  const themeToggle = document.getElementById("themeToggle");
+  const storedTheme = localStorage.getItem(THEME_KEY);
+  if (storedTheme === "light" || storedTheme === "dark") {
+    document.documentElement.dataset.theme = storedTheme;
+  }
+  if (themeToggle) {
+    themeToggle.addEventListener("click", () => {
+      const current = document.documentElement.dataset.theme;
+      const next = current === "light" ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem(THEME_KEY, next);
     });
   }
 })();

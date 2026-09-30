@@ -397,8 +397,8 @@ import { createLightbox } from "./src/lightbox.js";
       "aria-label",
       heroUserPaused ? "继续自动轮播" : "暂停自动轮播"
     );
-    const glyph = heroPauseBtn.querySelector(".hero-pause-glyph");
-    if (glyph) glyph.textContent = heroUserPaused ? "▶" : "‖";
+    // 图标切换交给 CSS（[aria-pressed="true"] 显播放、否则显暂停），
+    // 不再用 ‖ / ▶ 文本字形——字形渲染依赖字体，图标不该依赖字体
   }
 
   /** 只给当前/前后一张挂 src——绝对定位会让 loading=lazy 全部失效 */
@@ -593,13 +593,6 @@ import { createLightbox } from "./src/lightbox.js";
       art.className = "hero-art";
       art.appendChild(picture);
       slide.appendChild(art);
-
-      const caption = document.createElement("div");
-      caption.className = "hero-carousel-caption";
-      const h = document.createElement("h2");
-      h.textContent = "";
-      caption.appendChild(h);
-      slide.appendChild(caption);
 
       slide.addEventListener("click", () => {
         if (heroSwiped) {
@@ -846,7 +839,10 @@ import { createLightbox } from "./src/lightbox.js";
     rebuildPhotos();
     mark("done:" + folderPhotos.length);
     const pm0 = hm.match(HASH_PHOTO_RE);
-    if (pm0) openLightboxFromHash(decodeURIComponent(pm0[1]));
+    // 与 hashchange 路径一致用 safeDecode：`#p=%` 这类被改坏的 hash 会让裸
+    // decodeURIComponent 抛 URIError，异常穿出 loadFolderPhotos 后被调用点的
+    // catch 当成「取清单失败」处理——展厅其实已渲染，却会再盖一层空状态提示。
+    if (pm0) openLightboxFromHash(safeDecode(pm0[1]));
   }
 
   const DB_NAME = "milan-photos";
@@ -968,7 +964,9 @@ import { createLightbox } from "./src/lightbox.js";
     // 旧卡片脱离文档：作废它们排队中的墙色采样
     roomEpoch += 1;
     roomJobs.length = 0;
-    emptyEl.hidden = !galleryReady || visible.length > 0;
+    // 空状态节点可能缺失（HTML 结构调整）：与其余绑定一样静默降级，
+    // 不因一处裸写中断整个渲染
+    if (emptyEl) emptyEl.hidden = !galleryReady || visible.length > 0;
     const wallIndexes = new Map(photos.map((photo, index) => [photo, index]));
 
     visible.forEach((photo, i) => {

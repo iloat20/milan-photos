@@ -385,7 +385,8 @@ export function createLightbox({
     if (source) source.srcset = photo.animated ? "" : photo.mediumAvif || "";
     img.src = lightboxSrc(photo);
     img.alt = titleText;
-    if (title) title.textContent = "";
+    // 观画室底部题名：与卡片墙签同一套 displayTitle 产出，切图时同步更新
+    if (title) title.textContent = titleText;
     const frame = lightbox.querySelector(".lightbox-frame");
     if (frame) {
       frame.classList.remove("is-lit");

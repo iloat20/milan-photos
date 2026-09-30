@@ -1,5 +1,5 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v42";
+const VERSION = "milan-v43";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
@@ -32,13 +32,7 @@ self.addEventListener("install", (event) => {
       } catch {
         /* 快照失败不阻断安装 */
       }
-      // 字体同样不进 addAll 原子组：装饰性资源缺了不该让整个 SW 装不上
-      try {
-        const res = await fetch("./assets/fonts/milan-serif.woff2");
-        if (res && res.ok) await cache.put("./assets/fonts/milan-serif.woff2", res);
-      } catch {
-        /* 快照失败不阻断安装 */
-      }
+      // 站内已无自托管字体（标题走系统字体栈）：不再快照 assets/fonts/*
       await self.skipWaiting();
     })()
   );
@@ -88,7 +82,6 @@ function isShellRequest(url) {
     // 否则 app.js 命中缓存但它的 import 图拉不到 → 离线整站停摆
     path.includes("/src/") ||
     path.endsWith("/index.html") ||
-    path.endsWith(".woff2") ||
     path.endsWith("/") ||
     path.endsWith("/milan") ||
     path.endsWith("/milan-photos")

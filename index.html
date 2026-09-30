@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="米兰美术馆 · 油画式摄影陈列" />
-  <meta name="theme-color" content="#1f2a24" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="米兰美术馆 · 摄影作品陈列：重点陈列轮播、展厅索引与观画室。" />
+  <!-- 跟随系统外观：亮/暗两套主题各自声明主题色，地址栏/状态栏与页面同底 -->
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="light dark" />
   <link rel="canonical" href="https://iloat20.github.io/milan-photos/" />
   <link rel="manifest" href="manifest.webmanifest" />
 
@@ -19,10 +21,12 @@
   <meta property="og:image" content="https://iloat20.github.io/milan-photos/assets/og.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="米兰美术馆展厅一角" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="米兰美术馆 · 油画展厅" />
   <meta name="twitter:description" content="油画式摄影陈列：重点陈列轮播、展厅索引与库房入藏。" />
   <meta name="twitter:image" content="https://iloat20.github.io/milan-photos/assets/og.jpg" />
+  <meta name="twitter:image:alt" content="米兰美术馆展厅一角" />
 
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
@@ -46,15 +50,9 @@
 
   <title>米兰美术馆 · 油画展厅</title>
   <link rel="preload" href="styles.css" as="style" />
-  <link rel="preload" href="app.js" as="script" />
-  <!-- 标题子集字体提前到 HTML 解析期取回，首屏馆名大字不等 CSS 解析 -->
-  <link
-    rel="preload"
-    href="assets/fonts/milan-serif.woff2"
-    as="font"
-    type="font/woff2"
-    crossorigin
-  />
+  <!-- app.js 是模块脚本（CORS 模式取回），预载必须带 crossorigin 才与真实请求同键，
+       否则预载落空、脚本再下载一次。 -->
+  <link rel="preload" href="app.js" as="script" crossorigin />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -74,19 +72,31 @@
       <h1 class="hero-title">米兰美术馆</h1>
     </div>
     <div class="hero-carousel-track" id="heroCarouselTrack"></div>
-    <button class="hero-carousel-arrow hero-carousel-prev" id="heroPrev" type="button" aria-label="上一件">‹</button>
-    <button class="hero-carousel-arrow hero-carousel-next" id="heroNext" type="button" aria-label="下一件">›</button>
+    <button class="hero-carousel-arrow hero-carousel-prev" id="heroPrev" type="button" aria-label="上一件">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M15 4 7 12l8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+    <button class="hero-carousel-arrow hero-carousel-next" id="heroNext" type="button" aria-label="下一件">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
     <div class="hero-carousel-controls">
       <div class="hero-carousel-dots" id="heroCarouselDots" role="group" aria-label="重点陈列页码"></div>
       <button class="hero-carousel-pause" id="heroPause" type="button" aria-label="暂停自动轮播" aria-pressed="false" hidden>
-        <span class="hero-pause-glyph" aria-hidden="true">‖</span>
+        <svg class="hero-icon-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 6v12M15 6v12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+        <svg class="hero-icon-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 6.5 18 12l-9 5.5z" fill="currentColor"/>
+        </svg>
       </button>
     </div>
   </section>
 
   <main>
     <section class="gallery-section chapter-room" id="gallery">
-      <span class="chapter-vert" aria-hidden="true">展厅</span>
       <div class="chapter-head">
         <h2 class="chapter-title">展厅</h2>
       </div>
@@ -101,7 +111,6 @@
     </section>
 
     <section class="about chapter-room-deep" id="about">
-      <span class="chapter-vert" aria-hidden="true">前言</span>
       <div class="about-inner">
         <h2 class="about-title">像油画一样<br />被观看。</h2>
         <a class="btn btn-text" href="#gallery">进入展厅</a>
@@ -109,7 +118,6 @@
     </section>
 
     <section class="upload-section" id="upload">
-      <span class="chapter-vert" aria-hidden="true">库房</span>
       <div class="upload-inner">
         <h2 class="upload-title" id="archive">库房</h2>
         <button class="btn btn-outline" type="button" id="addPhotoBtn">登记入藏</button>
@@ -164,14 +172,22 @@
       </button>
     </div>
     <figure class="lightbox-stage">
-      <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一件">‹</button>
+      <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一件">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M15 4 7 12l8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <div class="lightbox-frame">
         <picture>
           <source id="lbSource" type="image/avif" srcset="" />
           <img class="lightbox-img" id="lbImg" alt="" />
         </picture>
       </div>
-      <button class="lb-arrow lb-next" id="next" type="button" aria-label="下一件">›</button>
+      <button class="lb-arrow lb-next" id="next" type="button" aria-label="下一件">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M9 4l8 8-8 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
     </figure>
     <div class="lightbox-meta">
       <h2 class="lb-title" id="lbTitle"></h2>

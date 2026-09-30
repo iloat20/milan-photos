@@ -1,1680 +1,836 @@
+/* 米兰美术馆 —— 视觉语言：系统字体 + 中性表面 + 圆角卡片 + 毛玻璃 chrome。
+   分层顺序即优先级：responsive > sections > components > base > reset。 */
 @layer reset, base, components, sections, responsive;
 
-/* 注册采样色为类型化颜色：JS setProperty 的色值可平滑插值 */
+/* 采样色注册为类型化颜色：JS 写进去的墙色 / 环境色才能平滑插值。
+   不注册的话 var 变化不触发 transition，切画时墙面会跳变。 */
 @property --card-wall {
   syntax: "<color>";
   inherits: true;
-  initial-value: #2a2418;
+  initial-value: #1c1c1e;
 }
 
 @property --card-glow {
   syntax: "<color>";
   inherits: true;
-  initial-value: rgba(201, 169, 106, 0.18);
+  initial-value: rgba(255, 255, 255, 0.08);
 }
 
 @property --card-accent {
   syntax: "<color>";
   inherits: true;
-  initial-value: rgba(201, 169, 106, 0.28);
+  initial-value: rgba(255, 255, 255, 0.1);
 }
 
-/* 序厅/观画室的随画采样墙色同样类型化：切画时墙面与射灯平滑过渡而非跳变 */
+/* 序厅 / 观画室的随画环境色：变量名固定（app.js 写入、e2e 按名读取），
+   只改用途——从「油画墙面」改为「环境光晕」，亮色主题下再与页面底色混合。 */
 @property --room-adapt {
   syntax: "<color>";
   inherits: true;
-  initial-value: #151c18;
+  initial-value: #0a0a0a;
 }
 
 @property --room-adapt-deep {
   syntax: "<color>";
   inherits: true;
-  initial-value: #0e1210;
+  initial-value: #000;
 }
 
 @property --room-adapt-glow {
   syntax: "<color>";
   inherits: true;
-  initial-value: rgba(201, 169, 106, 0.06);
-}
-
-/* 站内可见字形的思源宋体（Noto Serif SC）子集：只含页面真正渲染的 257 字，
-   权重 400–600 可变。Windows 无系统中文衬线时用它兜底，标题不再落到 SimSun */
-@font-face {
-  font-family: "Milan Serif";
-  src: url("assets/fonts/milan-serif.woff2") format("woff2");
-  font-weight: 400 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-@layer base {
-/* 米兰美术馆 — 油画展厅 */
-:root {
-  --room: #1f2a24;
-  --room-deep: #151c18;
-  --room-soft: #27332c;
-  --gilt: #c9a96a;
-  --gilt-bright: #e2c98a;
-  --gilt-dark: #8a7348;
-
-  /* 框勾边：比框面再暗一档。框退到照片之后，靠它与墙面分界 */
-  --gilt-edge: color-mix(in oklab, var(--gilt-dark), #000 32%);
-  --gilt-liner: #2a2418;
-  --ivory: #f0ead8;
-  --ivory-dim: #cfc6b0;
-
-  /* 提亮一档保证对比度：--room 5.8 / --room-deep 6.8 / --room-soft 5.2（均 ≥ AA 4.5） */
-  --haze: #aaa28d;
-  --rule: rgba(201, 169, 106, 0.28);
-  --rule-soft: rgba(240, 234, 216, 0.12);
-  --night: #0e1210;
-  --on-dark: var(--ivory);
-  --nav-h: 52px;
-  --max: 720px;
-  --max-wide: 1120px;
-  --font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --display: "Songti SC", "Source Han Serif SC", "Noto Serif SC", "STSong",
-    "Milan Serif", "SimSun", Georgia, "Times New Roman", serif;
-  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
-
-  /* 系统控件/滚动条跟随暗色（另在 <meta name="color-scheme"> 声明） */
-  color-scheme: dark;
-
-  --frame:
-    0 0 0 1px rgba(42, 36, 24, 0.55),
-    0 0 0 3px var(--gilt-dark),
-    0 0 0 8px var(--gilt),
-    0 0 0 9px rgba(42, 36, 24, 0.45),
-    0 14px 36px rgba(0, 0, 0, 0.42);
-  --frame-sm:
-    0 0 0 1px rgba(42, 36, 24, 0.55),
-    0 0 0 2px var(--gilt-dark),
-    0 0 0 6px var(--gilt),
-    0 0 0 7px rgba(42, 36, 24, 0.4),
-    0 10px 28px rgba(0, 0, 0, 0.4);
-}
-
+  initial-value: rgba(255, 255, 255, 0.05);
 }
 
 @layer reset {
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-/* <picture> 不生成盒子：img/source 保持原直接子的布局与定位 */
-picture {
-  display: contents;
-}
+  /* <picture> 不生成盒子：img/source 保持原直接子的布局与定位 */
+  picture {
+    display: contents;
+  }
+
+  body,
+  h1,
+  h2,
+  h3,
+  p,
+  figure {
+    margin: 0;
+  }
 }
 
 @layer base {
-html {
-  scroll-behavior: smooth;
-  scroll-padding-top: calc(var(--nav-h) + 12px);
-}
+  :root {
+    color-scheme: light dark;
 
-body {
-  margin: 0;
-  font-family: var(--font);
-  font-size: 16px;
-  line-height: 1.65;
-  letter-spacing: 0.02em;
-  color: var(--ivory);
-  background: var(--room);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  -webkit-tap-highlight-color: transparent;
-}
+    /* —— 表面 —— */
+    --bg: #000;
+    --bg-1: #0a0a0a;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --glass: rgba(10, 10, 11, 0.72);
 
-img {
-  display: block;
-  max-width: 100%;
-}
+    /* —— 文本 ——（--text-3 仅供装饰：小字对比度不足 AA） */
+    --text: #f5f5f7;
+    --text-2: #a1a1a6;
+    --text-3: #86868b;
+    --accent: #0a84ff;
+    --danger: #ff453a;
 
-a {
-  color: var(--gilt);
-  text-decoration: none;
-}
+    /* —— 线与影 —— */
+    --hairline: rgba(255, 255, 255, 0.16);
+    --hairline-soft: rgba(255, 255, 255, 0.07);
+    --fill: rgba(120, 120, 128, 0.28);
+    --fill-strong: rgba(120, 120, 128, 0.44);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
+    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 30px 70px rgba(0, 0, 0, 0.55);
 
-a:hover {
-  color: var(--gilt-bright);
-  text-decoration: underline;
-}
+    /* —— 几何 —— */
+    --nav-h: 48px;
+    --max: 720px;
+    --max-wide: 1120px;
+    --r-lg: 22px;
+    --r-md: 14px;
+    --r-sm: 10px;
+    --r-pill: 980px;
 
-code {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.9em;
-}
+    /* —— 字体与缓动 —— */
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro SC", "SF Pro Text",
+      "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
+      "Helvetica Neue", sans-serif;
+
+    /* Apple 式缓动：起步快、收尾长，接近弹簧而非线性 */
+    --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fff;
+      --bg-1: #f5f5f7;
+      --surface: #f5f5f7;
+      --surface-2: #e8e8ed;
+      --glass: rgba(255, 255, 255, 0.72);
+      --text: #1d1d1f;
+      --text-2: #6e6e73;
+      --text-3: #86868b;
+
+      /* 文本链接对比度：Apple 蓝 #0071e3 在 --bg-1(#f5f5f7) 上仅 4.31:1，
+         AA 小字需 4.5 —— 深一档到 #06c（≈5.1:1，白底 5.57:1）。
+         深色主题的 #0a84ff 在 #0a0a0a 上 ≈5.4:1，无需调整。 */
+      --accent: #06c;
+      --danger: #d70015;
+      --hairline: rgba(0, 0, 0, 0.16);
+      --hairline-soft: rgba(0, 0, 0, 0.07);
+      --fill: rgba(120, 120, 128, 0.16);
+      --fill-strong: rgba(120, 120, 128, 0.28);
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.08);
+      --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.08), 0 30px 70px rgba(0, 0, 0, 0.16);
+    }
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: calc(var(--nav-h) + 12px);
+    background: var(--bg);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: var(--font);
+    font-size: 17px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  code {
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas,
+      monospace;
+    font-size: 0.9em;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--accent) 30%, transparent);
+  }
+
+  :focus-visible {
+    outline: 3px solid color-mix(in oklab, var(--accent) 60%, transparent);
+    outline-offset: 3px;
+  }
 }
 
 @layer components {
-/* —— 馆名顶栏 —— */
-.site-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 50;
-  height: var(--nav-h);
-  background: rgba(21, 28, 24, 0.94);
-  border-bottom: 1px solid var(--rule);
+  /* —— 顶栏：毛玻璃 chrome —— */
+  .site-nav {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 50;
+    height: var(--nav-h);
+    background: var(--glass);
 
-  /* 不做 backdrop-filter：本条是 position:fixed 全宽，内容在其下方持续滚动，
-     模糊要每帧重算 52px × 视宽；而底色已是 94% 不透明，参与模糊的只剩 6%，
-     视觉上几乎不可辨。属于「付出滚动期合成成本换不可见收益」，故去掉。
-     若日后想要玻璃质感，必须同时把底色降到 ~0.72 并重新校验导航文字对比度。 */
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
-}
-
-.site-nav-inner {
-  max-width: var(--max-wide);
-  height: 100%;
-  margin: 0 auto;
-  padding: 0 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.site-nav-logo {
-  font-family: var(--display);
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: 0.28em;
-  color: var(--gilt-bright);
-  text-decoration: none;
-
-  /* 序厅门厅大字在场时由 .is-at-hero 隐去（见下），滚入展厅再浮现 */
-  transition: opacity 0.4s var(--ease), visibility 0s;
-}
-
-/* 隐藏态把 visibility 推迟到渐隐结束；浮现时回到基础规则立即可见，
-   否则渐显会整体被 visibility 的延时卡住 */
-.site-nav.is-at-hero .site-nav-logo {
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.4s var(--ease), visibility 0s 0.4s;
-}
-
-.site-nav-logo:hover {
-  text-decoration: none;
-  color: var(--ivory);
-}
-
-.site-nav-links {
-  display: flex;
-  gap: 28px;
-}
-
-.site-nav-links a {
-  font-family: var(--display);
-  font-size: 12px;
-  letter-spacing: 0.22em;
-  color: var(--ivory-dim);
-  text-decoration: none;
-}
-
-.site-nav-links a:hover {
-  color: var(--gilt-bright);
-  text-decoration: none;
-}
-
-/* —— 序厅：油画陈列 —— */
-.hero-carousel {
-  position: relative;
-  width: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
-  overflow: hidden;
-
-  --room-adapt: #1f2a24;
-  --room-adapt-deep: #151c18;
-  --room-adapt-glow: rgba(201, 169, 106, 0.07);
-
-  background:
-    linear-gradient(180deg, var(--room-adapt) 0%, var(--room) 55%, var(--room-deep) 100%);
-  touch-action: pan-y;
-  user-select: none;
-  -webkit-user-select: none;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--rule);
-
-  /* 墙色过渡要写在采样变量本身上：background 的渐变不会被 var 色变化触发过渡 */
-  transition:
-    background 1.8s cubic-bezier(0.22, 0.61, 0.36, 1),
-    --room-adapt 1.8s cubic-bezier(0.22, 0.61, 0.36, 1),
-    --room-adapt-deep 1.8s cubic-bezier(0.22, 0.61, 0.36, 1),
-    --room-adapt-glow 1.8s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-
-.hero-plate {
-  position: relative;
-  z-index: 4;
-  flex: 0 0 auto;
-  text-align: center;
-  padding: calc(var(--nav-h) + 28px) 28px 12px;
-  pointer-events: none;
-}
-
-.hero-title {
-  margin: 0;
-  font-family: var(--display);
-  font-size: clamp(28px, 4.5vw, 42px);
-  font-weight: 500;
-  letter-spacing: 0.28em;
-  line-height: 1.2;
-  color: var(--gilt-bright);
-  padding-left: 0.36em;
-  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
-}
-
-.hero-carousel-track {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
-  margin-top: 0;
-  margin-bottom: 4px;
-}
-
-.hero-carousel-slide {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-
-  /* 非活动 slide 必须移出 Tab 序列与无障碍树。
-     opacity:0 + pointer-events:none 挡不住键盘：slide 里现在有可聚焦的
-     .hero-art <button>，只有 visibility:hidden 能让它不被 Tab 到、
-     也不被读屏念出来。visibility 延迟到最后再翻转，不打断淡出。 */
-  visibility: hidden;
-  transition:
-    opacity 0.9s cubic-bezier(0.22, 0.61, 0.36, 1),
-    visibility 0s linear 0.9s;
-  pointer-events: none;
-  background: transparent;
-  padding: 8px 48px 4px;
-}
-
-.hero-carousel-slide.is-active {
-  opacity: 1;
-  visibility: visible;
-  transition:
-    opacity 0.9s cubic-bezier(0.22, 0.61, 0.36, 1),
-    visibility 0s linear 0s;
-  pointer-events: auto;
-  z-index: 1;
-}
-
-/* 画心 + 鎏金框：不在照片上打光 */
-.hero-art img,
-.hero-carousel-slide img {
-  display: block;
-  width: auto;
-  height: auto;
-  max-width: min(86vw, 860px);
-  max-height: min(70vh, 720px);
-  object-fit: contain;
-  object-position: center;
-  background: #111;
-  border: 7px solid var(--gilt-dark);
-  outline: 1px solid var(--gilt-edge);
-  filter: none;
-  transition: none;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-}
-
-.hero-carousel-slide.is-active img {
-  filter: none;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
-}
-
-.hero-art {
-  /* 这一层是 <button>（键盘可达），故先做按钮重置，再按原画心容器布局 */
-  appearance: none;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  position: relative;
-
-  /* 画心在窄屏会宽于本容器（img 用 86vw，本容器用 86%），属既有设计；
-     显式声明不裁切，避免某些 UA 给 button 的 overflow 裁掉画心两侧。 */
-  overflow: visible;
-  max-width: min(86%, 860px);
-  max-height: min(70vh, 720px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1;
-}
-
-.hero-art:focus-visible {
-  outline: 2px solid var(--gilt);
-  outline-offset: 10px;
-}
-
-.hero-carousel-caption {
-  display: none !important;
-}
-
-.filter-bar::before {
-  display: none !important;
-}
-
-.hero-carousel-arrow {
-  position: absolute;
-  top: 54%;
-  transform: translateY(-50%);
-  z-index: 5;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--rule);
-  border-radius: 0;
-  background: rgba(21, 28, 24, 0.72);
-  color: var(--gilt-bright);
-  font-family: var(--display);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
-}
-
-.hero-carousel-arrow:hover {
-  background: rgba(201, 169, 106, 0.16);
-  border-color: var(--gilt);
-}
-
-.hero-carousel-arrow:focus-visible {
-  outline: 2px solid var(--gilt-bright);
-  outline-offset: 3px;
-}
-
-.hero-carousel-prev {
-  left: 18px;
-}
-
-.hero-carousel-next {
-  right: 18px;
-}
-
-.hero-carousel-controls {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 10px 16px 6px;
-}
-
-.hero-carousel-dots {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  padding: 0;
-}
-
-.hero-carousel-pause {
-  appearance: none;
-  border: 1px solid var(--rule);
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 0;
-  background: rgba(21, 28, 24, 0.72);
-  color: var(--gilt-bright);
-  font-family: var(--display);
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  touch-action: manipulation;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.25s var(--ease), border-color 0.25s var(--ease);
-}
-
-.hero-carousel-pause[hidden] {
-  display: none !important;
-}
-
-.hero-carousel-pause:hover {
-  background: rgba(201, 169, 106, 0.16);
-  border-color: var(--gilt);
-}
-
-.hero-carousel-pause:focus-visible {
-  outline: 2px solid var(--gilt-bright);
-  outline-offset: 3px;
-}
-
-/* 控件自带暗底，不依赖采样墙色的明度 */
-.site-nav,
-.hero-carousel-arrow,
-.hero-carousel-pause,
-.lb-close,
-.lb-arrow {
-  color: var(--gilt-bright);
-}
-
-/* 按钮本体 24×24 满足触摸目标（WCAG 2.5.8），5px 微点视觉交给 ::before 绘制 */
-.hero-carousel-dot {
-  appearance: none;
-  border: 0;
-  position: relative;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  margin: 0;
-  border-radius: 0;
-  background: transparent;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.hero-carousel-dot::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 5px;
-  height: 5px;
-  background: rgba(240, 234, 216, 0.22);
-  transition: width 0.3s var(--ease), background 0.3s var(--ease);
-}
-
-.hero-carousel-dot.is-active::before {
-  width: 20px;
-  background: var(--gilt);
-}
-
-/* 焦点框画回微点本身，维持原有视觉 */
-.hero-carousel-dot:focus-visible {
-  outline: none;
-}
-
-.hero-carousel-dot:focus-visible::before {
-  outline: 2px solid var(--gilt);
-  outline-offset: 3px;
-}
-
-.hero-carousel:empty,
-.hero-carousel.is-empty {
-  display: none;
-}
-
-@media (max-width: 560px) {
-  .hero-plate {
-    padding-top: calc(var(--nav-h) + 18px);
-    padding-bottom: 8px;
+    /* 苹果式 chrome：半透明底 + 饱和模糊。滚动时每帧合成 48px 高的条带，
+       成本可接受（对比全屏 backdrop-filter）；不支持时下方 @supports 退回实底。 */
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: 1px solid var(--hairline-soft);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
-  .hero-title {
-    letter-spacing: 0.16em;
-    padding-left: 0.16em;
-    font-size: clamp(24px, 7vw, 32px);
-  }
-
-  .hero-carousel-slide {
-    padding: 4px 28px;
-  }
-
-  .hero-art {
-    max-width: min(92%, 620px);
-    max-height: min(62vh, 560px);
-  }
-
-  .hero-art img,
-  .hero-carousel-slide img {
-    max-width: min(92vw, 620px);
-    max-height: min(62vh, 560px);
-    border-width: 5px;
-  }
-
-  .hero-carousel-caption {
-    margin-top: 28px;
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .site-nav {
+      background: var(--bg-1);
+    }
   }
 
   .site-nav-inner {
-    padding: 0 16px;
+    max-width: var(--max-wide);
+    height: 100%;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
   }
 
   .site-nav-logo {
-    font-size: 14px;
-    letter-spacing: 0.16em;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text);
+
+    /* 序厅大字在场时隐去（见 .is-at-hero），滚入展厅再浮现 */
+    transition: opacity 0.35s var(--ease), visibility 0s;
+  }
+
+  /* 隐藏态把 visibility 推迟到渐隐结束；浮现时回到基础规则立即可见，
+     否则渐显会整体被 visibility 的延时卡住 */
+  .site-nav.is-at-hero .site-nav-logo {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.35s var(--ease), visibility 0s 0.35s;
+  }
+
+  .site-nav-logo:hover {
+    color: var(--text);
+    text-decoration: none;
   }
 
   .site-nav-links {
-    gap: 14px;
-  }
-
-  /* 窄屏隐藏翻页箭头：画心 92% 视宽、左右仅约 15px 边距，
-     36px 箭头会压在画心上。翻页由横滑（heroCarousel pointerup，阈值 40px）
-     与分页点承担，二者都保留。 */
-  .hero-carousel-arrow {
-    display: none;
-  }
-}
-
-/* —— View Transitions —— */
-::view-transition-old(milan-lightbox-img),
-::view-transition-new(milan-lightbox-img) {
-  animation-duration: 0.28s;
-  animation-timing-function: var(--ease);
-  mix-blend-mode: normal;
-}
-
-::view-transition-group(milan-lightbox-img) {
-  z-index: 1001;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
-  }
-}
-
-@media (hover: none) {
-  .hero-carousel-arrow:hover {
-    background: rgba(21, 28, 24, 0.72);
-  }
-}
-
-/* —— Buttons —— */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 10px 22px;
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.2em;
-  text-decoration: none;
-  cursor: pointer;
-  transition: color 0.2s var(--ease), background 0.2s var(--ease),
-    border-color 0.2s var(--ease);
-}
-
-.btn:hover {
-  text-decoration: none;
-}
-
-.btn-text {
-  border: 0;
-  background: transparent;
-  color: var(--gilt);
-  border-bottom: 1px solid rgba(201, 169, 106, 0.4);
-  border-radius: 0;
-  padding: 8px 4px;
-  min-height: auto;
-}
-
-.btn-text:hover {
-  color: var(--gilt-bright);
-  border-bottom-color: var(--gilt-bright);
-}
-
-.btn-outline {
-  appearance: none;
-  border: 1px solid var(--rule);
-  background: transparent;
-  color: var(--ivory-dim);
-  border-radius: 0;
-}
-
-.btn-outline:hover {
-  border-color: var(--gilt);
-  color: var(--gilt-bright);
-}
-
-.btn-ghost {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--haze);
-  border-radius: 0;
-}
-
-.btn-ghost:hover {
-  color: var(--ivory);
-}
-
-.btn:focus-visible {
-  outline: 2px solid var(--gilt);
-  outline-offset: 3px;
-}
-
-}
-
-@layer sections {
-/* —— Chapters —— */
-.chapter-room {
-  background: var(--room);
-  color: var(--ivory);
-}
-
-.chapter-room-deep {
-  background: var(--room-deep);
-  color: var(--ivory);
-}
-
-.chapter-head {
-  max-width: var(--max);
-  margin: 0 auto 52px;
-  padding: 0 28px;
-  text-align: center;
-}
-
-.chapter-title {
-  margin: 0;
-  font-family: var(--display);
-  font-size: clamp(32px, 5vw, 48px);
-  font-weight: 500;
-  letter-spacing: 0.4em;
-  line-height: 1.2;
-  color: var(--gilt-bright);
-  padding-left: 0.4em;
-}
-
-/* —— 展厅：鎏金画框挂画 —— */
-.gallery-section {
-  padding: 96px 0 88px;
-
-  /* 卡片射灯（.card-media::before）会向左右各溢出 34px；最外侧卡片会顶出视口造成
-     整页横向滚动。这里按展厅盒边界裁切：仍不影响 sticky 章节题（clip 不产生滚动容器，
-     且纵向保持 visible，画框上方的锥光完整保留）。 */
-  overflow-x: clip;
-
-  /* 高光起点避开章节题遮罩带（遮罩为纯 --room），否则遮罩会盖出一块可见的矩形色差 */
-  background:
-    radial-gradient(ellipse 90% 46% at 50% 6%, rgba(201, 169, 106, 0.05), transparent 62%),
-    var(--room);
-}
-
-/* 骨架屏与真实展厅共用同一条盒模型/列定义/gap 规则 —— 故意写成同一组选择器，
-   而不是各写一份相同的值：这样两者不可能漂移。
-   历史问题：骨架屏曾自带一套 auto-fill minmax(260px) + 64px/40px，
-   在 390px 下算出 1 列，而真实展厅是 2 列 → 数据到达时正好在 LCP 窗口内发生列数跳变。
-   注意：三处断点（本处 sections 层基值、responsive 层「无字陈列」、≤560px）都必须带上
-   .gallery-skeleton，否则前两处会静默失效。 */
-.gallery,
-.gallery-skeleton {
-  max-width: var(--max-wide);
-  margin: 0 auto;
-  padding: 28px 40px 8px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 64px 40px;
-
-  /* 中线挂画：同排画心对齐同一水平中线（真实画廊挂画规则），
-     而非顶部对齐——竖横混排时底部参差会撑出大片空洞 */
-  align-items: center;
-}
-
-.card {
-  appearance: none;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  width: 100%;
-  max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  touch-action: manipulation;
-
-  /* 不做 content-visibility:auto —— 它隐含的 pain containment 会把子盒裁到卡片
-     自身盒内，直接裁掉 .card-media::before 溢出到画框外的那 58px 墙面射灯
-     （实测：加 paint containment 时画框上方墙面 hover 前后亮度差恒为 0.00，
-     移除后 hover 亮度 +31）。getComputedStyle().contain 报 none，属静默失效。
-     同时其 contain-intrinsic-height 估值（400px）远高于手机端实际卡高
-     （约 112–150px），滚动经过时会造成整行先撑高再塌缩的位移。
-     图片懒加载已由 loading="lazy" 承担，卡片级跳过渲染的收益不足以抵消这两项代价。 */
-  isolation: isolate;
-}
-
-/* 策展节奏：每 7 张的末张做「重点陈列」——独占一整行成为一面墙，
-   形成 3 列 × 2 行 → 一面大墙 → 的观展呼吸。
-   卡片宽度按画心比例反算（--fit 由 applyRowFit 写入），框与画同比例，
-   避免全宽大框里装小画撑出大片卡纸 */
-.card.is-feature {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: min(100%, calc(64vh * var(--fit, 1.333)));
-}
-
-.card:focus-visible {
-  outline: 2px solid var(--gilt);
-  outline-offset: 10px;
-}
-
-.card-media {
-  position: relative;
-
-  /* 本盒不裁切：::before 的锥光必须能溢出到画框之外的墙面。
-     裁切职责交给 .card-media-glass（只包画心），否则 overflow:hidden
-     会把墙面色光一并裁掉，射灯就只剩框内 4px 可见。 */
-  overflow: visible;
-
-  --card-wall: #2a2418;
-  --card-glow: rgba(201, 169, 106, 0.12);
-  --card-accent: rgba(201, 169, 106, 0.28);
-
-  /* 框退到照片之后：面用古铜金（明度低于照片中调），框体收窄让画心更大 */
-  --frame-inset: 4px;
-
-  background: var(--gilt-dark);
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border: 2px solid var(--gilt-edge);
-
-  /* 轨道射灯从上方打来：框的上沿受光更亮，投影向下方坠实 */
-  border-top-color: color-mix(in oklab, var(--gilt-dark), #fff 24%);
-  padding: var(--frame-inset);
-  box-sizing: border-box;
-  box-shadow:
-    0 0 0 1px rgba(42, 36, 24, 0.35),
-    0 18px 36px rgba(0, 0, 0, 0.46),
-    0 6px 22px var(--card-glow);
-  transition: box-shadow 0.7s var(--ease), border-color 0.7s var(--ease);
-}
-
-/* 墙面上的射灯：锥光落在画框上沿之外的墙面，向下衰减（光不进画心） */
-.card-media::before {
-  content: "";
-  position: absolute;
-  inset: -58px -34px -26px;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse 36% 52% at 50% -8%, rgba(255, 246, 222, 0.2), transparent 64%),
-    radial-gradient(ellipse 86% 66% at 50% 42%, var(--card-accent), transparent 72%);
-  opacity: 0.9;
-  pointer-events: none;
-  transition: background 0.7s var(--ease), opacity 0.7s var(--ease);
-}
-
-/* 画心裁切盒：与 .card-media 分离，只承担「hover 缩放不出框」的裁剪。
-   inset = 框内边，与旧版 img 直接定位在 .card-media 上的几何等价。 */
-.card-media-glass {
-  position: absolute;
-  inset: var(--frame-inset);
-  overflow: hidden;
-}
-
-.card-media img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  object-fit: contain;
-  object-position: center;
-  transition: transform 0.7s var(--ease);
-  opacity: 1;
-
-  /* 画框内侧：比例不符时信箱化为墙面色，而非裁切 */
-  background: var(--card-wall, #2a2418);
-}
-
-.card:hover .card-media img,
-.card:focus-visible .card-media img {
-  transform: scale(1.02);
-}
-
-.card-badge {
-  position: absolute;
-  right: 8px;
-  top: 8px;
-  z-index: 1;
-  padding: 3px 8px;
-  font-family: var(--display);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  background: rgba(14, 18, 16, 0.78);
-  color: var(--gilt-bright);
-  border: 1px solid var(--rule);
-  pointer-events: none;
-}
-
-/* 展厅索引 */
-.filter-bar {
-  max-width: var(--max-wide);
-  margin: -8px auto 36px;
-  padding: 0 36px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px 0;
-  align-items: center;
-}
-
-.filter-bar::before {
-  content: "展厅";
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.28em;
-  color: var(--gilt);
-  margin-right: 18px;
-}
-
-.filter-chip {
-  appearance: none;
-  border: 0;
-  border-bottom: 1px solid transparent;
-  background: transparent;
-  color: var(--haze);
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.14em;
-  padding: 10px 14px;
-  min-height: 40px;
-  cursor: pointer;
-  transition: color 0.2s var(--ease), border-color 0.2s var(--ease);
-}
-
-.filter-chip:hover {
-  color: var(--ivory);
-}
-
-.filter-chip:focus-visible {
-  outline: 2px solid var(--gilt);
-  outline-offset: 2px;
-}
-
-.filter-chip.is-active {
-  color: var(--gilt-bright);
-  border-bottom-color: var(--gilt);
-  font-weight: 600;
-}
-
-.empty {
-  max-width: var(--max);
-  margin: 32px auto 0;
-  padding: 0 28px;
-  text-align: center;
-  font-family: var(--display);
-  letter-spacing: 0.08em;
-  color: var(--haze);
-}
-
-/* —— 库房 —— */
-.upload-section {
-  padding: 56px 28px;
-  background: var(--room-deep);
-  border-top: 1px solid var(--rule);
-  text-align: center;
-}
-
-.upload-inner {
-  max-width: 520px;
-  margin: 0 auto;
-}
-
-.upload-section .upload-title {
-  margin: 0;
-  font-family: var(--display);
-  font-size: clamp(20px, 3vw, 26px);
-  font-weight: 500;
-  letter-spacing: 0.28em;
-  line-height: 1.25;
-  color: var(--gilt-bright);
-  padding-left: 0.28em;
-}
-
-.upload-section #addPhotoBtn {
-  margin: 0 auto;
-}
-
-.upload-status {
-  margin: 16px auto 0;
-  min-height: 1.4em;
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  color: var(--haze);
-  max-width: 28em;
-}
-
-.upload-status.is-error {
-  color: #d4a090;
-}
-
-.gh-panel {
-  margin-top: 28px;
-  text-align: left;
-  border: 1px solid var(--rule);
-  padding: 0 16px 16px;
-  background: transparent;
-}
-
-.gh-panel > summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 14px 0;
-  font-family: var(--display);
-  font-size: 13px;
-  letter-spacing: 0.16em;
-  color: var(--ivory-dim);
-}
-
-.gh-panel > summary:hover {
-  color: var(--gilt-bright);
-}
-
-.gh-panel > summary::-webkit-details-marker {
-  display: none;
-}
-
-.gh-fields {
-  display: grid;
-  gap: 12px;
-}
-
-.gh-field {
-  display: grid;
-  gap: 6px;
-  font-family: var(--display);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  color: var(--haze);
-}
-
-.gh-field input {
-  width: 100%;
-  border: 1px solid var(--rule);
-  padding: 10px 12px;
-  min-height: 44px;
-  font-family: var(--font);
-  font-size: 14px;
-  letter-spacing: 0;
-  color: var(--ivory);
-  background: rgba(240, 234, 216, 0.04);
-}
-
-.gh-field input::placeholder {
-  color: var(--haze);
-}
-
-.gh-field input:focus-visible {
-  outline: 2px solid var(--gilt);
-  outline-offset: 1px;
-  border-color: var(--gilt);
-}
-
-.gh-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.gh-hint {
-  margin: 4px 0 0;
-  font-family: var(--display);
-  font-size: 12px;
-  line-height: 1.55;
-  letter-spacing: 0.03em;
-  color: var(--haze);
-}
-
-/* —— 前言 —— */
-.about {
-  padding: 100px 28px;
-  text-align: center;
-}
-
-.about-inner {
-  max-width: 640px;
-  margin: 0 auto;
-}
-
-.about-title {
-  margin: 0;
-  font-family: var(--display);
-  font-size: clamp(32px, 5.5vw, 48px);
-  font-weight: 500;
-  letter-spacing: 0.28em;
-  line-height: 1.4;
-  color: var(--gilt-bright);
-}
-
-/* —— 馆脚 —— */
-.footer {
-  background: var(--night);
-  color: var(--haze);
-  border-top: 1px solid var(--rule);
-  padding: 36px 28px 40px;
-}
-
-.footer-inner {
-  max-width: var(--max);
-  margin: 0 auto;
-  text-align: center;
-}
-
-.footer-museum {
-  margin: 0;
-  font-family: var(--display);
-  font-size: 16px;
-  letter-spacing: 0.36em;
-  color: var(--gilt-bright);
-  padding-left: 0.36em;
-}
-
-.footer-copy {
-  margin: 16px 0 0;
-  font-family: var(--display);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-}
-
-}
-
-@layer components {
-/* —— 观画室 —— */
-.lightbox {
-  position: fixed;
-  inset: 0;
-
-  /* <dialog> UA reset：fit-content 宽高/内边距/边框会破坏全屏铺排 */
-  box-sizing: border-box;
-  border: 0;
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  max-width: none;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
-  max-height: 100vh;
-  max-height: 100dvh;
-
-  --room-adapt: #151c18;
-  --room-adapt-deep: #0e1210;
-  --room-adapt-glow: rgba(201, 169, 106, 0.06);
-
-  background:
-    /* 天花射灯：光自顶部洒下，画上方墙面被照亮（光只在墙面，画心不加光） */
-    radial-gradient(ellipse 54% 52% at 50% -4%, rgba(255, 247, 226, 0.16), transparent 64%),
-    radial-gradient(ellipse 70% 48% at 50% 42%, var(--room-adapt-glow), transparent 68%),
-    linear-gradient(180deg, var(--room-adapt) 0%, var(--room-adapt-deep) 100%);
-  color: var(--ivory);
-  overflow: hidden;
-  overscroll-behavior: contain;
-  touch-action: none;
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
-  padding-top: env(safe-area-inset-top);
-
-  /* 同序厅：过渡写在采样变量本身上，墙面与射灯随之平滑换色 */
-  transition:
-    background 0.65s var(--ease),
-    --room-adapt 0.65s var(--ease),
-    --room-adapt-deep 0.65s var(--ease),
-    --room-adapt-glow 0.65s var(--ease);
-}
-
-.lightbox:not([open]) {
-  display: none;
-}
-
-dialog.lightbox::backdrop {
-  background: rgba(14, 18, 16, 0.72);
-}
-
-.lightbox-chrome {
-  display: flex;
-  justify-content: flex-end;
-  padding: 14px 16px 6px;
-  flex-shrink: 0;
-}
-
-.lb-close {
-  appearance: none;
-  border: 1px solid var(--rule);
-  width: 36px;
-  height: 36px;
-  border-radius: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: var(--gilt-bright);
-  cursor: pointer;
-  touch-action: manipulation;
-  padding: 0;
-}
-
-.lb-close:hover {
-  background: rgba(201, 169, 106, 0.12);
-}
-
-.lb-close:focus-visible {
-  outline: 2px solid var(--gilt);
-  outline-offset: 2px;
-}
-
-.lightbox-stage {
-  position: relative;
-  flex: 1 1 0%;
-  min-height: 0;
-  min-width: 0;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 48px;
-  overflow: hidden;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-/* 金框包住画心：图不得大于框 */
-.lightbox-frame {
-  --frame-pad: 6px;
-  --frame-border: 2px;
-
-  /* 观画室放足墙面：上限取 74vh，竖构图才撑得开（横构图先触 940px 宽度限），
-     比早先的 58vh/560px 明显少留空墙 */
-  --frame-max-w: min(86vw, 940px);
-  --frame-max-h: min(74vh, 780px);
-
-  position: relative;
-  box-sizing: border-box;
-  width: fit-content;
-  height: fit-content;
-  max-width: var(--frame-max-w);
-  max-height: var(--frame-max-h);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--frame-pad);
-  background: var(--gilt-dark);
-  border: var(--frame-border) solid var(--gilt-edge);
-
-  /* 光从上方来：投影向下方坠得更深，画「离开」墙面 */
-  box-shadow: 0 30px 64px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
-}
-
-/* 观画室：无金框反光，只有墙面微光。
-   .lightbox-frame.is-lit 本身的 animation/box-shadow 与基础规则同值（no-op），
-   连同无人引用的 @keyframes frame-lit 一并删除；
-   但 .lightbox-frame.is-lit img 的 animation:none 是**生效**的
-   ——它关掉 .lightbox-img 的 lb-in 入场动画，故保留。 */
-.lightbox-frame.is-lit img {
-  animation: none;
-  filter: none;
-}
-
-.lightbox-img {
-  display: block;
-  width: auto;
-  height: auto;
-  max-width: calc(var(--frame-max-w, 940px) - 2 * var(--frame-pad, 10px) - 2 * var(--frame-border, 2px));
-  max-height: calc(var(--frame-max-h, 780px) - 2 * var(--frame-pad, 10px) - 2 * var(--frame-border, 2px));
-  object-fit: contain;
-  animation: lb-in 0.4s var(--ease) both;
-  transform: translate(var(--lb-tx, 0), var(--lb-ty, 0)) scale(var(--lb-zoom, 1));
-  transition: transform 0.35s var(--ease);
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-user-drag: none;
-  pointer-events: auto;
-  background: #111;
-  flex: 0 0 auto;
-}
-
-.lightbox-img.is-panning {
-  transition: none;
-  cursor: grabbing;
-}
-
-.lightbox-img.is-zoomed {
-  cursor: zoom-out;
-}
-
-/* 只动 opacity：fill both 的 transform 会永久盖掉缩放手势的 transform */
-@keyframes lb-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.lb-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-
-  /* 画框在 .lb-prev 之后绘制：画作放大到贴近两侧时（窄屏），箭头须显式压在画框之上，
-     否则左箭头会被画框盖住、与右箭头不对称 */
-  z-index: 2;
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--rule);
-  border-radius: 0;
-  background: rgba(21, 28, 24, 0.7);
-  color: var(--gilt-bright);
-  font-family: var(--display);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.lb-arrow:hover {
-  background: rgba(201, 169, 106, 0.16);
-}
-
-.lb-arrow:focus-visible {
-  outline: 2px solid var(--gilt);
-  outline-offset: 2px;
-}
-
-.lb-prev {
-  left: 16px;
-}
-
-.lb-next {
-  right: 16px;
-}
-
-.lightbox-meta {
-  flex-shrink: 0;
-  text-align: center;
-  padding: 14px 20px calc(22px + env(safe-area-inset-bottom));
-  max-height: 28vh;
-  overflow: auto;
-}
-
-.lb-title {
-  margin: 10px 0 0;
-  font-family: var(--display);
-  font-size: clamp(18px, 3vw, 22px);
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  color: var(--ivory);
-}
-
-body.lb-open {
-  overflow: hidden;
-  touch-action: none;
-}
-
-}
-
-@layer responsive {
-/* —— 无字陈列：只留金框画 ——
-   只隐藏文案装饰；功能性 UI（.upload-status 反馈、.gh-panel 同步设置、
-   .empty 空状态引导）必须可见，否则上传/同步流程不可达。
-
-   ⚠️ 位置敏感：本块必须留在 responsive 层的最前。
-   它不带媒体查询，靠「同层同权重 → 源序取胜」压过 components / sections 层的
-   基础值；但它同时也是 @media (max-width: 560px) 的「可被覆盖对象」——窄屏专用值
-   同层、同权重、写在后面，才能反过来赢。
-   本块此前位于窄屏断点之后，导致 .gallery gap / .chapter-head margin-bottom /
-   .filter-bar margin / .hero-plate padding-bottom 四处窄屏值被静默压死。
-   维护约定：本层新增断点规则一律写在本块之后，不要上移。 */
-.chapter-kicker,
-.chapter-sub,
-.hero-kicker,
-.hero-sub,
-.hero-carousel-caption,
-.card-meta,
-.lb-index,
-.lb-caption,
-.lb-medium,
-.lightbox-meta,
-.upload-sub,
-.footer-note,
-.footer-museum-en,
-.filter-bar::before {
-  display: none !important;
-}
-
-.hero-plate {
-  padding-bottom: 12px;
-}
-
-.chapter-head {
-  margin-bottom: 28px;
-}
-
-/* 与 .gallery 同组：骨架屏必须跟着走，否则桌面端骨架 gap 仍是 64px/40px */
-.gallery,
-.gallery-skeleton {
-  gap: 52px 36px;
-}
-
-.card-media {
-  /* 无墙签时画框外扩留白更稳 */
-  margin-bottom: 4px;
-}
-
-.about-text {
-  display: none !important;
-}
-
-.about-title {
-  margin-bottom: 24px;
-}
-
-.upload-inner {
-  padding: 12px 0;
-}
-
-.footer-inner {
-  padding: 4px 0;
-}
-
-.filter-bar {
-  margin-top: 0;
-  margin-bottom: 28px;
-}
-
-.filter-chip {
-  /* 比 --haze 更稳：采样墙变亮时仍可读 */
-  color: var(--ivory-dim);
-}
-
-.filter-chip.is-active {
-  color: var(--gilt-bright);
-}
-
-/* —— Responsive —— */
-@media (max-width: 834px) {
-  .gallery-section {
-    padding: 72px 0 64px;
-  }
-
-  .about,
-  .upload-section {
-    padding-top: 72px;
-    padding-bottom: 56px;
-  }
-}
-
-@media (max-width: 560px) {
-  body {
-    font-size: 15px;
+    display: flex;
+    gap: 26px;
   }
 
   .site-nav-links a {
-    font-size: 11px;
-    letter-spacing: 0.14em;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text-2);
+    transition: color 0.25s var(--ease);
   }
 
-  .chapter-head {
-    margin-bottom: 36px;
-    padding: 0 18px;
+  .site-nav-links a:hover {
+    color: var(--text);
+    text-decoration: none;
   }
 
-  .chapter-head::before {
-    inset-inline: 0;
+  /* —— 序厅：全屏重点陈列 —— */
+  .hero-carousel {
+    position: relative;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: hidden;
+
+    /* 随画环境色：JS 按当前画作写入（同 .lightbox） */
+    --room-adapt: #0a0a0a;
+    --room-adapt-deep: #000;
+    --room-adapt-glow: rgba(255, 255, 255, 0.05);
+
+    background:
+      radial-gradient(ellipse 68% 44% at 50% 4%, var(--room-adapt-glow), transparent 68%),
+      linear-gradient(180deg, var(--room-adapt) 0%, var(--room-adapt-deep) 100%);
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 18px;
+
+    /* 过渡写在采样变量本身上：渐变不会被 var 色变化触发过渡 */
+    transition:
+      background 0.6s var(--ease),
+      --room-adapt 1.2s var(--ease),
+      --room-adapt-deep 1.2s var(--ease),
+      --room-adapt-glow 1.2s var(--ease);
   }
 
-  .chapter-title {
-    letter-spacing: 0.22em;
-    padding-left: 0.22em;
-  }
-
-  .gallery-section {
-    padding: 56px 0 48px;
-  }
-
-  /* 与 .gallery 同组：窄屏骨架必须是 2 列，否则数据到达瞬间会从 1 列跳成 2 列 */
-  .gallery,
-  .gallery-skeleton {
-    grid-template-columns: 1fr 1fr;
-    gap: 40px 16px;
-    padding: 20px 18px 8px;
-  }
-
-  .card-media {
-    border-width: 1px;
-
-    --frame-inset: 3px;
-  }
-
-  .filter-bar {
-    margin: -4px auto 24px;
-    padding: 0 16px;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .filter-bar::before {
+  .hero-plate {
+    position: relative;
+    z-index: 4;
     flex: 0 0 auto;
+    text-align: center;
+    padding: calc(var(--nav-h) + 34px) 24px 14px;
+    pointer-events: none;
   }
 
-  .filter-bar::-webkit-scrollbar {
+  .hero-title {
+    margin: 0;
+    font-size: clamp(30px, 4.6vw, 50px);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    line-height: 1.15;
+    color: var(--text);
+    padding-left: 0.12em;
+  }
+
+  .hero-carousel-track {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    margin-bottom: 4px;
+  }
+
+  .hero-carousel-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+
+    /* 非活动 slide 必须移出 Tab 序列与无障碍树。
+       opacity + pointer-events 挡不住键盘：slide 里现在有可聚焦的
+       .hero-art <button>，只有 visibility 能让它不被 Tab 到、
+       也不被读屏念出来。visibility 延迟到最后再翻转，不打断淡出。 */
+    visibility: hidden;
+    transition: opacity 0.6s var(--ease), visibility 0s linear 0.6s;
+    pointer-events: none;
+    background: transparent;
+    padding: 8px 48px 4px;
+  }
+
+  .hero-carousel-slide.is-active {
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.6s var(--ease), visibility 0s linear 0s;
+    pointer-events: auto;
+    z-index: 1;
+  }
+
+  /* 画心：照片压在环境底色上，圆角 + 深投影（苹果式「抬起」而非镶框） */
+  .hero-art img,
+  .hero-carousel-slide img {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: min(86vw, 880px);
+    max-height: min(68vh, 700px);
+    object-fit: contain;
+    object-position: center;
+    background: var(--surface);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-2);
+  }
+
+  .hero-art {
+    /* 这一层是 <button>（键盘可达），故先做按钮重置，再按原画心容器布局 */
+    appearance: none;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: zoom-in;
+    position: relative;
+
+    /* 画心在窄屏会宽于本容器（img 用 86vw，本容器用 86%），属既有设计；
+       显式声明不裁切，避免某些 UA 给 button 的 overflow 裁掉画心两侧。 */
+    overflow: visible;
+    max-width: min(86%, 880px);
+    max-height: min(68vh, 700px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    border-radius: var(--r-md);
+  }
+
+  .hero-art:focus-visible {
+    outline-offset: 12px;
+  }
+
+  .hero-carousel-arrow {
+    position: absolute;
+    top: 54%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--fill);
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    transition: background 0.25s var(--ease), transform 0.25s var(--ease);
+  }
+
+  .hero-carousel-arrow svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .hero-carousel-arrow:hover {
+    background: var(--fill-strong);
+  }
+
+  .hero-carousel-arrow:active {
+    transform: translateY(-50%) scale(0.94);
+  }
+
+  .hero-carousel-prev {
+    left: 18px;
+  }
+
+  .hero-carousel-next {
+    right: 18px;
+  }
+
+  .hero-carousel-controls {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 16px 6px;
+  }
+
+  .hero-carousel-dots {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  /* 按钮本体 24×24 满足触摸目标（WCAG 2.5.8），视觉圆点交给 ::before */
+  .hero-carousel-dot {
+    appearance: none;
+    border: 0;
+    position: relative;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .hero-carousel-dot::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--text) 30%, transparent);
+    transition: width 0.35s var(--ease), background 0.35s var(--ease);
+  }
+
+  .hero-carousel-dot.is-active::before {
+    width: 22px;
+    border-radius: var(--r-pill);
+    background: var(--text);
+  }
+
+  /* 焦点框画回圆点本身，维持原有视觉 */
+  .hero-carousel-dot:focus-visible {
+    outline: none;
+  }
+
+  .hero-carousel-dot:focus-visible::before {
+    outline: 3px solid color-mix(in oklab, var(--accent) 60%, transparent);
+    outline-offset: 4px;
+  }
+
+  .hero-carousel-pause {
+    appearance: none;
+    border: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--fill);
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    transition: background 0.25s var(--ease);
+  }
+
+  .hero-carousel-pause svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* 图标切换走 CSS：暂停态显「暂停」，播放态显「播放」——不再依赖 ‖ ▶ 字形 */
+  .hero-carousel-pause .hero-icon-play {
     display: none;
+  }
+
+  .hero-carousel-pause[aria-pressed="true"] .hero-icon-pause {
+    display: none;
+  }
+
+  .hero-carousel-pause[aria-pressed="true"] .hero-icon-play {
+    display: block;
+  }
+
+  .hero-carousel-pause[hidden] {
+    display: none !important;
+  }
+
+  .hero-carousel-pause:hover {
+    background: var(--fill-strong);
+  }
+
+  .hero-carousel:empty,
+  .hero-carousel.is-empty {
+    display: none;
+  }
+
+  /* —— 按钮：胶囊 + 克制的填充 —— */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 12px 24px;
+    border: 0;
+    border-radius: var(--r-pill);
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.25s var(--ease), background 0.25s var(--ease),
+      border-color 0.25s var(--ease);
+  }
+
+  .btn:hover {
+    text-decoration: none;
+  }
+
+  .btn-text {
+    min-height: auto;
+    padding: 6px 2px;
+    background: transparent;
+    color: var(--accent);
+  }
+
+  .btn-text:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  .btn-outline {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .btn-outline:hover {
+    background: var(--surface-2);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-2);
+  }
+
+  .btn-ghost:hover {
+    color: var(--text);
+  }
+
+  /* —— 展厅索引：胶囊筛选 —— */
+  .filter-bar {
+    max-width: var(--max-wide);
+    margin: 0 auto 32px;
+    padding: 0 36px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
   }
 
   .filter-chip {
-    flex: 0 0 auto;
+    appearance: none;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    color: var(--text-2);
+    font-family: var(--font);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    padding: 9px 16px;
+    min-height: 36px;
+    cursor: pointer;
+    transition: color 0.25s var(--ease), background 0.25s var(--ease);
   }
 
-  .about-title,
-  .upload-title {
-    letter-spacing: 0.14em;
-    padding-left: 0.14em;
+  .filter-chip:hover {
+    color: var(--text);
   }
 
-  .lightbox-stage {
-    padding: 4px 8px;
+  .filter-chip.is-active {
+    background: var(--text);
+    color: var(--bg);
+    font-weight: 600;
   }
 
-  .lightbox-frame {
-    --frame-pad: 4px;
-    --frame-max-w: min(94vw, 900px);
-    --frame-max-h: min(70vh, 640px);
+  /* —— 空状态 —— */
+  .empty {
+    max-width: var(--max);
+    margin: 40px auto 0;
+    padding: 0 28px;
+    text-align: center;
+    color: var(--text-2);
   }
 
-  /* 窄屏隐藏翻页箭头：frame 占 94vw、左右仅约 12px 边距，
-     36px 箭头会压在画心上。翻页由横滑承担（lightbox-stage pointerup，阈值 48px）。 */
-  .lb-arrow {
-    display: none;
+  /* —— 首屏骨架：盒模型/列定义/gap 与 .gallery 同组（见 sections 层），
+        这里只保留骨架自身的质感 —— */
+  .gallery-skeleton span {
+    display: block;
+    aspect-ratio: 4 / 3;
+    border-radius: var(--r-lg);
+    background: linear-gradient(
+      100deg,
+      var(--surface) 32%,
+      color-mix(in oklab, var(--surface), var(--text) 7%) 50%,
+      var(--surface) 68%
+    );
+    background-size: 220% 100%;
+    animation: skeleton-shimmer 1.6s linear infinite;
   }
 
-  .btn {
+  @keyframes skeleton-shimmer {
+    to {
+      background-position: -220% 0;
+    }
+  }
+
+  /* 骨架屏退场用的 .gallery-skeleton[hidden] { display: none } 写在 sections 层：
+     层优先级高于本层，才能反过来压过那一层的 display: grid（见该处注释）。 */
+
+  /* —— 画作卡片：圆角台面 + 环境光，照片完整显示（contain 而非裁切） —— */
+  .card {
+    appearance: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    text-align: left;
+    cursor: zoom-in;
+    font: inherit;
+    color: inherit;
     width: 100%;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    touch-action: manipulation;
+    border-radius: var(--r-lg);
+
+    /* 不做 content-visibility:auto —— 它隐含的 paint containment 会把子盒裁到卡片
+       自身盒内，直接裁掉 .card-media::before 溢出到画框外的环境光
+       （实测：加 paint containment 时画框外墙面 hover 前后亮度差恒为 0.00，
+       移除后 hover 亮度 +31）。getComputedStyle().contain 报 none，属静默失效。
+       同时其 contain-intrinsic-height 估值（400px）远高于手机端实际卡高
+       （约 112–150px），滚动经过时会造成整行先撑高再塌缩的位移。
+       图片懒加载已由 loading="lazy" 承担。 */
+    isolation: isolate;
   }
 
-  /* 文字按钮（如「进入展厅」）不拉满：全宽下划线会横贯半屏，语义也不再是文字链 */
-  .btn-text {
-    width: auto;
+  /* 策展节奏：每 7 张的末张做「重点陈列」——独占一整行，形成呼吸。
+     卡片宽度按画心比例反算（--fit 由 applyRowFit 写入），
+     避免全宽卡片里装竖构图小画撑出大片空白 */
+  .card.is-feature {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, calc(64vh * var(--fit, 1.333)));
   }
 
-  .gh-actions .btn {
-    flex: 1 1 auto;
-    width: auto;
-  }
-
-  .footer-museum {
-    letter-spacing: 0.2em;
-    padding-left: 0.2em;
-  }
-}
-
-@media (hover: none) {
-  .card:hover .card-media img {
-    transform: none;
-  }
-}
-
-/* —— 排版细节 —— */
-h1,
-h2,
-h3 {
-  text-wrap: balance;
-}
-
-p {
-  text-wrap: pretty;
-}
-
-/* 屏外区块跳过渲染，contain-intrinsic 的 auto 记住已渲染高度避免跳动 */
-.upload-section {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 560px;
-}
-
-.footer {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 140px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  .site-nav-logo {
-    transition: none;
-  }
-
-  .card-media img,
-  .lightbox-img,
-  .hero-carousel-slide,
-  .hero-art img,
-  .hero-art::after,
-  .card-media::after,
-  .lightbox-frame::after,
-  .lightbox-frame.is-lit {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  .hero-carousel-slide.is-active img,
-  .lightbox-frame.is-lit img {
-    filter: none;
-  }
-
-  .card-media::before,
-  .hero-art::after {
-    opacity: 0.5;
-    transition: none;
-  }
-}
-
-}
-
-/* —— 现代特性与质感（追加区，归 sections 层：需覆盖 sections 内的 card/chapter 基础规则） —— */
-@layer sections {
-  /* 章节题 sticky：滚动时常驻，渐变底色避免与卡片叠字 */
-  .chapter-head {
-    position: sticky;
-    top: calc(var(--nav-h) + 6px);
-    z-index: 4;
-  }
-
-  .chapter-head::before {
-    content: "";
-
-    /* 横向铺满视口：遮罩与滚动区同宽，左右不露边；
-       底部渐隐让卡片从标题下方透出 */
-    position: absolute;
-    inset-block: -16px -30px;
-    inset-inline: calc(50% - 50vw);
-    background: linear-gradient(to bottom, var(--room) 62%, transparent 100%);
-    pointer-events: none;
-    z-index: -1;
-  }
-
-  /* 章节竖排小字（右缘装饰） */
-  .gallery-section,
-  .about,
-  .upload-section {
+  .card-media {
     position: relative;
+
+    /* 本盒不裁切：::before 的环境光必须能溢出到卡片之外。
+       裁切职责交给 .card-media-glass（只包画心），否则 overflow:hidden
+       会把环境光一并裁掉，只剩框内 4px 可见。 */
+    overflow: visible;
+
+    --card-wall: #1c1c1e;
+    --card-glow: rgba(255, 255, 255, 0.08);
+    --card-accent: rgba(255, 255, 255, 0.1);
+
+    /* 画心内衬：留出细边，照片不贴边 */
+    --frame-inset: 4px;
+
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    padding: var(--frame-inset);
+    border: 2px solid var(--hairline-soft);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    transition: box-shadow 0.45s var(--ease), border-color 0.45s var(--ease),
+      transform 0.45s var(--ease);
   }
 
-  .chapter-vert {
+  /* 环境光：取自画作本身的调色板（manifest 预计算），落在卡片四周。
+     只做氛围、不压画心：低透明度 + 大范围径向衰减。 */
+  .card-media::before {
+    content: "";
     position: absolute;
-    top: 104px;
-    right: 22px;
-    writing-mode: vertical-rl;
-    font-family: var(--display);
-    font-size: 11px;
-    letter-spacing: 0.4em;
-
-    /* 装饰字仍需过 AA（axe 对 aria-hidden 文本照测对比度）：gilt 对各深绿底 ≥ 6 */
-    color: var(--gilt);
+    inset: -28px -20px;
+    z-index: -1;
+    border-radius: 34px;
+    background: radial-gradient(
+      58% 58% at 50% 48%,
+      var(--card-accent),
+      transparent 72%
+    );
+    opacity: 0.45;
     pointer-events: none;
-    user-select: none;
+    transition: opacity 0.45s var(--ease);
   }
 
-  /* 卡片 hover 升级 = 射灯打亮：锥光增强 + 顶边高光 + 投影下坠更深 */
+  /* 画心裁切盒：只承担「hover 缩放不出框」的裁剪 */
+  .card-media-glass {
+    position: absolute;
+    inset: var(--frame-inset);
+    overflow: hidden;
+    border-radius: calc(var(--r-lg) - var(--frame-inset) - 2px);
+  }
+
+  .card-media img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    object-fit: contain;
+    object-position: center;
+
+    /* 画心内侧：比例不符时信箱化为画作自身的墙色，而非裁切 */
+    background: var(--card-wall, #1c1c1e);
+    transition: transform 0.6s var(--ease);
+  }
+
+  /* hover / 键盘聚焦 = 抬起 + 环境光变亮 */
   .card:hover .card-media,
   .card:focus-visible .card-media {
-    border-color: var(--gilt);
-    border-top-color: var(--gilt-bright);
-    box-shadow:
-      0 0 0 1px rgba(42, 36, 24, 0.35),
-      0 24px 48px rgba(0, 0, 0, 0.54),
-      0 8px 34px color-mix(in oklab, var(--card-glow) 62%, rgba(201, 169, 106, 0.42));
+    border-color: var(--hairline);
+    box-shadow: var(--shadow-2);
+    transform: translateY(-3px);
   }
 
   .card:hover .card-media::before,
   .card:focus-visible .card-media::before {
-    background:
-      radial-gradient(ellipse 42% 60% at 50% -8%, rgba(255, 248, 230, 0.44), transparent 66%),
-      radial-gradient(ellipse 104% 84% at 50% 42%, var(--card-accent), transparent 76%);
+    opacity: 0.85;
   }
 
-  /* 墙签浮层：默认无字，hover/键盘聚焦浮现 */
+  .card:hover .card-media img,
+  .card:focus-visible .card-media img {
+    transform: scale(1.03);
+  }
+
+  .card:focus-visible {
+    outline: none;
+  }
+
+  .card:focus-visible .card-media {
+    outline: 3px solid color-mix(in oklab, var(--accent) 60%, transparent);
+    outline-offset: 6px;
+  }
+
+  .card-badge {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    z-index: 2;
+    padding: 4px 9px;
+    border-radius: var(--r-pill);
+    font-family: var(--font);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    background: var(--fill);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    color: var(--text);
+    pointer-events: none;
+  }
+
+  /* 墙签：默认无字陈列，hover / 键盘聚焦浮现。
+     单一文本节点：多节点列布局会被 axe 提取为 \n 分隔的可见文本，与 aria-label 无法匹配 */
   .card-anno {
     position: absolute;
-    inset: auto 0 0 0;
-    z-index: 1;
-    padding: 16px 13px 11px;
-    background: linear-gradient(to bottom, transparent, rgba(14, 18, 16, 0.92) 64%);
-    font-family: var(--display);
+    inset: auto 0 0;
+    z-index: 2;
+    padding: 34px 14px 12px;
+    border-radius: 0 0 calc(var(--r-lg) - 2px) calc(var(--r-lg) - 2px);
+    background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.72) 62%);
+    font-family: var(--font);
     font-size: 13px;
-    letter-spacing: 0.1em;
-    color: var(--ivory);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: #fff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     opacity: 0;
-    transform: translateY(8px);
-    transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
+    transform: translateY(6px);
+    transition: opacity 0.35s var(--ease), transform 0.35s var(--ease);
     pointer-events: none;
   }
 
@@ -1684,41 +840,757 @@ p {
     transform: none;
   }
 
-  /* 首屏骨架：manifest 未到时占位，数据到达后隐藏。
-     盒模型/列定义/gap 全部由上方 .gallery 同组规则提供（见 :753 注释），
-     本处只保留骨架自身的东西，避免两套值再次漂移。 */
-  .gallery-skeleton span {
-    display: block;
-    aspect-ratio: 4 / 3;
-    background: linear-gradient(
-      110deg,
-      var(--room-soft) 32%,
-      color-mix(in oklab, var(--room-soft), var(--gilt) 12%) 48%,
-      var(--room-soft) 64%
-    );
-    background-size: 220% 100%;
-    animation: skeleton-shimmer 1.5s linear infinite;
+  /* —— 库房：登记入藏面板 —— */
+  .upload-inner {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 40px 32px;
+    border-radius: 28px;
+    background: var(--surface);
+    text-align: center;
   }
 
-  @keyframes skeleton-shimmer {
+  .upload-title {
+    font-size: clamp(22px, 3vw, 28px);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    line-height: 1.25;
+    color: var(--text);
+    padding-left: 0.08em;
+  }
+
+  .upload-section #addPhotoBtn {
+    margin-top: 22px;
+  }
+
+  .upload-status {
+    margin: 16px auto 0;
+    min-height: 1.4em;
+    max-width: 28em;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    color: var(--text-2);
+  }
+
+  .upload-status.is-error {
+    color: var(--danger);
+  }
+
+  .gh-panel {
+    margin-top: 28px;
+    text-align: left;
+    border: 1px solid var(--hairline-soft);
+    border-radius: var(--r-md);
+    padding: 0 16px 16px;
+    background: transparent;
+  }
+
+  .gh-panel > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 16px 0;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text-2);
+    transition: color 0.25s var(--ease);
+  }
+
+  /* 展开指示：右缘雪佛龙，展开时翻转 */
+  .gh-panel > summary::after {
+    content: "";
+    float: right;
+    width: 8px;
+    height: 8px;
+    margin-top: 6px;
+    border-right: 1.5px solid currentcolor;
+    border-bottom: 1.5px solid currentcolor;
+    transform: rotate(45deg);
+    transition: transform 0.3s var(--ease);
+  }
+
+  .gh-panel[open] > summary::after {
+    transform: rotate(-135deg);
+  }
+
+  .gh-panel > summary:hover {
+    color: var(--text);
+  }
+
+  .gh-panel > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .gh-fields {
+    display: grid;
+    gap: 12px;
+  }
+
+  .gh-field {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--text-2);
+  }
+
+  .gh-field input {
+    width: 100%;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-sm);
+    padding: 11px 14px;
+    min-height: 44px;
+    font-family: var(--font);
+    font-size: 15px;
+    letter-spacing: 0;
+    color: var(--text);
+    background: var(--bg);
+  }
+
+  .gh-field input::placeholder {
+    color: var(--text-2);
+  }
+
+  .gh-field input:focus-visible {
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+
+  .gh-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .gh-hint {
+    margin: 4px 0 0;
+    font-size: 12px;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    color: var(--text-2);
+  }
+
+  /* —— 观画室：全屏模态，纯色底 + 环境光 —— */
+  .lightbox {
+    position: fixed;
+    inset: 0;
+
+    /* <dialog> UA reset：fit-content 宽高/内边距/边框会破坏全屏铺排 */
+    box-sizing: border-box;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--text);
+
+    /* 同序厅：随画环境色由 JS 写入，过渡写在变量本身 */
+    --room-adapt: #0a0a0a;
+    --room-adapt-deep: #000;
+    --room-adapt-glow: rgba(255, 255, 255, 0.05);
+
+    background:
+      radial-gradient(ellipse 62% 44% at 50% 0%, var(--room-adapt-glow), transparent 66%),
+      linear-gradient(180deg, var(--room-adapt) 0%, var(--room-adapt-deep) 100%);
+    overscroll-behavior: contain;
+    touch-action: none;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+    transition:
+      background 0.6s var(--ease),
+      --room-adapt 0.65s var(--ease),
+      --room-adapt-deep 0.65s var(--ease),
+      --room-adapt-glow 0.65s var(--ease);
+  }
+
+  .lightbox:not([open]) {
+    display: none;
+  }
+
+  dialog.lightbox::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .lightbox-chrome {
+    display: flex;
+    justify-content: flex-end;
+    padding: 14px 18px 4px;
+    flex-shrink: 0;
+  }
+
+  .lb-close {
+    appearance: none;
+    border: 0;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--fill);
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    transition: background 0.25s var(--ease);
+  }
+
+  .lb-close:hover {
+    background: var(--fill-strong);
+  }
+
+  .lightbox-stage {
+    position: relative;
+    flex: 1 1 0%;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 56px;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* 画作容器：图不得大于框 */
+  .lightbox-frame {
+    --frame-pad: 6px;
+    --frame-border: 2px;
+
+    /* 观画室放足画面：上限取 72vh，竖构图才撑得开（横构图先触 940px 宽度限） */
+    --frame-max-w: min(86vw, 940px);
+    --frame-max-h: min(72vh, 760px);
+
+    position: relative;
+    box-sizing: border-box;
+    width: fit-content;
+    height: fit-content;
+    max-width: var(--frame-max-w);
+    max-height: var(--frame-max-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--frame-pad);
+    border: var(--frame-border) solid var(--hairline-soft);
+    border-radius: 18px;
+    background: color-mix(in oklab, var(--surface) 72%, transparent);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+
+  /* 观画室：无框反光，只有墙面的环境光。
+     但 .lightbox-frame.is-lit img 的 animation:none 是**生效**的
+     ——它关掉 .lightbox-img 的 lb-in 入场动画，故保留。 */
+  .lightbox-frame.is-lit img {
+    animation: none;
+    filter: none;
+  }
+
+  .lightbox-img {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: calc(var(--frame-max-w, 940px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 2px));
+    max-height: calc(var(--frame-max-h, 760px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 2px));
+    object-fit: contain;
+    border-radius: 12px;
+    animation: lb-in 0.4s var(--ease) both;
+    transform: translate(var(--lb-tx, 0), var(--lb-ty, 0)) scale(var(--lb-zoom, 1));
+    transition: transform 0.35s var(--ease);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: auto;
+    background: var(--surface);
+    flex: 0 0 auto;
+  }
+
+  .lightbox-img.is-panning {
+    transition: none;
+    cursor: grabbing;
+  }
+
+  .lightbox-img.is-zoomed {
+    cursor: zoom-out;
+  }
+
+  /* 只动 opacity：fill both 的 transform 会永久盖掉缩放手势的 transform */
+  @keyframes lb-in {
+    from {
+      opacity: 0;
+    }
+
     to {
-      background-position: -220% 0;
+      opacity: 1;
     }
   }
 
+  .lb-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+
+    /* 画框在 .lb-prev 之后绘制：画作放大到贴近两侧时（窄屏），箭头须显式压在画框之上，
+       否则左箭头会被画框盖住、与右箭头不对称 */
+    z-index: 2;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: var(--fill);
+    color: var(--text);
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    transition: background 0.25s var(--ease);
+  }
+
+  .lb-arrow svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .lb-arrow:hover {
+    background: var(--fill-strong);
+  }
+
+  .lb-prev {
+    left: 16px;
+  }
+
+  .lb-next {
+    right: 16px;
+  }
+
+  .lightbox-meta {
+    flex-shrink: 0;
+    text-align: center;
+    padding: 12px 20px calc(22px + env(safe-area-inset-bottom));
+    max-height: 24vh;
+    overflow: auto;
+  }
+
+  .lb-title {
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+  }
+
+  body.lb-open {
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* —— 亮色主题：环境色只作底纹，主调仍是页面底色——照片落在浅色台面上。
+        放在本层末尾：它与上面 .hero-carousel / .lightbox 的基础 background
+        同层同权重，靠源序取胜，上移就会被基础值压死。 —— */
+  @media (prefers-color-scheme: light) {
+    .hero-carousel,
+    .lightbox {
+      background:
+        radial-gradient(
+          ellipse 68% 44% at 50% 4%,
+          color-mix(in oklab, var(--room-adapt-glow) 40%, transparent),
+          transparent 68%
+        ),
+        linear-gradient(
+          180deg,
+          color-mix(in oklab, var(--room-adapt) 22%, var(--bg)) 0%,
+          color-mix(in oklab, var(--room-adapt-deep) 8%, var(--bg)) 100%
+        );
+    }
+  }
+}
+
+@layer sections {
+  .chapter-room {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  .chapter-room-deep {
+    background: var(--bg-1);
+    color: var(--text);
+  }
+
+  .chapter-head {
+    max-width: var(--max);
+    margin: 0 auto 28px;
+    padding: 0 28px;
+    text-align: center;
+  }
+
+  .chapter-title {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    line-height: 1.2;
+    color: var(--text);
+    padding-left: 0.14em;
+  }
+
+  .gallery-section {
+    padding: 96px 0 88px;
+
+    /* 卡片环境光会向左右各溢出 20px：最外侧卡片会顶出视口造成整页横向滚动。
+       这里按展厅盒边界裁切横向；clip 不产生滚动容器，纵向仍 visible。 */
+    overflow-x: clip;
+    background: var(--bg);
+  }
+
+  /* —— 展厅网格 ——
+     骨架屏与真实展厅共用同一条盒模型/列定义/gap 规则 —— 故意写成同一组选择器，
+     而不是各写一份相同的值：这样两者不可能漂移。
+     历史问题：骨架屏曾自带一套 auto-fill minmax(260px) + 64px/40px，
+     在 390px 下算出 1 列，而真实展厅是 2 列 → 数据到达时正好在 LCP 窗口内发生列数跳变。
+     注意：三处断点（本处基值、responsive 层窄屏、以及任何新增断点）都必须带上
+     .gallery-skeleton，否则新断点会静默失效。 */
+  .gallery,
+  .gallery-skeleton {
+    max-width: var(--max-wide);
+    margin: 0 auto;
+    padding: 28px 40px 8px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 52px 36px;
+
+    /* 中线挂画：同排画心对齐同一水平中线（真实画廊挂画规则），
+       而非顶部对齐——竖横混排时底部参差会撑出大片空洞 */
+    align-items: center;
+  }
+
+  /* [hidden] 必须写在**同一层、同一规则组之后**：上面的 display:grid 在本层，
+     若把它留在 components 层，层优先级会让 grid 反过来压死 display:none，
+     骨架屏在数据到达后不会退场（e2e「缺元素时降级运行」实测抓到过）。 */
   .gallery-skeleton[hidden] {
     display: none;
   }
 
-  /* 颗粒噪点：整站质感（SVG turbulence，固定层） */
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    pointer-events: none;
-    opacity: 0.05;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* —— 前言 —— */
+  .about {
+    padding: 120px 28px;
+    text-align: center;
+  }
+
+  .about-inner {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .about-title {
+    margin-bottom: 24px;
+    font-size: clamp(30px, 5vw, 46px);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    line-height: 1.24;
+    color: var(--text);
+  }
+
+  /* —— 库房 —— */
+  .upload-section {
+    padding: 72px 28px 88px;
+
+    /* 屏外区块跳过渲染，contain-intrinsic 的 auto 记住已渲染高度避免跳动 */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 560px;
+  }
+
+  /* —— 馆脚 —— */
+  .footer {
+    background: var(--bg-1);
+    border-top: 1px solid var(--hairline-soft);
+    padding: 44px 28px 52px;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 140px;
+  }
+
+  .footer-inner {
+    max-width: var(--max);
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .footer-museum {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    color: var(--text);
+    padding-left: 0.18em;
+  }
+
+  .footer-copy {
+    margin: 12px 0 0;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+  }
+
+  /* —— 排版细节 —— */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* —— View Transitions —— */
+::view-transition-old(milan-lightbox-img),
+::view-transition-new(milan-lightbox-img) {
+  animation-duration: 0.32s;
+  animation-timing-function: var(--ease);
+  mix-blend-mode: normal;
+}
+
+::view-transition-group(milan-lightbox-img) {
+  z-index: 1001;
+}
+
+@layer responsive {
+  /* 本层整体晚于 components / sections，故这里写下的值天然赢过基础值。
+     ⚠️ 层内若同时出现「不带媒体查询的基础值 + 媒体查询覆盖」，基础值必须写在
+     媒体查询**之前**（同层同权重靠源序取胜）。这条以前踩过：无字陈列块曾写在
+     窄屏断点之后，把 .gallery gap / .chapter-head margin-bottom 等四处窄屏值静默压死。 */
+
+  @media (max-width: 834px) {
+    .gallery-section {
+      padding: 72px 0 64px;
+    }
+
+    .about {
+      padding: 96px 24px;
+    }
+
+    .upload-section {
+      padding: 56px 22px 64px;
+    }
+
+    .hero-art,
+    .hero-art img,
+    .hero-carousel-slide img {
+      max-height: min(60vh, 600px);
+    }
+  }
+
+  @media (max-width: 560px) {
+    body {
+      font-size: 16px;
+    }
+
+    .site-nav-inner {
+      padding: 0 16px;
+    }
+
+    .site-nav-logo {
+      font-size: 14px;
+      letter-spacing: 0.06em;
+    }
+
+    .site-nav-links {
+      gap: 16px;
+    }
+
+    .site-nav-links a {
+      font-size: 12px;
+      letter-spacing: 0.02em;
+    }
+
+    .hero-plate {
+      padding-top: calc(var(--nav-h) + 20px);
+      padding-bottom: 8px;
+    }
+
+    .hero-title {
+      font-size: clamp(26px, 7vw, 34px);
+      letter-spacing: 0.08em;
+      padding-left: 0.08em;
+    }
+
+    .hero-carousel-slide {
+      padding: 4px 20px;
+    }
+
+    .hero-art,
+    .hero-art img,
+    .hero-carousel-slide img {
+      max-height: min(58vh, 520px);
+    }
+
+    .hero-art img,
+    .hero-carousel-slide img {
+      max-width: min(92vw, 620px);
+      border-radius: 12px;
+    }
+
+    /* 窄屏隐藏翻页箭头：画心 92% 视宽、左右仅约 15px 边距，
+       40px 箭头会压在画心上。翻页由横滑（heroCarousel pointerup，阈值 40px）
+       与分页点承担，二者都保留。 */
+    .hero-carousel-arrow {
+      display: none;
+    }
+
+    .chapter-head {
+      margin-bottom: 36px;
+      padding: 0 18px;
+    }
+
+    .chapter-title {
+      font-size: clamp(24px, 6.4vw, 30px);
+      letter-spacing: 0.1em;
+      padding-left: 0.1em;
+    }
+
+    .gallery-section {
+      padding: 56px 0 48px;
+    }
+
+    /* 与 .gallery 同组：窄屏骨架必须是 2 列，否则数据到达瞬间会从 1 列跳成 2 列 */
+    .gallery,
+    .gallery-skeleton {
+      grid-template-columns: 1fr 1fr;
+      gap: 40px 16px;
+      padding: 20px 18px 8px;
+    }
+
+    .card-media {
+      border-width: 1px;
+      border-radius: 16px;
+
+      --frame-inset: 3px;
+    }
+
+    .card-media-glass {
+      border-radius: 12px;
+    }
+
+    .filter-bar {
+      margin: 0 auto 24px;
+      padding: 0 16px;
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+
+    .filter-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter-chip {
+      flex: 0 0 auto;
+    }
+
+    .about-title,
+    .upload-title {
+      letter-spacing: 0.06em;
+      padding-left: 0.06em;
+    }
+
+    .upload-inner {
+      padding: 30px 20px;
+      border-radius: 22px;
+    }
+
+    .lightbox-stage {
+      padding: 4px 10px;
+    }
+
+    .lightbox-frame {
+      --frame-pad: 4px;
+      --frame-max-w: min(94vw, 900px);
+      --frame-max-h: min(70vh, 640px);
+    }
+
+    /* 窄屏隐藏翻页箭头：frame 占 94vw、左右仅约 12px 边距，
+       44px 箭头会压在画心上。翻页由横滑承担（lightbox-stage pointerup，阈值 48px）。 */
+    .lb-arrow {
+      display: none;
+    }
+
+    .btn {
+      width: 100%;
+    }
+
+    /* 文字按钮（如「进入展厅」）不拉满：全宽下划线会横贯半屏，语义也不再是文字链 */
+    .btn-text {
+      width: auto;
+    }
+
+    .gh-actions .btn {
+      flex: 1 1 auto;
+      width: auto;
+    }
+
+    .footer-museum {
+      letter-spacing: 0.16em;
+      padding-left: 0.16em;
+    }
+  }
+
+  /* 触屏没有 hover：墙签浮层无处触发，直接不显示
+     （等价文本仍在卡片的 aria-label 与图片 alt 上，无障碍契约不受影响） */
+  @media (hover: none) {
+    .card-anno {
+      display: none;
+    }
+
+    .card:hover .card-media img {
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    .site-nav-logo,
+    .hero-carousel-slide,
+    .hero-carousel-slide img,
+    .hero-art img,
+    .card-media,
+    .card-media::before,
+    .card-media img,
+    .card-anno,
+    .lightbox-img,
+    .gh-panel > summary::after {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    .gallery-skeleton span {
+      animation: none;
+    }
+
+    .hero-carousel-slide.is-active img,
+    .lightbox-frame.is-lit img {
+      filter: none;
+    }
   }
 
   /* 滚动渐显（view timeline），不支持的浏览器自动跳过 */
@@ -1733,7 +1605,7 @@ p {
       @keyframes card-rise {
         from {
           opacity: 0;
-          transform: translateY(22px);
+          transform: translateY(16px);
         }
 
         to {
@@ -1741,30 +1613,6 @@ p {
           transform: none;
         }
       }
-    }
-  }
-
-  /* 动效与输入适配 */
-  @media (prefers-reduced-motion: reduce) {
-    .card-anno,
-    .card-media {
-      transition: none;
-    }
-
-    .gallery-skeleton span {
-      animation: none;
-    }
-  }
-
-  @media (hover: none) {
-    .card-anno {
-      display: none;
-    }
-  }
-
-  @media (max-width: 900px) {
-    .chapter-vert {
-      display: none;
     }
   }
 }

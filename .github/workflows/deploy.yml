@@ -18,13 +18,25 @@ permissions:
   pages: write
   id-token: write
 
-# 同时只允许一个部署，排队中的直接取消——避免旧产物把新产物覆盖回去
+# 同时只允许一个部署，排队中的直接取消——避免旧产物把新产物覆盖回去。
+# （官方 starter 用 false「让进行中的部署跑完」；本仓取 true：连推时只关心最终态，
+#   被取消的中间 run 本就该作废，新 run 会部署最新提交，不存在半成品。）
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
+  # 发布门禁：复用 CI 全量（照片 GPS/长边不变量 + lint + e2e + lhci），绿了才构建部署。
+  # 为什么必须有：两条链原本各自 on: push、互不依赖——破坏性提交会先上线、CI 后报红；
+  # 尤其 sanitize --check 失败拦不住含 GPS 的照片被发布（deploy 照样把 photos/ 拷进产物），
+  # 直接违背「母版不带 GPS」的硬约束。用 workflow_call 复用 ci.yml 而非手写步骤副本：
+  # 配置单源、不随 CI 演进而漂移。代价是 push 时测试执行两遍（两链并行，墙钟 ≈ CI 时长，
+  # 线上更新延迟到门禁绿——这正是本 job 存在的意义）。
+  gate:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

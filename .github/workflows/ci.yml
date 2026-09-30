@@ -3,6 +3,13 @@ name: CI
 on:
   push:
   workflow_dispatch:
+  # deploy.yml 作为发布门禁复用本工作流（配置单源：改测试命令只改这里，
+  # 门禁自动跟上，不会两处漂移）。详见 deploy.yml 的 gate job 注释。
+  workflow_call:
+
+# 最小权限：本工作流只读代码、跑测试，无任何写操作
+permissions:
+  contents: read
 
 jobs:
   lint-and-test:

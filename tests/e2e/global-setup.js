@@ -1,6 +1,6 @@
 // 资产来源自检（e2e globalSetup）：确认 baseURL 上跑的确实是**本工作区刚构建的 dist**。
 //
-// 两类风险（都是实证踩过的坑），四层对策：
+// 两类风险（都是实证踩过的坑），五层对策：
 //
 //   风险 A：端口被另一个目录的服务占用，webServer.reuseExistingServer 只要 URL 可达
 //           就静默复用 → 用例跑在别的仓库资产上，症状与「本次改动没生效」完全无法区分
@@ -18,6 +18,11 @@
 //   对策 4（能力）：manifest 不得是降级版（缺 palette / thumbAvifSrcset 说明生成它的
 //         环境没装 Pillow）。该文件直接被站点发布，降级版会让访客与测试同时受害，
 //         且症状是「红点散落在互不相关的地方」——必须在开跑前拦住。
+//   对策 5（引用完整性）：index.html / manifest.webmanifest / robots.txt 引用到的静态
+//         资源（og.jpg、512 图标、sitemap.xml…）必须真实进 dist。这类引用不经过
+//         Vite 资源图（绝对 URL 或 public 内引用），漏拷即线上必 404；而 vite preview
+//         的 SPA 兜底会把 404 变成 200 text/html，本地永远看不出来（GitHub Pages
+//         没有兜底）——2026-09-30 审查抓到的 S1 就是这么漏上线的。
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -40,7 +45,10 @@ const SOURCES = [
   "public",
   "src",
   "package.json",
+  "package-lock.json",
   "photos",
+  "assets",
+  "sitemap.xml",
 ];
 
 function sha256(buf) {
@@ -134,6 +142,36 @@ module.exports = async function globalSetup(config) {
     }
   } catch (err) {
     problems.push(`public/sw.js 读取失败（${(err && err.message) || err}）`);
+  }
+
+  // ── 对策 5：被引用的静态资源必须真实进 dist（漏拷即线上 404，且被 preview 兜底掩盖） ──
+  try {
+    const expected = new Set();
+    // index.html：剥掉注释再扫（注释里的举例字面量不是引用），收集 assets/* 路径——
+    // 覆盖相对引用（favicon/icon-192）与绝对 URL 引用（og:image 的 assets/og.jpg）
+    const html = fs.readFileSync(path.join(DIST, "index.html"), "utf8").replace(/<!--[\s\S]*?-->/g, "");
+    for (const m of html.matchAll(/assets\/[A-Za-z0-9._-]+/g)) expected.add(m[0]);
+    // manifest.webmanifest（public 内引用根 assets，不进 Vite 资源图）
+    const webmanifest = JSON.parse(
+      fs.readFileSync(path.join(ROOT, "public", "manifest.webmanifest"), "utf8")
+    );
+    for (const icon of webmanifest.icons || []) {
+      const src = String(icon.src || "").replace(/^\.\//, "");
+      if (src && !/^https?:/.test(src)) expected.add(src);
+    }
+    // robots.txt 的 Sitemap 绝对 URL → 取 pathname、剥掉部署前缀（/milan-photos/）
+    const robots = fs.readFileSync(path.join(ROOT, "public", "robots.txt"), "utf8");
+    const sm = /^Sitemap:\s*(\S+)/m.exec(robots);
+    if (sm) expected.add(new URL(sm[1]).pathname.replace(/^\/[^/]+\//, "/"));
+    for (const rel of expected) {
+      if (!fs.existsSync(path.join(DIST, rel))) {
+        problems.push(
+          `被引用资源 ${rel} 不在 dist —— 线上必 404（vite preview 的 SPA 兜底会本地掩盖成 200）`
+        );
+      }
+    }
+  } catch (err) {
+    problems.push(`引用完整性检查失败（${(err && err.message) || err}）`);
   }
 
   if (problems.length > 0) {

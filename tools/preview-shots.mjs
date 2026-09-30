@@ -1,8 +1,10 @@
 // 临时视觉核对脚本（截图产物在 .gitignore 内的 tools/preview-*.png）
-// 用法：先起服务（`npm run build && npm run preview`，或 `npm run dev`），再 node tools/preview-shots.mjs
+// 用法：先起服务——`npm run preview`（默认 4173，即本脚本默认值）或 `npm run dev`（5173，
+// 需 BASE 覆盖：BASE=http://127.0.0.1:5173 node tools/preview-shots.mjs），再运行本脚本。
+// 端口被 MILAN_PORT 改过时同理用 BASE 对齐（e2e 的 8080 服务在跑时 BASE=http://127.0.0.1:8080）。
 import { chromium } from "@playwright/test";
 
-const BASE = process.env.BASE || "http://127.0.0.1:8080";
+const BASE = process.env.BASE || "http://127.0.0.1:4173";
 
 const SCENES = [
   { file: "preview-apple-hero-light.png", scheme: "light", w: 1440, h: 900, act: null },

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-纯静态 GitHub Pages 照片墙（当前视觉：Apple 式系统语言——系统字体栈 + 中性表面 + 圆角卡片 + 毛玻璃 chrome，亮/暗双主题跟随系统）。**Vite 构建管线**（2026-09-30 起；此前是零构建源码直出）：仓库里是源码，线上是 `dist/` 产物——`vite.config.js` 固定产物名（不带 hash）、`base:"./"`（相对路径，兼容子路径站点）。工程化 dev 工具：Vite / ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` → `app.js`（构建时与 `src/*.js` 打成单文件，dev 下按 ESM 直服）+ `styles.css` + `public/`（`sw.js` / `manifest.webmanifest` / `robots.txt`，原样拷贝、不做转换）。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 由 `deploy.yml` 构建 `dist/` 后经 Actions 发布（非分支直出）。
+纯静态 GitHub Pages 照片墙（当前视觉：Apple 式系统语言——系统字体栈 + 中性表面 + 圆角卡片 + 毛玻璃 chrome，亮/暗双主题跟随系统）。**Vite 构建管线**（2026-09-30 起；此前是零构建源码直出）：仓库里是源码，线上是 `dist/` 产物——`vite.config.js` 固定产物名（不带 hash）、`base:"./"`（相对路径，兼容子路径站点）。工程化 dev 工具：Vite / ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` → `app.js`（构建时与 `src/*.js` 打成单文件，dev 下按 ESM 直服）+ `styles.css` + `public/`（`sw.js` / `manifest.webmanifest` / `robots.txt`，原样拷贝、不做转换）。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 由 `deploy.yml` 先复用 `ci.yml` 全量作门禁、再构建 `dist/` 经 Actions 发布（非分支直出）。
 
 ## 命令
 
@@ -15,15 +15,15 @@ npm run lint                # ESLint + Stylelint
 npm run test:unit           # 纯函数单测（node --test，零新依赖，毫秒级）
 npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，27 项）
 npm run lhci                # Lighthouse CI（先 build 再审，a11y/BP/SEO 满分断言）
-node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview/dev；产物 tools/preview-apple-*.png，已 gitignore）
+node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / dev 5173——dev 用 BASE 指端口；产物 tools/preview-apple-*.png，已 gitignore）
 ```
 
 - **dev 与产物是两种形态**：`npm run dev` 直服源码（`src/*.js` 独立请求、带 HMR），`npm run build` 才是线上形态（`app.js` 单文件、JS/CSS 已压缩；体积 120KB→83KiB、LCP 2180→1900ms）。**新图上墙 dev 期要先 `npm run sync`**——Vite 读的是**仓库里提交的** `manifest.json`，serve.py 时代的 mtime 自动重建已退役；`photos/` 推上去后 CI 的 sync-photos 会生成并回写。**dev 形态不注册 Service Worker**（`app.js` 的 `isViteDev` 守卫）：Vite dev 对同一 URL 按请求形态返回不同内容——`<link>` 要 `styles.css` 拿裸 CSS，SW 的 `addAll`/页面 fetch 拿到的却是 JS 包装版，两者挤在同一缓存键上互相覆盖，二次刷新必丢样式（实测 `.site-nav` 掉回 static、`cssRules 0`）；且 dev 缓存的是带 HMR 注入的转换形态。产物形态不受影响（dist 是固定裸 CSS，构建时 `import.meta.env.DEV` 静态求值为 false、注册照旧），**SW 行为一律在 preview 形态用 e2e 验证**（「SW 激活」「SW 离线」两测依赖应用自动注册，即产物路径的护栏）。
 - 端口：dev 5173 / preview 4173 / e2e 默认 8080（覆盖用 `MILAN_PORT=8099 npm run test:e2e`，webServer 与 baseURL 同源）。e2e 的 preview 用 `--strictPort`：端口被占**直接失败**，不会悄悄换端口硬跑。
-- **e2e 有资产来源自检**（`tests/e2e/global-setup.js`），四层，任一不符即中止整个运行：① **新鲜度**——任一源码比 `dist/index.html` 新就先补 `npm run build`（复用本地已起的旧 preview 时靠它兜底）；② **逐字节**——服务返回的 `index.html`/`app.js`/`styles.css`/`sw.js` 与 `dist/` 磁盘文件 sha256 比对，防「端口上是另一个目录的服务，而 `reuseExistingServer` 静默复用了它」；③ **SW 清单完整性**——`public/sw.js` 的 `SHELL_ASSETS` 每一项都要在 `dist/` 真实存在（多列一条 → install 的 `cache.addAll` 整组 reject → 全站悄悄失去 SW）；④ **manifest 能力**——必须带 `thumbAvifSrcset` / `palette`。有 ② 之后，全绿或全红都与本仓库强相关，不再出现「跑的是别人的服务」这种带偏排查的假象。
-- 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；留档截图用 `node tools/preview-shots.mjs`（先起 `npm run preview` 或 `npm run dev`；亮/暗 × 序厅/展厅/灯箱/前言/库房 + 手机宽，共 10 张）。截图类视觉验证前确认窗口前台（rAF ≈16ms）。
+- **e2e 有资产来源自检**（`tests/e2e/global-setup.js`），五层，任一不符即中止整个运行：① **新鲜度**——任一源码比 `dist/index.html` 新就先补 `npm run build`（复用本地已起的旧 preview 时靠它兜底）；② **逐字节**——服务返回的 `index.html`/`app.js`/`styles.css`/`sw.js` 与 `dist/` 磁盘文件 sha256 比对，防「端口上是另一个目录的服务，而 `reuseExistingServer` 静默复用了它」；③ **SW 清单完整性**——`public/sw.js` 的 `SHELL_ASSETS` 每一项都要在 `dist/` 真实存在（多列一条 → install 的 `cache.addAll` 整组 reject → 全站悄悄失去 SW）；④ **manifest 能力**——必须带 `thumbAvifSrcset` / `palette`；⑤ **引用完整性**——`index.html` / `manifest.webmanifest` / `robots.txt` 引用到的静态资源（`assets/og.jpg`、512 图标、`sitemap.xml`）必须真实进 `dist`（这类引用走绝对 URL 或 public 内引用、不进 Vite 资源图，漏拷即线上 404，且被 preview 的 SPA 兜底掩盖成本地 200——见 `appType:"mpa"` 注释）。有 ②⑤ 之后，全绿或全红都与本仓库强相关，不再出现「跑的是别人的服务」或「本地 200 线上 404」这种带偏排查的假象。
+- 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；留档截图用 `node tools/preview-shots.mjs`（先起 `npm run preview`——默认 4173 与脚本一致，或 `npm run dev`——5173 需 `BASE=http://127.0.0.1:5173`；亮/暗 × 序厅/展厅/灯箱/前言/库房 + 手机宽，共 10 张）。截图类视觉验证前确认窗口前台（rAF ≈16ms）。
 - **manifest 必须是完整版**：`dist/photos/manifest.json` 就是仓库里提交的那份（构建只拷贝、不重算）。缺 `palette`/`thumbAvifSrcset` 的降级版只有在**没装 Pillow** 的环境里 sync 才会生成——一旦提交，访客与测试同时受害，症状是红点散落到互不相关的地方；`global-setup.js` 会在开跑前明确报出。**本机解释器状态会漂移**（`python`/`py` 都曾指向过缺 Pillow 的那个；2026-09-30 实测两者同为 3.12.7 且都有 Pillow），别信记忆。CI 在 `setup-python` 后显式 `pip install "Pillow>=11"`，线上不受影响。
-- CI 三条链：`sync-photos.yml`（photos/sync 脚本变更时**先治母版**再生成，bot 回写 `photos/` 全量）；`ci.yml`（**所有 push**：母版两条不变量检查 → lint → e2e → lhci）；`deploy.yml`（**所有 push**：`npm run build` → 发布 `dist/` 到 Pages）。**仓库 Settings → Pages 的 Source 必须保持 GitHub Actions**——改回 branch 模式会让 deploy 失败、线上退回源码直出。
+- CI 三条链：`sync-photos.yml`（photos/sync 脚本变更时**先治母版**再生成，bot 回写 `photos/` 全量）；`ci.yml`（**所有 push**：母版两条不变量检查 → lint → e2e → lhci；另带 `workflow_call` 供 deploy 复用）；`deploy.yml`（**所有 push**：**gate = 复用 ci.yml 全量，绿了才** `npm run build` → 发布 `dist/` 到 Pages——没有这道门禁时，破坏性提交会先上线、含 GPS 的照片也会照发）。**仓库 Settings → Pages 的 Source 必须保持 GitHub Actions**——改回 branch 模式会让 deploy 失败、线上退回源码直出。
 
 ## 数据与生成物
 
@@ -34,7 +34,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview/dev；�
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
-| `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入 |
+| `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入，另补拷 `assets/` 与 `sitemap.xml`（见 `copyStaticPlugin` 注释） |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
 - 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
@@ -72,7 +72,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview/dev；�
    做法：① 纯计算抽成**具名导出**（`clampPan` / `anchorZoom` / `resolveVtSource` …），单测直接 import；② DOM 引用与跨域能力（墙色 / 深链 / 视图过渡 / 预载 / 卡片反查 / 导航序列 / 序厅轮播暂停）走 `ports` 注入，**不**反向 import `app.js`；③ 装配点放在宿主顶部（工厂调用即绑事件，放晚了会撞 `const` 的 TDZ）。
    **按会话注入的能力走 `open()` 的参数，不要做成端口**：视图过渡的「显式源」只对一次序厅点击有效，若做成端口（只能按 photoId 查），从展厅卡片打开灯箱而该画恰好也是序厅当前那张时，卡片源会被序厅画面覆盖。同理，跨 open/close 存活的会话态（如该提供者）留在工厂闭包内。
    仍留在 `app.js` 的 `sampleRoomColor` / `applyRowFit` / `renderGallery` 尚未拆，原因是没有独立状态域或收益不足 —— 拆之前先确认能划出「自成一域 + 有回归网」的边界。
-2. **SW 清单只列壳层，且不能多列**：Vite 把 `src/*.js` 打进 `app.js`，旧契约「清单要覆盖 src/ 全部文件」随打包**消失**（新模块自动进包，离线骨架屏那类坑不再可能，**不用**改清单）。现行契约反过来：`SHELL_ASSETS` 必须**恰好**等于构建产物的壳层（`./` `./index.html` `./styles.css` `./app.js` `./manifest.webmanifest`）——**多列**一条产物里不存在的条目（如忘删的 `./src/…`），install 的 `cache.addAll` 会整组 reject，表现为**全站悄悄失去 SW**（页面照常跑，只是不再离线可服务，不炸不报错）。`tests/unit/sw-assets.test.mjs` 钉清单形状（毫秒级、不依赖构建），`tests/e2e/global-setup.js` 对 `dist/` 核对每项真实存在。`isShellRequest()` 保留 `path.includes("/src/")` 分支仅为 dev 期兼容，无害。
+2. **SW 清单只列壳层，且不能多列**：Vite 把 `src/*.js` 打进 `app.js`，旧契约「清单要覆盖 src/ 全部文件」随打包**消失**（新模块自动进包，离线骨架屏那类坑不再可能，**不用**改清单）。现行契约反过来：`SHELL_ASSETS` 必须**恰好**等于构建产物的壳层（`./` `./index.html` `./styles.css` `./app.js` `./manifest.webmanifest`）——**多列**一条产物里不存在的条目（如忘删的 `./src/…`），install 的 `cache.addAll` 会整组 reject，表现为**全站悄悄失去 SW**（页面照常跑，只是不再离线可服务，不炸不报错）。`tests/unit/sw-assets.test.mjs` 钉清单形状（毫秒级、不依赖构建），`tests/e2e/global-setup.js` 对 `dist/` 核对每项真实存在。`isShellRequest()` 曾为 dev 期保留的 `path.includes("/src/")` 分支**已删**——dev 形态现在根本不注册 SW（见上「dev 与产物是两种形态」），产物里也没有 `/src/` 请求，两边都无人走。
 3. **`src/package.json` 的 `{"type":"module"}` 不要动**：仓库根 `package.json` 必须保持**无** `type`（否则 `playwright.config.js` 的 `require` 失效），所以由 `src/` 单独向 Node 声明 ESM 身份；浏览器不读这个文件。
 
 `npm run test:unit` 就是 `node --test`（自动发现 `**/*.test.mjs`，不会误扫 `tests/e2e/*.spec.js`）。写测试注意三个坑：

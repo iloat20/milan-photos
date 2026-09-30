@@ -49,9 +49,10 @@
   </script>
 
   <title>米兰美术馆 · 油画展厅</title>
-  <link rel="preload" href="styles.css" as="style" />
-  <!-- （Vite 起）src/*.js 由构建打进 app.js 单文件，不再需要手写 modulepreload：
-       打包后没有额外的模块请求跳数，Vite 会为自己的产物注入 modulepreload。 -->
+  <!-- （Vite 起）手写 preload 已全部移除：src/*.js 由构建打进 app.js 单文件，不需要
+       modulepreload；app.js / styles.css 的 <link rel="preload"> 也会被 Vite 当静态资源
+       处理（实测：preload app.js 会复制出一份未压缩的 dist/assets/app.js，preload
+       styles.css 则被静默删除）——入口脚本已在头部、样式表紧随其后，无需预载。 -->
   <!-- 清单请求提前到 HTML 解析期：等 app.js 下载完再发 fetch 会在模拟图里
        串出 app.js → manifest → 序厅图 的三跳链（LCP 的 Load Delay 实测 334ms，
        每跳 ~150ms）。这里先发，app.js 用 window.__milanManifest 消费同一 Promise，

@@ -923,6 +923,8 @@ import { createLightbox } from "./src/lightbox.js";
         // 它是存储层、不依赖 SW 拦截，install 快照必在——终结「离线 0 卡」
         const cached = await caches.match("photos/manifest.json", {
           ignoreSearch: true,
+          // 与 sw.js 各 match 点同因：preview/dev 发 Vary: Origin，本缓存是同源自产内容
+          ignoreVary: true,
         });
         if (cached) {
           data = await cached.json();

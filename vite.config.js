@@ -15,23 +15,40 @@ const path = require("node:path");
 const ROOT = __dirname;
 
 /**
- * 站点必需、但不在 Vite 资源图里的目录拷贝。
- * Vite 只会搬运 public/ 与「被 index.html / JS 引用到的资源」；
- * photos/manifest.json 是运行时 fetch 的，永远不会进图，只能显式拷。
+ * 站点必需、但不在 Vite 资源图里的文件拷贝。
+ * Vite 只会搬运 public/ 与「被 index.html / JS 以可解析方式引用到的资源」；
+ * 下列内容永远进不了图，只能显式拷：
+ *   - photos/（含运行时 fetch 的 manifest.json）
+ *   - assets/ 的一部分：og.jpg 被 og:image 以**绝对 URL** 引用、icon-512 系被
+ *     public/manifest.webmanifest 引用——两种都不经资源图（也不能整体搬进 public：
+ *     index.html 相对引用 ./assets/favicon-32.png，HTML 引用 public 目录会被 Vite 警告）。
+ *     同名的 favicon/icon-192 已被 HTML 相对引用进产物，覆盖即同内容，无害。
+ *   - sitemap.xml：robots.txt 里是绝对 URL 引用。
+ * 漏拷的后果是线上 404，且被 vite preview 的 SPA 兜底掩盖成本地 200（S1 实证），
+ * e2e globalSetup 对策 5 会拦。
  */
 function copyStaticPlugin() {
   return {
-    name: "copy-photos",
+    name: "copy-static",
     closeBundle() {
       fs.cpSync(path.join(ROOT, "photos"), path.join(ROOT, "dist", "photos"), {
         recursive: true,
       });
+      fs.cpSync(path.join(ROOT, "assets"), path.join(ROOT, "dist", "assets"), {
+        recursive: true,
+      });
+      fs.cpSync(path.join(ROOT, "sitemap.xml"), path.join(ROOT, "dist", "sitemap.xml"));
     },
   };
 }
 
 module.exports = {
   base: "./",
+  // preview 的 404 语义对齐 GitHub Pages（S1 教训）：默认 appType:"spa" 会给未知路径
+  // 回退 index.html（200 text/html），把「资源缺失」在本地掩盖成 200——og.jpg / sitemap
+  // 就是这么漏到线上的（e2e 对策 5 会在开跑前拦）。本站只有 hash 深链、无 client router，
+  // SPA 回退毫无用处；dev 下未知路径也直接 404，不误导。
+  appType: "mpa",
   publicDir: "public", // sw.js / robots.txt / manifest.webmanifest：原样搬运、不做转换
   plugins: [copyStaticPlugin()],
   build: {

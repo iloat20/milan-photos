@@ -77,9 +77,6 @@ function isShellRequest(url) {
   return (
     path.endsWith("/styles.css") ||
     path.endsWith("/app.js") ||
-    // ESM 模块（P2-2 拆出的 src/*.js）：同样走壳层 SWR，
-    // 否则 app.js 命中缓存但它的 import 图拉不到 → 离线整站停摆
-    path.includes("/src/") ||
     path.endsWith("/index.html") ||
     path.endsWith("/") ||
     path.endsWith("/milan") ||

@@ -57,4 +57,15 @@ export default [
       globals: { ...globals.node },
     },
   },
+  {
+    // tools 下的 ESM 脚本（如 preview-shots.mjs）：宿主在 Node（process/console），
+    // 而 page.evaluate / waitForFunction 的回调体在浏览器上下文执行（document）。
+    // 与 tests/**/*.js 同一处理：两侧全局都放行。
+    files: ["tools/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
 ];

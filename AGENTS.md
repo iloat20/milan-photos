@@ -1,6 +1,6 @@
 # AGENTS.md
 
-纯静态 GitHub Pages 照片墙（当前视觉：油画馆陈列）。**无打包/构建步骤**（源码直出）；工程化 dev 工具：ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` + `app.js`（`<script type="module">`）+ `src/*.js`（原生 ESM，同样零构建）+ `styles.css` + `sw.js`。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 部署 `main` 分支根目录。
+纯静态 GitHub Pages 照片墙（当前视觉：Apple 式系统语言——系统字体栈 + 中性表面 + 圆角卡片 + 毛玻璃 chrome，亮/暗双主题跟随系统）。**无打包/构建步骤**（源码直出）；工程化 dev 工具：ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` + `app.js`（`<script type="module">`）+ `src/*.js`（原生 ESM，同样零构建）+ `styles.css` + `sw.js`。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 部署 `main` 分支根目录。
 
 ## 命令
 
@@ -13,14 +13,14 @@ npm run lint                   # ESLint + Stylelint
 npm run test:unit              # 纯函数单测（node --test，零新依赖，毫秒级）
 npm run test:e2e               # Playwright 冒烟（自动起 serve.py，27 项）
 npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
-node tools/build-font-subset.js # 改文案后重生成标题字体子集（需网络；不跑则新字逐字回退 SimSun）
+node tools/preview-shots.mjs   # 视觉核对截图（需先起 serve.py；产物 tools/preview-apple-*.png，已 gitignore）
 ```
 
 - 本地预览：`serve.py` 对 `/photos/manifest.json` 做 mtime 戳缓存（`photos/` 变了自动重建），新图刷新即见，**不要**为预览去跑 sync。
 - 端口默认 8080，可覆盖：`python tools/serve.py --port 8099` 或 `MILAN_PORT=8099 npm run test:e2e`（`playwright.config.js` 的 `baseURL`/`webServer` 与 `serve.py` 同源，改一处即可）。Windows 下 `serve.py` 用 `SO_EXCLUSIVEADDRUSE`：端口被占用时**直接启动失败**，不会两个进程共享同一端口。
 - **e2e 有资产来源自检**（`tests/e2e/global-setup.js`）：跑用例前把服务返回的 `index.html`/`app.js`/`styles.css`/`sw.js` 与磁盘文件做 sha256 比对，**并检查 manifest 是否带 `thumbAvifSrcset` / `palette`**，任一不符即中止。前者防「端口上是另一个目录的服务，而 `reuseExistingServer` 静默复用了它」——那种情况下全绿或全红都与本仓库无关；后者防「服务其实在无 Pillow 降级模式下跑」。
-- 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；截图类视觉验证前确认窗口前台（rAF ≈16ms）。
-- e2e 起的服务必须**装了 Pillow**：缺 Pillow 时 `serve.py` 会静默降级（不生成缩略图、不算 `palette`），而 manifest 仍返回 200 —— 用例不是报错，是被测对象悄悄变成降级版，红点会散落到互不相关的地方。本机实测 `python`（托管 3.13）与 `py`（系统 3.12）是**两个解释器**且只有后者有 Pillow。`global-setup.js` 会明确报出这种情况；临时换解释器：`MILAN_PY=py npx playwright test`。CI 在 `setup-python` 后显式 `pip install "Pillow>=11"`，线上不受影响。
+- 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；留档截图用 `node tools/preview-shots.mjs`（亮/暗 × 序厅/展厅/灯箱/前言/库房 + 手机宽，共 10 张）。截图类视觉验证前确认窗口前台（rAF ≈16ms）。
+- e2e 起的服务必须**装了 Pillow**：缺 Pillow 时 `serve.py` 会静默降级（不生成缩略图、不算 `palette`），而 manifest 仍返回 200 —— 用例不是报错，是被测对象悄悄变成降级版，红点会散落到互不相关的地方。**本机解释器状态会漂移**（`python` / `py` 都曾各自指向过缺 Pillow 的那个；2026-09-30 实测两者同为 3.12.7 且都有 Pillow），所以别信记忆：`global-setup.js` 会明确报出降级服务；临时换解释器用 `MILAN_PY=py npx playwright test`。CI 在 `setup-python` 后显式 `pip install "Pillow>=11"`，线上不受影响。
 - CI 两条链：`sync-photos.yml`（photos/sync 脚本变更时**先治母版**再生成，bot 回写 `photos/` 全量）；`ci.yml`（**所有 push**：母版两条不变量检查 → lint → e2e → lhci）。
 
 ## 数据与生成物
@@ -32,7 +32,6 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
-| `assets/fonts/milan-serif.woff2` | 标题字体子集（200 字形 / ~74KB / 可变 400–600），`tools/build-font-subset.js` 生成，字形来源在 `tools/font-glyphs.js`；只含**可见**文本，改文案后重跑（见下「必做」） |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
 - 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
@@ -83,22 +82,17 @@ node tools/build-font-subset.js # 改文案后重生成标题字体子集（需�
 
 改 `index.html` / `styles.css` / `app.js` 后，**必须**把 `sw.js` 里的 `VERSION`（当前形如 `milan-vN`）往上抬。否则旧壳层缓存会让线上更新失效。
 
-例外：只替换 `assets/fonts/milan-serif.woff2` 时**不要**抬。理由有三：① `.woff2` 走 `shellSwr`（stale-while-revalidate），下次加载就会把新字体换进缓存，不会长期滞留；② 换字体只减不增「已渲染字形」（旧字体是超集），视觉上新旧等价，晚一次生效无影响；③ 而抬 `VERSION` 会让 `activate` 删掉旧 cache —— **连 `CACHE_MEDIA` 一起清空**，回访者要重下全部缩略图，代价远大于省下的那点字体体积。
+历史例外（只换 `assets/fonts/*.woff2` 不抬版本：字体子集是超集缩减、而抬版本会连 `CACHE_MEDIA` 一起清空）**随自托管字体一起退役**——见下「字体」节。现在没有例外：改任何壳层资产都抬版本。
 
-## 必做：字体子集的字形来源要跟着模块走
+## 字体：系统栈（子集工具已退役）
 
-`assets/fonts/milan-serif.woff2` 只含**站内可见**字形；子集外的字会**逐个回落 SimSun**，同一串文字里出现两种字体，而脚本与页面都不报错 —— 属于静默故障。字形来源的收集在 `tools/font-glyphs.js`，契约由 `tests/unit/font-subset.test.mjs` 钉住。
+2026-09-30 起标题不再自托管字体：`assets/fonts/`、`tools/build-font-subset.js`、`tools/font-glyphs.js`、`tests/unit/font-subset.test.mjs` 与 `sw.js` 里的字体快照**全部移除**，`--font` 是纯系统字体栈（Windows 中文衬线走系统回退）。改文案**不再有**「重跑字体生成」这一步（`meta.json` 的 `caption` 依旧站内无处渲染，与字体无关）。
 
-两条已经踩过的坑：
+历史教训仍有效——将来若重新引入自托管子集，三件护栏必须一起恢复（均被实证明必要）：
 
-1. **`src/*.js` 也是文案来源，不能漏扫。** P2-2 把 `displayTitle`（产出 `《无题 · NN》`）与 `ymLabel`（产出 `NNNN年N月`）从 `app.js` 搬进 `src/util.js`，而当时脚本的来源清单没跟上。线上字体是**搬迁之前**生成的，靠巧合没暴露。
-2. **改文案后必须重跑脚本，且这条没有自动护栏。** 实证：`app.js:1433` 的上传失败文案 `另有 N 张本地失败（文件过大）。` 被加进来之后没重跑，导致 `大` / `过` 两个字**在线上一直是 SimSun**——`.upload-status` 用的是 `var(--display)`（本站字体栈），所以这串字里确实混着两种字体。2026-09-29 重新生成后修复（新旧 cmap 差集实测：仅新字体多 `大过` 两字形）。
-
-所以：**改任何可见文案 → 重跑 `node tools/build-font-subset.js`**（需网络）。重跑后可用 `fontTools` + `brotli` 解析 woff2 的 cmap 做核实：必须命中 `无题《》年月`，且 **不含** `meta.json` 里 caption 独有的字（caption 无处渲染，见下）。
-
-`meta.json` 只取 **`title`** 值：`caption` 站内**无处渲染**（`.hero-carousel-caption` / `.card-meta` / `.lb-caption` / `.lb-index` / `.lb-medium` / `.lightbox-meta` 全在隐藏清单里，`app.js` 里 `caption` 只被搬运）。收进来会多带 59 个独占字形（实测 254 → 200，字体 97,180 → 75,300 B）。而 `title` **会**渲染：`.card-anno` 用 `var(--display)` 承接 `${wallNo} ${titleText}`。
-
-顺带记一条**不是**杠杆的：字重轴。实测 `wght@400..600` 与 `wght@400..500` 的产物字节完全相同，Google Fonts 的 `text=` 子集只按**字形数**打包。要瘦身只能改来源，别动字重档位。
+1. **字形来源要跟着模块走**：`src/*.js` 也产出可见文案（`displayTitle` 的 `《无题 · NN》`、`ymLabel` 的 `NNNN年N月`），漏扫即同一串文字混排两种字体且页面/脚本都不报错（静默故障）。
+2. **要有契约测试**：`tests/unit/font-subset.test.mjs` 曾钉住「来源集合 == 渲染文本集合」；后加文案漏重跑，新字会线上逐字回落 SimSun（实证：上传失败文案里的 `大` / `过`）。
+3. **SW 例外要写清理由**：换子集只减不增字形，且「抬 `VERSION` 会连 `CACHE_MEDIA` 一起清空」——恢复子集时这段取舍说明要一起带回（现行政策见上「Service Worker 版本」节）。
 
 ## 必做：manifest 新字段要接进白名单
 
@@ -119,26 +113,26 @@ done
 三个易踩点（P2-1 实证）：
 
 1. **带缩进的 `@media` 内覆盖最容易漏。** 用 `^\.selector` 锚定行首核对，会漏掉 media query 里缩进两格的同名规则——`.card-meta` / `.card-title` / `.card-caption` / `.about-text` 的窄屏覆盖就是这么漏过第一轮的。核对一律用 `\.selector\s*\{` 且**不限行首**。
-2. **`!important` 会反转 `@layer` 优先级。** 同一属性都带 `!important` 时，**低优先级层胜出**——`components` 层的 `display: none !important` 强于 `responsive` 层的同类声明。`.filter-bar::before` 在 components（`:374`）与隐藏清单（responsive）各有一条，**生效的是前者**。判断「哪条赢」时不能只看层顺序。
-3. **墓碑要连消费者一起看。** `.hero-art::after { content: none }` / `.card-media::after { content: none }` / `.lightbox-frame::after { content: none }` 可删（全文再无任何地方为这些伪元素定义 `content`，属于纯 no-op）；但 `.lightbox-frame.is-lit img { animation: none }` **不可删**——它实际关掉了 `.lightbox-img` 的 `lb-in` 入场动画。同一块里 `.lightbox-frame.is-lit`（与基础规则同值）是 no-op、`@keyframes frame-lit` 无人引用，两者已删。**删 CSS 前先确认它是否被 JS 隐式依赖。**
+2. **`!important` 会反转 `@layer` 优先级。** 同一属性都带 `!important` 时**低优先级层胜出**，判断「哪条赢」不能只看层顺序。现存相关写法：`.hero-carousel-pause[hidden] { display: none !important }`（components 层）压住一切非 `!important` 的 display；给 `[hidden]` 元素补显隐样式时不要用同属性 `!important` 去顶，层序会反噬。当前全文件仅 3 处 `!important`（上述一处 + reduced-motion 的 `animation/transition: none`），新增前先问「不加能不能赢」。
+3. **删 CSS 前先确认它是否被 JS 隐式依赖。** 现行实例：`.lightbox-frame.is-lit img { animation: none }`（components）**不可删**——它实际关掉 `.lightbox-img` 的 `lb-in` 入场动画，原位注释（约 `:1091`）已把这条钉住。历史上还清过一批纯 no-op 墓碑（`.hero-art::after` / `.card-media::after` / `.lightbox-frame::after` 的 `content: none`）——可删判据是「全文再无任何地方为这些伪元素定义 `content`」。
 
 ## 设计意图（勿当 bug「修好」）
 
-当前是**无字油画馆**：`@layer responsive` 块**最前**（不是文件末尾；位置敏感，见该处注释）用一份 `display: none !important` 清单藏掉墙签、画作说明、章节 kicker、上传文案、页脚说明等。**不要**改成浅色机构馆藏站（Met/卢浮宫式有标签馆藏 UI）——那是外部对标结论里的「不建议」项，不是缺陷。
+当前是**「无字陈列」+ 亮/暗双主题**（Apple 式系统语言）。「无字」的**现行实现**是墙签默认不可见：`.card-anno { opacity: 0 }`，hover / 键盘聚焦才浮现（`.card:hover .card-anno` / `.card:focus-visible .card-anno`，见 `styles.css:810` 附近注释）。**不要**改成标签常显的馆藏 UI（Met/卢浮宫式一图一签）——那是外部对标结论里的「不建议」项，不是缺陷；亮/暗主题跟随系统（`prefers-color-scheme`）是**有意设计**，也别当成机构风要裁掉。
 
-⚠️ 该清单是**意图声明**：其中多数选择器（`.hero-kicker` / `.chapter-sub` / `.card-meta` / `.lb-index` / `.upload-sub` / `.footer-note` …）在 `index.html` 与 `app.js` 中**已无对应节点**，因此是 no-op 声明。**保留清单本身**（它是「这些元素被有意隐藏」的记录，且位置敏感），但**不要再为它们写样式定义**——P2-1 已按此清掉 218 行死 CSS。
+历史记录：旧版曾用一份 `display: none !important` 清单（藏 `.hero-kicker` / `.chapter-sub` / `.card-meta` / `.lb-index` / `.upload-sub` / `.footer-note` 等）做「无字」，其中多数选择器早已无节点（no-op 声明）。2026-09-30 重绘时**清单连同这些死选择器整体删除**——这些名字**不要**再写成样式定义（写了就是新的死 CSS）。
 
-- 展厅墙面取色：**在 sync 阶段预计算**（`photos_lib.photo_palette()` → manifest 的 `palette` 字段，四值 `wall` / `deep` / `glow` / `accent`），客户端只做样式赋值。同一张画在卡片／序厅／灯箱共用一套墙色（P1-6 之前三处各采各的，同画三色）。`app.js` 的 `sampleRoomColor()` 退居**回退**，只服务浏览器内上传的图（`photo.custom`，没有 manifest 条目）。取色值会按与象牙字的对比度**压暗墙色**，避免亮画把 chrome 冲没。
-- 金框用 box-shadow / border 模拟；光晕应落在墙面（伪元素），**不要**打在画心上。
-- 框要退到照片**之后**：框面统一古铜金 `--gilt-dark`、勾边 `--gilt-edge` 再暗一档、框体窄（序厅 7px / 卡片 `--frame-inset` 4px / 灯箱 `--frame-pad` 6px）——**不要**改回亮金 `--gilt` 粗框，那会压过画心；`--gilt` 只留给文字、分页点与 hover 提边。
+- 环境光取色：**在 sync 阶段预计算**（`photos_lib.photo_palette()` → manifest 的 `palette` 字段，四值 `wall` / `deep` / `glow` / `accent`），客户端只做样式赋值——卡片写 `--card-wall/--card-glow/--card-accent`（`applyCardPalette`），序厅与灯箱写 `--room-adapt*`（`@property` 注册、过渡平滑，见 `styles.css:27` 附近）。同一张画在卡片／序厅／灯箱共用一套色（P1-6 之前三处各采各的，同画三色）。`app.js` 的 `sampleRoomColor()` 退居**回退**，只服务浏览器内上传的图（`photo.custom`，没有 manifest 条目）。取色会按与前景文字的对比度**压暗**，避免亮画把 chrome 冲没。
+- 画框是**中性细边 + 圆角**：卡片 = `--surface` 底 + `2px var(--hairline-soft)` + `--r-lg`，照片再内缩 `--frame-inset: 4px`；灯箱同构（`--frame-pad: 6px` / `--frame-border: 2px` / radius 18px）。**不要**加宽/提亮成装饰性金框或粗边，那会压过画心。
+- 环境光晕落在画框**之外**的四周（`.card-media::before`：径向 `--card-accent`、`opacity .45`、`inset: -28px -20px`、`z-index: -1`），**不要**打在画心上；为此 `.card-media` 自身 `overflow: visible` 不裁切，裁切只交给 `.card-media-glass`（管 hover 缩放不出框）。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
 - 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
-- 卡片的光是「轨道射灯」：框顶边受光更亮、锥光落在画框**上方**的墙面、投影向下坠，hover 即打亮；`--display` 字体栈里 `Milan Serif` 是站内字形子集（Windows 无系统中文衬线时兜底），插在 `STSong` 后、`SimSun` 前。
+- 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2` + 边框提亮到 `--hairline`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
 - 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。
 
 ### 网格与比例（正名）
 
-- 展厅是 **CSS Grid 规则格 + 金框画心**（`repeat(auto-fill, minmax(260px,1fr))`），**不是** Flickr justified（等高行、不裁切凑满宽），也**不是** CSS masonry/grid-lanes。
+- 展厅是 **CSS Grid 规则格 + 细边画心**（`repeat(auto-fill, minmax(260px,1fr))`，见 `.gallery`/`:1271`），**不是** Flickr justified（等高行、不裁切凑满宽），也**不是** CSS masonry/grid-lanes。
 - 画框 `aspect-ratio` 由 `applyRowFit()` 按画心宽高设定，钳制在约 0.55–1.9；未知尺寸时 CSS 默认 4:3。
 - 列表 `.card-media img` 与灯箱均为 `object-fit: contain`：比例与画框不一致时完整显示画心，框内以墙面色信箱化，避免 cover 裁切。
 - `README.md` 若再写「justified」即过时，以本节与代码为准。
@@ -163,7 +157,7 @@ done
 ## Git
 
 - 提交信息风格：`type: 中文描述`，type 常用 `feat` / `ui` / `chore` / `perf` / `photos`。
-- `tools/preview-*.png` 是设计过程稿，**已加入 `.gitignore`**，不要提交。
+- `tools/preview-*.png`（含截图工具产出的 `preview-apple-*.png`）是设计过程稿，**已加入 `.gitignore`**，不要提交。
 - 推送若因 CI 刚写回 manifest 被拒：`git fetch && git rebase origin/main` 再推；勿 force push `main`。
 - 不要手改 bot 管理的 `photos/manifest.json` / `thumbs/` / `medium/` 当作功能提交。
 

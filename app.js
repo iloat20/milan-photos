@@ -1674,7 +1674,20 @@ import { createLightbox } from "./src/lightbox.js";
     (window.__lf || (window.__lf = [])).push("custom-unhandled:" + (err && err.message));
   });
 
-  if ("serviceWorker" in navigator) {
+  // dev 形态（npm run dev）不注册 SW。Vite dev 对**同一 URL 按请求形态返回不同内容**：
+  // <link rel=stylesheet> 要 styles.css 拿到裸 CSS，而 SW 的 addAll / 页面 JS fetch
+  // 拿到的是 JS 包装版（实测缓存里 content-type: text/javascript）。两种形态挤在
+  // 同一缓存键上互相覆盖（shellSwr 的 revalidate 会把最后一次 fetch 的形态写回去），
+  // 二次刷新后 <link> 命中包装版 → 样式全丢（.site-nav 掉回 static、cssRules 0）。
+  // dev 缓存里的 app.js / index.html 还是 Vite 转换形态（带 HMR 注入），同样会让刷新
+  // 跑旧代码。产物（build / preview）不受影响：dist 里 styles.css 是固定裸 CSS，
+  // 且 import.meta.env.DEV 构建时被静态求值为 false，注册照旧。
+  // 用 typeof 守卫而非裸 import.meta.env.DEV：万一被非 Vite 的静态服务器直服源码
+  //（迁移前的老形态），裸引用会 TypeError 打挂整个 init；守卫下则退回「照常注册」。
+  // SW 行为一律用 e2e 验证（preview 形态），不要在 dev 下测 SW。
+  const isViteDev =
+    typeof import.meta.env === "object" && import.meta.env !== undefined && import.meta.env.DEV === true;
+  if ("serviceWorker" in navigator && !isViteDev) {
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("sw.js").catch(() => {
         /* file:// or unsupported — ignore */

@@ -21,6 +21,7 @@ __pycache__/
 
 # Node / 工程化
 node_modules/
+dist/
 .lighthouseci/
 test-results/
 playwright-report/

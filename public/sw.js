@@ -1,20 +1,19 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v44";
+const VERSION = "milan-v45";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
 const OWNED_CACHE_RE = /^milan-v\d+-(?:shell|media)$/;
 
-// P2-2 起 app.js 是 ESM，src/ 下的模块必须一并预缓存：
-// 模块加载失败会连坐 app.js（它 import 不进来就整个不执行），
-// 表现为离线时停在骨架屏。新增 src 模块时记得同步这里。
+// Vite 起：src/*.js 被打进 app.js 单文件，清单只需「构建产物的壳层」。
+// 曾经的坑（清单漏列 src 模块 → 首访后立刻离线停在骨架屏）随打包消失；
+// 反向的坑依然在：**多列**一个产物里不存在的条目（如忘删的 ./src/…）会让 install 的
+// cache.addAll 直接 reject，全站悄悄失去 SW。条目与 dist 的对齐由 e2e globalSetup 核对。
 const SHELL_ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
-  "./src/util.js",
-  "./src/lightbox.js",
   "./manifest.webmanifest",
 ];
 
@@ -123,7 +122,8 @@ async function putMedia(request, response) {
 }
 
 async function cacheFirst(request) {
-  const cached = await caches.match(request, { ignoreSearch: true });
+  // ignoreVary：与 shellSwr 同因（preview 发 Vary: Origin，同源自产缓存忽略之）
+  const cached = await caches.match(request, { ignoreSearch: true, ignoreVary: true });
   if (cached) {
     // 命中后重放一份到 media，便于 LRU 保留热图
     // （Cache API 无原生 recency，用 delete+put 近似）
@@ -163,7 +163,7 @@ async function networkFirst(request) {
     // 不把坏清单交给页面——否则 r.json() 抛错，展厅会空
     throw new Error("manifest fetch not ok");
   } catch {
-    const cached = await caches.match(request, { ignoreSearch: true });
+    const cached = await caches.match(request, { ignoreSearch: true, ignoreVary: true });
     if (cached) return cached;
     throw new Error("manifest unavailable offline");
   }
@@ -186,12 +186,22 @@ function shellSwr(request) {
     .catch(() => null);
 
   const serve = cacheP.then(async (cache) => {
-    const cached = await cache.match(request, { ignoreSearch: true });
+    // ignoreVary 是这次迁移的实证修复，别删：vite preview（与 dev）对静态文件发
+    // `Vary: Origin`，而 Cache API 的 Vary 匹配比较「存储时的请求」与「当前请求」的
+    // 同名头——addAll 的内部请求与 FetchEvent.request（cors 模式、带 Origin）不对称，
+    // 于是**键明明在 keys() 里却 match 不中**：离线首访拿不到壳层 → 兜底把 index.html
+    // 当 app.js 喂 → 模块 MIME 报错、展厅 0 卡。线上表现为约 40% 的偶发（取决于
+    // 热路径 revalidate 是否已用页面同款请求重写过条目）。本缓存是同源自产内容，
+    // Vary 无信息量，整体忽略。（旧 serve.py 不发 Vary: Origin，所以迁移前从未出现。）
+    const cached = await cache.match(request, { ignoreSearch: true, ignoreVary: true });
     if (cached) return cached;
     const response = await revalidate;
     if (response) return response;
-    const fallback = await caches.match("./index.html");
-    if (fallback) return fallback;
+    // HTML 只兜导航：把 index.html 当 JS/CSS 喂只会把「缺缓存」变成难查的 MIME 报错
+    if (request.mode === "navigate") {
+      const fallback = await caches.match("./index.html", { ignoreVary: true });
+      if (fallback) return fallback;
+    }
     return Response.error();
   });
 
@@ -212,7 +222,7 @@ function thumbSwr(request) {
     .catch(() => null);
 
   const serve = cacheP.then(async (cache) => {
-    const cached = await cache.match(request, { ignoreSearch: true });
+    const cached = await cache.match(request, { ignoreSearch: true, ignoreVary: true });
     if (cached) return cached;
     return (await revalidate) || Response.error();
   });

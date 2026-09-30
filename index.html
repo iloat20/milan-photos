@@ -50,13 +50,8 @@
 
   <title>米兰美术馆 · 油画展厅</title>
   <link rel="preload" href="styles.css" as="style" />
-  <!-- app.js 是模块脚本（CORS 模式取回），预载必须带 crossorigin 才与真实请求同键，
-       否则预载落空、脚本再下载一次。 -->
-  <link rel="preload" href="app.js" as="script" crossorigin />
-  <!-- 模块图并行发现：否则 import 要等 app.js 下载解析完才发起（串行多一跳 RTT，
-       simulate 模式下每跳 ~150ms，直接垫高 LCP 的 Load Delay） -->
-  <link rel="modulepreload" href="src/util.js" crossorigin />
-  <link rel="modulepreload" href="src/lightbox.js" crossorigin />
+  <!-- （Vite 起）src/*.js 由构建打进 app.js 单文件，不再需要手写 modulepreload：
+       打包后没有额外的模块请求跳数，Vite 会为自己的产物注入 modulepreload。 -->
   <!-- 清单请求提前到 HTML 解析期：等 app.js 下载完再发 fetch 会在模拟图里
        串出 app.js → manifest → 序厅图 的三跳链（LCP 的 Load Delay 实测 334ms，
        每跳 ~150ms）。这里先发，app.js 用 window.__milanManifest 消费同一 Promise，
@@ -66,6 +61,11 @@
     window.__milanManifest.catch(() => {});
   </script>
   <link rel="stylesheet" href="styles.css" />
+  <!-- 入口脚本放头部：type="module" 默认 defer（不阻塞解析、解析完才执行），且头部
+       的预加载扫描器最早发现它——等效于过去手写的 <link rel="preload" href="app.js">。
+       不要再手写那条预载：Vite 会把 href 当静态资源，复制出一份未压缩的
+       dist/assets/app.js（实测 68KB），预载反而去下载错误的文件。 -->
+  <script type="module" src="app.js"></script>
 </head>
 <body>
   <header class="site-nav" id="siteNav">
@@ -218,10 +218,7 @@
     </div>
   </dialog>
 
-  <!-- type="module"（P2-2）：app.js 现在从 ./src/util.js import 纯函数。
-       模块脚本默认就是 defer 语义，与原 `defer` 的执行时机一致，不改首屏行为。
-       ⚠️ sw.js 的 SHELL_ASSETS 必须同步列出 src/ 下的模块，否则离线时
-       app.js 能命中缓存、它的 import 却拉不到，整站停在骨架屏。 -->
-  <script type="module" src="app.js"></script>
+  <!-- 入口脚本已移入 <head>（见其处注释）：模块默认 defer，头部与 body 尾执行时机一致，
+       而头部能被预加载扫描器更早发现。 -->
 </body>
 </html>

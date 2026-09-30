@@ -3,7 +3,8 @@ import globals from "globals";
 
 export default [
   {
-    ignores: ["node_modules/**", "photos/**", "assets/**", ".lighthouseci/**", "test-results/**", "playwright-report/**"],
+    // dist/** 是构建产物：源码侧改 lint 规则时它永远是旧的，只对源码负责
+    ignores: ["node_modules/**", "dist/**", "photos/**", "assets/**", ".lighthouseci/**", "test-results/**", "playwright-report/**"],
   },
   js.configs.recommended,
   {
@@ -26,7 +27,8 @@ export default [
     },
   },
   {
-    files: ["sw.js"],
+    // sw.js 挪进 public/（Vite 会转换根目录 .js，public 里的才原样返回）
+    files: ["public/sw.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "script",
@@ -42,7 +44,7 @@ export default [
     },
   },
   {
-    files: ["playwright.config.js", "stylelint.config.js", "tests/**/*.js"],
+    files: ["playwright.config.js", "stylelint.config.js", "vite.config.js", "tests/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "commonjs",

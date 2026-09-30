@@ -1,5 +1,5 @@
 // 临时视觉核对脚本（截图产物在 .gitignore 内的 tools/preview-*.png）
-// 用法：先起 `python tools/serve.py`，再 node tools/preview-shots.mjs
+// 用法：先起服务（`npm run build && npm run preview`，或 `npm run dev`），再 node tools/preview-shots.mjs
 import { chromium } from "@playwright/test";
 
 const BASE = process.env.BASE || "http://127.0.0.1:8080";

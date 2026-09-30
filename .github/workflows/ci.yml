@@ -18,7 +18,7 @@ jobs:
           python-version: "3.12"
       - name: Install npm deps
         run: npm ci
-      - name: Install Pillow (serve.py 读 manifest)
+      - name: Install Pillow (downscale --check 需要；本机 sync 生成 manifest 同样靠它)
         run: pip install "Pillow>=11"
       # 护栏：母版既不得带 GPS，也不得超过长边上限。
       # 背景——手机原图可达 6000–8000px / 数十 MB，而站内展示只用 1600px 的 medium，

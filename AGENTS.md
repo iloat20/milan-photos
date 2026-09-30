@@ -1,27 +1,29 @@
 # AGENTS.md
 
-纯静态 GitHub Pages 照片墙（当前视觉：Apple 式系统语言——系统字体栈 + 中性表面 + 圆角卡片 + 毛玻璃 chrome，亮/暗双主题跟随系统）。**无打包/构建步骤**（源码直出）；工程化 dev 工具：ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` + `app.js`（`<script type="module">`）+ `src/*.js`（原生 ESM，同样零构建）+ `styles.css` + `sw.js`。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 部署 `main` 分支根目录。
+纯静态 GitHub Pages 照片墙（当前视觉：Apple 式系统语言——系统字体栈 + 中性表面 + 圆角卡片 + 毛玻璃 chrome，亮/暗双主题跟随系统）。**Vite 构建管线**（2026-09-30 起；此前是零构建源码直出）：仓库里是源码，线上是 `dist/` 产物——`vite.config.js` 固定产物名（不带 hash）、`base:"./"`（相对路径，兼容子路径站点）。工程化 dev 工具：Vite / ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` → `app.js`（构建时与 `src/*.js` 打成单文件，dev 下按 ESM 直服）+ `styles.css` + `public/`（`sw.js` / `manifest.webmanifest` / `robots.txt`，原样拷贝、不做转换）。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 由 `deploy.yml` 构建 `dist/` 后经 Actions 发布（非分支直出）。
 
 ## 命令
 
 ```powershell
-python tools/serve.py          # 本地预览 http://127.0.0.1:8080
-python tools/sync_photos.py    # 生成 manifest + thumbs + medium（需 Pillow；通常只由 CI 跑）
+npm run dev                 # Vite dev server → http://localhost:5173（HMR，src/*.js 是独立请求）
+npm run build               # 构建 dist/（线上同款产物；e2e / lhci / deploy 都用它）
+npm run preview             # 预览 dist/（默认 4173）
+npm run sync                # = python tools/sync_photos.py（需 Pillow；通常只由 CI 跑）
 python tools/downscale_photos.py [--check]  # 母版长边上限 2560（超限即降采样；--check 只检不写）
 python tools/sanitize_photos.py  [--check]  # 字节级剥离 JPEG GPS EXIF（零像素改动；--check 只检）
-npm run lint                   # ESLint + Stylelint
-npm run test:unit              # 纯函数单测（node --test，零新依赖，毫秒级）
-npm run test:e2e               # Playwright 冒烟（自动起 serve.py，27 项）
-npm run lhci                   # Lighthouse CI（a11y/BP/SEO 满分断言）
-node tools/preview-shots.mjs   # 视觉核对截图（需先起 serve.py；产物 tools/preview-apple-*.png，已 gitignore）
+npm run lint                # ESLint + Stylelint
+npm run test:unit           # 纯函数单测（node --test，零新依赖，毫秒级）
+npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，27 项）
+npm run lhci                # Lighthouse CI（先 build 再审，a11y/BP/SEO 满分断言）
+node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview/dev；产物 tools/preview-apple-*.png，已 gitignore）
 ```
 
-- 本地预览：`serve.py` 对 `/photos/manifest.json` 做 mtime 戳缓存（`photos/` 变了自动重建），新图刷新即见，**不要**为预览去跑 sync。
-- 端口默认 8080，可覆盖：`python tools/serve.py --port 8099` 或 `MILAN_PORT=8099 npm run test:e2e`（`playwright.config.js` 的 `baseURL`/`webServer` 与 `serve.py` 同源，改一处即可）。Windows 下 `serve.py` 用 `SO_EXCLUSIVEADDRUSE`：端口被占用时**直接启动失败**，不会两个进程共享同一端口。
-- **e2e 有资产来源自检**（`tests/e2e/global-setup.js`）：跑用例前把服务返回的 `index.html`/`app.js`/`styles.css`/`sw.js` 与磁盘文件做 sha256 比对，**并检查 manifest 是否带 `thumbAvifSrcset` / `palette`**，任一不符即中止。前者防「端口上是另一个目录的服务，而 `reuseExistingServer` 静默复用了它」——那种情况下全绿或全红都与本仓库无关；后者防「服务其实在无 Pillow 降级模式下跑」。
-- 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；留档截图用 `node tools/preview-shots.mjs`（亮/暗 × 序厅/展厅/灯箱/前言/库房 + 手机宽，共 10 张）。截图类视觉验证前确认窗口前台（rAF ≈16ms）。
-- e2e 起的服务必须**装了 Pillow**：缺 Pillow 时 `serve.py` 会静默降级（不生成缩略图、不算 `palette`），而 manifest 仍返回 200 —— 用例不是报错，是被测对象悄悄变成降级版，红点会散落到互不相关的地方。**本机解释器状态会漂移**（`python` / `py` 都曾各自指向过缺 Pillow 的那个；2026-09-30 实测两者同为 3.12.7 且都有 Pillow），所以别信记忆：`global-setup.js` 会明确报出降级服务；临时换解释器用 `MILAN_PY=py npx playwright test`。CI 在 `setup-python` 后显式 `pip install "Pillow>=11"`，线上不受影响。
-- CI 两条链：`sync-photos.yml`（photos/sync 脚本变更时**先治母版**再生成，bot 回写 `photos/` 全量）；`ci.yml`（**所有 push**：母版两条不变量检查 → lint → e2e → lhci）。
+- **dev 与产物是两种形态**：`npm run dev` 直服源码（`src/*.js` 独立请求、带 HMR），`npm run build` 才是线上形态（`app.js` 单文件、JS/CSS 已压缩；体积 120KB→83KiB、LCP 2180→1900ms）。**新图上墙 dev 期要先 `npm run sync`**——Vite 读的是**仓库里提交的** `manifest.json`，serve.py 时代的 mtime 自动重建已退役；`photos/` 推上去后 CI 的 sync-photos 会生成并回写。
+- 端口：dev 5173 / preview 4173 / e2e 默认 8080（覆盖用 `MILAN_PORT=8099 npm run test:e2e`，webServer 与 baseURL 同源）。e2e 的 preview 用 `--strictPort`：端口被占**直接失败**，不会悄悄换端口硬跑。
+- **e2e 有资产来源自检**（`tests/e2e/global-setup.js`），四层，任一不符即中止整个运行：① **新鲜度**——任一源码比 `dist/index.html` 新就先补 `npm run build`（复用本地已起的旧 preview 时靠它兜底）；② **逐字节**——服务返回的 `index.html`/`app.js`/`styles.css`/`sw.js` 与 `dist/` 磁盘文件 sha256 比对，防「端口上是另一个目录的服务，而 `reuseExistingServer` 静默复用了它」；③ **SW 清单完整性**——`public/sw.js` 的 `SHELL_ASSETS` 每一项都要在 `dist/` 真实存在（多列一条 → install 的 `cache.addAll` 整组 reject → 全站悄悄失去 SW）；④ **manifest 能力**——必须带 `thumbAvifSrcset` / `palette`。有 ② 之后，全绿或全红都与本仓库强相关，不再出现「跑的是别人的服务」这种带偏排查的假象。
+- 校验 UI：改完跑 `npm run lint && npm run test:unit && npm run test:e2e`，再浏览器核对轮播 / 展厅 / 灯箱 / 手机宽度；留档截图用 `node tools/preview-shots.mjs`（先起 `npm run preview` 或 `npm run dev`；亮/暗 × 序厅/展厅/灯箱/前言/库房 + 手机宽，共 10 张）。截图类视觉验证前确认窗口前台（rAF ≈16ms）。
+- **manifest 必须是完整版**：`dist/photos/manifest.json` 就是仓库里提交的那份（构建只拷贝、不重算）。缺 `palette`/`thumbAvifSrcset` 的降级版只有在**没装 Pillow** 的环境里 sync 才会生成——一旦提交，访客与测试同时受害，症状是红点散落到互不相关的地方；`global-setup.js` 会在开跑前明确报出。**本机解释器状态会漂移**（`python`/`py` 都曾指向过缺 Pillow 的那个；2026-09-30 实测两者同为 3.12.7 且都有 Pillow），别信记忆。CI 在 `setup-python` 后显式 `pip install "Pillow>=11"`，线上不受影响。
+- CI 三条链：`sync-photos.yml`（photos/sync 脚本变更时**先治母版**再生成，bot 回写 `photos/` 全量）；`ci.yml`（**所有 push**：母版两条不变量检查 → lint → e2e → lhci）；`deploy.yml`（**所有 push**：`npm run build` → 发布 `dist/` 到 Pages）。**仓库 Settings → Pages 的 Source 必须保持 GitHub Actions**——改回 branch 模式会让 deploy 失败、线上退回源码直出。
 
 ## 数据与生成物
 
@@ -32,6 +34,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 serve.py；产�
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
+| `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入 |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
 - 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
@@ -61,7 +64,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 serve.py；产�
 
 ## 必做：src/ 模块的三条约束
 
-`src/*.js` 是**原生 ESM**（`app.js` 以 `<script type="module">` 加载，仍然零构建），`tests/unit/*.test.mjs` 直接 import 它们做单测。往 `src/` 加模块或搬函数时：
+`src/*.js` 是**原生 ESM**（dev 下 Vite 按模块直服，构建时打包进 `app.js` 单文件），`tests/unit/*.test.mjs` 直接 import 它们做单测。往 `src/` 加模块或搬函数时：
 
 1. **零副作用**：import 时不得触碰 DOM / `window` / `localStorage` / `matchMedia`。碰了的话 Node 端 `import` 会抛错，单测根本加载不起来 —— 这是 `util.js` 只装纯函数的**唯一**原因。
    依赖 DOM 的域要拆出去，就得先解决状态注入 —— **`lightbox.js` 给出的既有范式：工厂 + 端口注入**。
@@ -69,7 +72,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 serve.py；产�
    做法：① 纯计算抽成**具名导出**（`clampPan` / `anchorZoom` / `resolveVtSource` …），单测直接 import；② DOM 引用与跨域能力（墙色 / 深链 / 视图过渡 / 预载 / 卡片反查 / 导航序列 / 序厅轮播暂停）走 `ports` 注入，**不**反向 import `app.js`；③ 装配点放在宿主顶部（工厂调用即绑事件，放晚了会撞 `const` 的 TDZ）。
    **按会话注入的能力走 `open()` 的参数，不要做成端口**：视图过渡的「显式源」只对一次序厅点击有效，若做成端口（只能按 photoId 查），从展厅卡片打开灯箱而该画恰好也是序厅当前那张时，卡片源会被序厅画面覆盖。同理，跨 open/close 存活的会话态（如该提供者）留在工厂闭包内。
    仍留在 `app.js` 的 `sampleRoomColor` / `applyRowFit` / `renderGallery` 尚未拆，原因是没有独立状态域或收益不足 —— 拆之前先确认能划出「自成一域 + 有回归网」的边界。
-2. **同步 `sw.js` 的 `SHELL_ASSETS`**：模块加载失败会**连坐** `app.js`（import 不进来就整个不执行），症状是**离线时停在骨架屏**。`isShellRequest()` 已用 `path.includes("/src/")` 兜住 SWR 分支，但 `SHELL_ASSETS` 是显式清单，漏加就不预缓存。**`tests/unit/sw-assets.test.mjs` 会枚举 `src/` 下的实际文件做契约检查**，漏加即红（放在单测层而非 e2e，原因见该文件头注释）。
+2. **SW 清单只列壳层，且不能多列**：Vite 把 `src/*.js` 打进 `app.js`，旧契约「清单要覆盖 src/ 全部文件」随打包**消失**（新模块自动进包，离线骨架屏那类坑不再可能，**不用**改清单）。现行契约反过来：`SHELL_ASSETS` 必须**恰好**等于构建产物的壳层（`./` `./index.html` `./styles.css` `./app.js` `./manifest.webmanifest`）——**多列**一条产物里不存在的条目（如忘删的 `./src/…`），install 的 `cache.addAll` 会整组 reject，表现为**全站悄悄失去 SW**（页面照常跑，只是不再离线可服务，不炸不报错）。`tests/unit/sw-assets.test.mjs` 钉清单形状（毫秒级、不依赖构建），`tests/e2e/global-setup.js` 对 `dist/` 核对每项真实存在。`isShellRequest()` 保留 `path.includes("/src/")` 分支仅为 dev 期兼容，无害。
 3. **`src/package.json` 的 `{"type":"module"}` 不要动**：仓库根 `package.json` 必须保持**无** `type`（否则 `playwright.config.js` 的 `require` 失效），所以由 `src/` 单独向 Node 声明 ESM 身份；浏览器不读这个文件。
 
 `npm run test:unit` 就是 `node --test`（自动发现 `**/*.test.mjs`，不会误扫 `tests/e2e/*.spec.js`）。写测试注意三个坑：
@@ -80,7 +83,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 serve.py；产�
 
 ## 必做：Service Worker 版本
 
-改 `index.html` / `styles.css` / `app.js` 后，**必须**把 `sw.js` 里的 `VERSION`（当前形如 `milan-vN`）往上抬。否则旧壳层缓存会让线上更新失效。
+改 `index.html` / `styles.css` / `app.js` / `public/sw.js` 后，**必须**把 `public/sw.js` 里的 `VERSION`（当前形如 `milan-vN`）往上抬。否则旧壳层缓存会让线上更新失效。产物名固定不带 hash 正是这条纪律的前提：URL 永远稳定，清单与缓存键才追得上。
 
 历史例外（只换 `assets/fonts/*.woff2` 不抬版本：字体子集是超集缩减、而抬版本会连 `CACHE_MEDIA` 一起清空）**随自托管字体一起退役**——见下「字体」节。现在没有例外：改任何壳层资产都抬版本。
 
@@ -164,4 +167,4 @@ done
 ## 环境
 
 - Windows 开发机；Python 经系统 PATH 或 `py` 启动。Photos 处理依赖 **Pillow**（CI 与完整 sync 需要）；无 Pillow 时列表仍可出图，但尺寸 / EXIF 日期 / 动图检测会降级。
-- `package.json` + `package-lock.json` 只为 dev 工具（lint/e2e/lhci），**应用本身零依赖零构建**；无 monorepo。`README.md` 里的产品叙事可能滞后于当前博物馆 UI——**以代码为准**。
+- `package.json` + `package-lock.json` 只为 dev 工具（vite / lint / e2e / lhci），**应用运行时零依赖**（产物是纯静态文件）；根 `package.json` 保持**无** `type`（`playwright.config.js` / `vite.config.js` 的 `require` 依赖此）；无 monorepo。`README.md` 里的产品叙事可能滞后于当前博物馆 UI——**以代码为准**。

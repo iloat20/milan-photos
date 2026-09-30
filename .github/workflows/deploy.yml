@@ -1,0 +1,51 @@
+# 站点部署：构建 dist → 作为 GitHub Pages 产物发布。
+#
+# 与旧模式（Pages 直接发布 main 分支根目录）的区别：
+#   仓库里是**源码**，线上是**构建产物**——访客不再下载未压缩的源文件。
+#   仓库仍是唯一事实源：本 workflow 只 `npm run build`，不在部署时改写任何生成物；
+#   photos/manifest.json 的新鲜度由 sync-photos workflow 负责（生成并回写提交）。
+#
+# 前置条件（仓库设置，一次性）：Settings → Pages → Source = GitHub Actions。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同时只允许一个部署，排队中的直接取消——避免旧产物把新产物覆盖回去
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install deps
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

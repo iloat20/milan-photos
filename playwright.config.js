@@ -1,22 +1,16 @@
 // @ts-check
 const { defineConfig, devices } = require("@playwright/test");
 
-// 端口的单一事实源：serve.py 的 --port 与这里的 baseURL / webServer 同源，
+// 端口的单一事实源：webServer 里 vite preview 的 --port 与 baseURL 同源，
 // 避免「配置写死 8080，而 8080 上恰好是别人」。
 // 需要换端口时：MILAN_PORT=8099 npx playwright test
 const PORT = process.env.MILAN_PORT || "8080";
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
-// 用哪个解释器起 serve.py。默认 `python`（与 CI 的 setup-python 一致）；
-// 本机若 `python` 指向没装 Pillow 的解释器（实测：托管 3.13 无 Pillow、
-// 系统 3.12 有），serve.py 会静默降级成「无缩略图 / 无 palette」的版本，
-// 症状是一堆互不相关的用例变红。global-setup.js 会把这种情况明确报出来，
-// 也可用 MILAN_PY=py 直接换解释器。
-const PY = process.env.MILAN_PY || "python";
-
 module.exports = defineConfig({
   testDir: "tests/e2e",
-  // 跑任何用例之前先确认「服务提供的确实是本仓库的文件」，详见该文件注释
+  // 跑任何用例之前先确认「端口上确实是本工作区刚构建的 dist」，详见该文件注释：
+  // 它同时负责 dist 过期时的补构建（复用旧 preview 服务时靠它兜底）。
   globalSetup: "./tests/e2e/global-setup.js",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
@@ -33,9 +27,12 @@ module.exports = defineConfig({
     },
   ],
   webServer: {
-    command: `${PY} tools/serve.py --port ${PORT}`,
+    // 被测对象 = 构建产物（与线上 Pages 同源）：每次起服务先 vite build 再 preview。
+    // 构建失败会让服务起不来（整个运行红），不会静默跑旧产物；本地复用已起的服务时
+    // 由 global-setup 的新鲜度检查补构建。端口被占用（strictPort）直接失败，不换端口硬跑。
+    command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${PORT} --strictPort`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
+    timeout: 120_000,
   },
 });

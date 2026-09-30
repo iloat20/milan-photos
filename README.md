@@ -9,20 +9,26 @@
 ## 本地预览
 
 ```powershell
-python tools/serve.py
+npm run dev        # Vite dev server → http://localhost:5173
 ```
 
-打开 <http://127.0.0.1:8080>。
+把新图丢进 `photos/` 后要先 `npm run sync` 再刷新：Vite 直接读**仓库里提交的** `manifest.json`
+（旧 serve.py 的 mtime 自动重建已随迁移退役；推上去 CI 的 sync-photos 也会生成并回写）。
 
-把新图丢进 `photos/` 后**直接刷新**页面就会出现（serve 对 manifest 做 mtime 戳缓存，变了自动重建），不用跑同步脚本。
+要看**构建产物**（与线上 Pages 同源，e2e 测的就是它）：
+
+```powershell
+npm run build      # 产出 dist/
+npm run preview    # http://127.0.0.1:4173
+```
 
 ## 添加照片
 
 ### 本地 / 仓库文件
 
 1. 图片放进 `photos/`（jpg / png / webp / avif 等）
-2. 本地：用上面的 `serve.py` 预览并刷新
-3. 推送到 GitHub 后：`sync-photos` Actions 生成缩略图/中图/AVIF 并回写 `manifest.json`，`ci` Actions 跑 lint → e2e → Lighthouse，全绿后 Pages 刷新即可
+2. 本地：`npm run sync` 后用 `npm run dev` 预览刷新
+3. 推送到 GitHub 后：`sync-photos` Actions 生成缩略图/中图/AVIF 并回写 `manifest.json`，`ci` Actions 跑 lint → e2e → Lighthouse，`deploy` Actions 构建 `dist/` 发布 Pages
 
 可选：在 `photos/meta.json` 按文件名写标题和说明：
 
@@ -51,24 +57,26 @@ git remote add origin https://github.com/<用户名>/<仓库名>.git
 git push -u origin main
 ```
 
-**Settings → Pages**：`Deploy from a branch` → `main` / `(root)`。
+**Settings → Pages**：Source 选 **GitHub Actions**。`.github/workflows/deploy.yml` 在每次
+push 到 `main` 时执行 `npm run build` 并把 `dist/` 作为 Pages 产物发布（仓库里是源码，线上是构建产物）。
 
 之后加图流程：把图片放进 `photos/` → `git add` / `commit` / `push` → 等 Actions 跑完 → 刷新网站。本地不用执行同步命令。
 
 ## 目录
 
 ```text
-index.html                 入口（head 含 og/twitter 卡片与 JSON-LD）
+index.html                 入口（head 含 og/twitter 卡片与 JSON-LD；Vite 构建入口）
 styles.css                 深墙金框设计系统
-app.js                     轮播 / 展厅 / 灯箱 / 筛选 / 上传
-sw.js                      Service Worker（壳层 SWR + 媒体 LRU + 清单 Network First）
+app.js                     轮播 / 展厅 / 灯箱 / 筛选 / 上传（构建时与 src/*.js 打成单文件）
+src/                       ESM 模块（纯函数 / 灯箱域；单测直接 import）
+public/                    原样拷贝：sw.js / manifest.webmanifest / robots.txt
+vite.config.js             Vite 构建（固定产物名不带 hash、相对 base、photos 拷入 dist）
 photos/                    原图 + meta.json + manifest.json
 photos/thumbs/             列表缩略图（WebP + AVIF，400/800/1200 三档）
 photos/medium/             灯箱用中尺寸（WebP + AVIF ≤1600px；原图 ≤1600 时不生成）
-tools/serve.py             本地预览（manifest mtime 戳缓存）
 tools/sync_photos.py       生成 manifest + 缩略图 + 中尺寸 + AVIF（CI 权威跑）
-tests/e2e/                 Playwright 冒烟（10 项）
-.github/workflows/         sync-photos（清单回写）+ ci（lint → e2e → Lighthouse）
+tests/e2e/                 Playwright 冒烟（27 项）
+.github/workflows/         sync-photos（清单回写）+ ci（lint → e2e → Lighthouse）+ deploy（构建并发布 Pages）
 .github/dependabot.yml     npm + GitHub Actions 每周依赖巡检
 AGENTS.md                  项目约定（命令 / 生成物 / 无障碍契约）
 research/                  设计研究文档（brief / findings / a11y audit）
@@ -79,9 +87,12 @@ package.json               仅 dev 工具（应用本身零依赖零构建）
 
 ```powershell
 npm ci            # 首次
+npm run dev       # Vite dev server
+npm run build     # 产出 dist/（线上同款构建产物）
 npm run lint      # ESLint + Stylelint
-npm run test:e2e  # Playwright 冒烟：AVIF / manifest / 灯箱 / 筛选 / 轮播 / 移动端 / SW 缓存隔离与离线 / 零 console 错误
-npm run lhci      # Lighthouse CI（a11y / best-practices / SEO 满分断言）
+npm run test:unit # 纯函数单测（node --test）
+npm run test:e2e  # Playwright 冒烟：自动构建 dist 并用 vite preview 起服（AVIF / manifest / 灯箱 / 筛选 / 轮播 / 移动端 / SW 缓存隔离与离线 / 零 console 错误）
+npm run lhci      # Lighthouse CI（构建后审计，a11y / best-practices / SEO 满分断言）
 ```
 
 所有 push 都会触发 CI（lint → e2e → Lighthouse）；Dependabot 每周检查依赖与 Actions 版本。
@@ -92,8 +103,8 @@ npm run lhci      # Lighthouse CI（a11y / best-practices / SEO 满分断言）
 - 年月筛选 chip（`aria-pressed` + View Transitions 卡片配对动画）
 - **URL 深链**：`#f=<年月>` 直达筛选、`#p=<文件名>` 直达某张画的灯箱（可分享、刷新不丢状态）；纯锚点导航不受影响
 - AVIF + WebP `<picture>` 协商（缩略图三档 400/800/1200 srcset + 灯箱 ~1600px 中图）+ 懒加载 + View Transitions
-- Service Worker 离线缓存（壳层 SWR、媒体 LRU 上限、清单 Network First + install 快照）+ Priority Hints；改前端后须抬 `sw.js` 的 `VERSION`
-- `photos/` 自动上墙（本地 serve / GitHub Actions，日期优先取 EXIF）
+- Service Worker 离线缓存（壳层 SWR、媒体 LRU 上限、清单 Network First + install 快照）+ Priority Hints；改前端后须抬 `public/sw.js` 的 `VERSION`
+- `photos/` 自动上墙（本地 `npm run sync` / GitHub Actions，日期优先取 EXIF）
 - 支持 GIF / 动图：列表显示静帧 + 角标，灯箱播放原文件
 - 页面内本地上传（上传前客户端压缩为 ≤2048px WebP；GIF 保留原文件）
 - 支持 `prefers-reduced-motion`（关闭自动轮播与非必要动效）

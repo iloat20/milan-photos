@@ -294,7 +294,7 @@ def ensure_thumb_set(src: Path) -> dict[str, tuple[str, int, str | None]]:
 
 
 def ensure_medium(src: Path) -> tuple[str, str | None] | None:
-    """生成 photos/medium/<stem>.webp + .avif（~1600px）；原图不大于上限时不另存。"""
+    """生成 photos/medium/<stem>.webp + .avif（长边 ~1280px）；原图不大于上限时不另存。"""
     try:
         from PIL import Image
     except ImportError:

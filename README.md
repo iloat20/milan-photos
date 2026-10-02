@@ -73,7 +73,7 @@ public/                    原样拷贝：sw.js / manifest.webmanifest / robots.
 vite.config.js             Vite 构建（固定产物名不带 hash、相对 base、photos 拷入 dist）
 photos/                    原图 + meta.json + manifest.json
 photos/thumbs/             列表缩略图（WebP + AVIF，400/800/1200 三档）
-photos/medium/             灯箱用中尺寸（WebP + AVIF ≤1600px；原图 ≤1600 时不生成）
+photos/medium/             灯箱用中尺寸（WebP + AVIF ≤1280px；原图 ≤1280 时不生成）
 tools/sync_photos.py       生成 manifest + 缩略图 + 中尺寸 + AVIF（CI 权威跑）
 tests/e2e/                 Playwright 冒烟（27 项）
 .github/workflows/         sync-photos（清单回写）+ ci（lint → e2e → Lighthouse）+ deploy（构建并发布 Pages）
@@ -102,7 +102,7 @@ npm run lhci      # Lighthouse CI（构建后审计，a11y / best-practices / SE
 - 灯箱为**原生 `<dialog>` + `showModal()`**：Esc/焦点圈闭由 UA 承担、`::backdrop` 遮罩（APG Dialog）；支持双指捏合 / 双击 / 滚轮缩放、单击切图
 - 年月筛选 chip（`aria-pressed` + View Transitions 卡片配对动画）
 - **URL 深链**：`#f=<年月>` 直达筛选、`#p=<文件名>` 直达某张画的灯箱（可分享、刷新不丢状态）；纯锚点导航不受影响
-- AVIF + WebP `<picture>` 协商（缩略图三档 400/800/1200 srcset + 灯箱 ~1600px 中图）+ 懒加载 + View Transitions
+- AVIF + WebP `<picture>` 协商（缩略图三档 400/800/1200 srcset + 灯箱 ~1280px 中图）+ 懒加载 + View Transitions
 - Service Worker 离线缓存（壳层 SWR、媒体 LRU 上限、清单 Network First + install 快照）+ Priority Hints；改前端后须抬 `public/sw.js` 的 `VERSION`
 - `photos/` 自动上墙（本地 `npm run sync` / GitHub Actions，日期优先取 EXIF）
 - 支持 GIF / 动图：列表显示静帧 + 角标，灯箱播放原文件

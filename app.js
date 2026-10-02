@@ -572,7 +572,6 @@ import { createLightbox } from "./src/lightbox.js";
   }
 
   const HERO_INTERVAL = 4200;
-  let heroProgressTimer = 0;
 
   function startHeroProgress() {
     stopHeroProgress();
@@ -586,10 +585,9 @@ import { createLightbox } from "./src/lightbox.js";
   }
 
   function stopHeroProgress() {
-    if (heroProgressTimer) {
-      clearTimeout(heroProgressTimer);
-      heroProgressTimer = 0;
-    }
+    // 这里曾有一份 heroProgressTimer（clearTimeout 后置 0）。它从来没有被赋过值：
+    // 进度条走的是 CSS transform 过渡（startHeroProgress 里重置 + 触发），
+    // 不需要 JS 计时器。保留它只会让下一位读者以为存在一条计时器生命周期。
     const bar = document.getElementById("heroProgressBar");
     if (bar) {
       bar.style.transition = "none";
@@ -1129,11 +1127,14 @@ import { createLightbox } from "./src/lightbox.js";
       card.type = "button";
       card.className = "card";
 
-      // 入场 stagger：首次渲染时按序入场（筛选切换不播放，已有 VT 动画）
-      if (!gallery.dataset.enterBound && !reduceMotion) {
-        card.classList.add("is-enter");
-        card.style.animationDelay = `${Math.min(i * 60, 600)}ms`;
-      }
+      // 这里曾有「首次渲染按序入场」（加 .card.is-enter + animationDelay）。
+      // 已删：它**从未生效**——启动期那次 renderGallery() 的 visible 是空的，却仍旧
+      // 在函数末尾写下 gallery.dataset.enterBound="1"，于是 18 张卡真正上墙时
+      // `!enterBound` 恒为 false（实测 .card.is-enter 数量 0、animationDelay 全空）。
+      // 而「修好」它是错的：序厅占满首屏，展厅整段在视口之外，0.5s 的一次性动画会在
+      // 用户滚动到之前放完；且 .card.is-enter 的 animation 简写会把当前生效的滚动驱动
+      // card-rise（animation-timeline: view()）顶成 auto（实测 timeline view()→auto）。
+      // 想让卡片有入场感就用 @supports 里那条 card-rise，别再挂回 is-enter。
 
       // 策展节奏：每 7 张的末张做「重点陈列」，独占一行成为一面墙
       if ((i + 1) % 7 === 0) card.classList.add("is-feature");
@@ -1243,8 +1244,6 @@ import { createLightbox } from "./src/lightbox.js";
       card.addEventListener("focus", prefetchLightbox, { once: true });
       gallery.appendChild(card);
     });
-    // 首次渲染完成后标记，后续筛选切换不再播放入场动画
-    gallery.dataset.enterBound = "1";
   }
 
   function setStatus(msg, isError) {
@@ -1342,15 +1341,38 @@ import { createLightbox } from "./src/lightbox.js";
     return btoa(bin);
   }
 
+  /* 所有 GitHub API 调用都走这里：统一「三件套头」+ 统一超时。
+     原先三处各自手写同一组头（漂移风险），而且**完全没有超时** —— 连接挂住时 fetch
+     永不 reject，状态条会永远停在「正在同步到 GitHub…」，用户既看不到失败也无法重试。
+     AbortSignal.timeout 是平台原语（Baseline 2022），不必手搓计时器；每次调用新建一个
+     signal（同一个 signal 超时后不可复用）。 */
+  const GH_TIMEOUT_MS = 30_000;
+
+  async function ghFetch(url, cfg, init = {}) {
+    try {
+      return await fetch(url, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${cfg.token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...init.headers,
+        },
+        signal: AbortSignal.timeout(GH_TIMEOUT_MS),
+      });
+    } catch (err) {
+      // 超时是 DOMException(TimeoutError)：翻成可读中文，与其它失败一样由 setStatus 呈现。
+      // 附上 cause（本仓 eslint 的 preserve-caught-error 要求，同 manifest 那处）。
+      if (err && err.name === "TimeoutError") {
+        throw new Error("GitHub 响应超时（30 秒），请检查网络后重试", { cause: err });
+      }
+      throw err;
+    }
+  }
+
   async function ghGetFileSha(cfg, path) {
     const url = `https://api.github.com/repos/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${cfg.token}`,
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    });
+    const res = await ghFetch(url, cfg);
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`读取远端文件失败 (${res.status})`);
     const data = await res.json();
@@ -1359,14 +1381,9 @@ import { createLightbox } from "./src/lightbox.js";
 
   async function ghPutFile(cfg, path, contentB64, message) {
     const send = (sha) =>
-      fetch(`https://api.github.com/repos/${cfg.repo}/contents/${path}`, {
+      ghFetch(`https://api.github.com/repos/${cfg.repo}/contents/${path}`, cfg, {
         method: "PUT",
-        headers: {
-          Authorization: `Bearer ${cfg.token}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
           content: contentB64,
@@ -1403,15 +1420,9 @@ import { createLightbox } from "./src/lightbox.js";
     const sha = await ghGetFileSha(cfg, path);
     let photosList = [];
     if (sha) {
-      const res = await fetch(
+      const res = await ghFetch(
         `https://api.github.com/repos/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${cfg.token}`,
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-          },
-        }
+        cfg
       );
       if (!res.ok) throw new Error(`读取远端清单失败 (${res.status})，已中止写入`);
       const data = await res.json();
@@ -1643,9 +1654,15 @@ import { createLightbox } from "./src/lightbox.js";
   // 序厅门厅大字与顶栏馆名同屏重复：大字在场时隐去顶栏馆名，滚入展厅再浮现
   let heroEnd = Infinity;
   const measureHeroEnd = () => {
-    heroEnd = heroCarousel
-      ? heroCarousel.offsetTop + heroCarousel.offsetHeight - siteNav.offsetHeight
-      : Infinity;
+    // siteNav 缺失（HTML 结构调整 / SW 旧壳层配新页面）时**不得**裸取 offsetHeight：
+    // 本条在启动期就于 renderFilters / renderGallery / loadFolderPhotos **之前**求值，
+    // 抛 TypeError 会中断整个 IIFE —— 展厅 0 卡、骨架屏永不退场、主题按钮也没绑上。
+    // 这正是 on() 守卫要挡的那类故障（实证：删掉 <header id="siteNav"> 后 cards=0、
+    // skeleton.hidden=false、pageerror「Cannot read properties of null」）。
+    heroEnd =
+      heroCarousel && siteNav
+        ? heroCarousel.offsetTop + heroCarousel.offsetHeight - siteNav.offsetHeight
+        : Infinity;
   };
   const onScrollNav = () => {
     if (!siteNav) return;
@@ -1706,7 +1723,12 @@ import { createLightbox } from "./src/lightbox.js";
   }
   if (themeToggle) {
     themeToggle.addEventListener("click", () => {
-      const current = document.documentElement.dataset.theme;
+      // 没手动选过时 data-theme 缺省、页面跟随系统。此时必须先问系统当前是什么，
+      // 否则 `undefined → "light"` 会让**亮色系统**的用户第一击原地不动（实测：
+      // 亮色系统下首击 data-theme=light 而背景仍是 #fff，要第二击才变暗）。
+      const current =
+        document.documentElement.dataset.theme ||
+        (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
       const next = current === "light" ? "dark" : "light";
       document.documentElement.dataset.theme = next;
       localStorage.setItem(THEME_KEY, next);

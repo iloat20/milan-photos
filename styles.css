@@ -66,29 +66,44 @@
 
 @layer base {
   :root {
+    /* 亮/暗成对声明**一次**，由 light-dark() 按本元素的 used color-scheme 取边；
+       手动主题不写第二套值，只改 color-scheme（见下面两条 [data-theme] 规则）。
+       原先同一组颜色在「:root / 亮色媒体查询 / [data-theme=light]」三处各写一遍，
+       改一处忘另一处就静默不同步——本仓已有同族的常量漂移前科（medium 阈值 1600/1280）。
+       light-dark() 的可用基线（Chrome 123 / Safari 17.5 / Firefox 120）**早于**本站
+       已在用的 color-mix() 与 content-visibility: auto，不引入更严的浏览器门槛。 */
     color-scheme: light dark;
 
     /* —— 表面 —— */
-    --bg: #000;
-    --bg-1: #0a0a0a;
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --glass: rgba(10, 10, 11, 0.72);
+    --bg: light-dark(#fff, #000);
+    --bg-1: light-dark(#f5f5f7, #0a0a0a);
+    --surface: light-dark(#f5f5f7, #1c1c1e);
+    --surface-2: light-dark(#e8e8ed, #2c2c2e);
+    --glass: light-dark(rgba(255, 255, 255, 0.72), rgba(10, 10, 11, 0.72));
 
-    /* —— 文本 ——（--text-3 仅供装饰：小字对比度不足 AA） */
-    --text: #f5f5f7;
-    --text-2: #a1a1a6;
+    /* —— 文本 ——（--text-3 仅供装饰：小字对比度不足 AA；两主题同值，故不成对）
+       链接对比度：Apple 蓝 #0071e3 在 --bg-1(#f5f5f7) 上仅 4.31:1，AA 小字需 4.5
+       —— 亮色侧深一档到 #06c（≈5.1:1，白底 5.57:1）；暗色侧 #0a84ff 在 #0a0a0a 上
+       ≈5.4:1，无需调整。 */
+    --text: light-dark(#1d1d1f, #f5f5f7);
+    --text-2: light-dark(#6e6e73, #a1a1a6);
     --text-3: #86868b;
-    --accent: #0a84ff;
-    --danger: #ff453a;
+    --accent: light-dark(#06c, #0a84ff);
+    --danger: light-dark(#d70015, #ff453a);
 
     /* —— 线与影 —— */
-    --hairline: rgba(255, 255, 255, 0.16);
-    --hairline-soft: rgba(255, 255, 255, 0.07);
-    --fill: rgba(120, 120, 128, 0.28);
-    --fill-strong: rgba(120, 120, 128, 0.44);
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
-    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 30px 70px rgba(0, 0, 0, 0.55);
+    --hairline: light-dark(rgba(0, 0, 0, 0.16), rgba(255, 255, 255, 0.16));
+    --hairline-soft: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.07));
+    --fill: light-dark(rgba(120, 120, 128, 0.16), rgba(120, 120, 128, 0.28));
+    --fill-strong: light-dark(rgba(120, 120, 128, 0.28), rgba(120, 120, 128, 0.44));
+
+    /* 阴影整条不是 <color>，light-dark() 收不了——把每段色分别成对，值仍只有一处来源 */
+    --shadow-1:
+      0 1px 2px light-dark(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.5)),
+      0 10px 30px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.45));
+    --shadow-2:
+      0 2px 6px light-dark(rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.55)),
+      0 30px 70px light-dark(rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0.55));
 
     /* —— 几何 —— */
     --nav-h: 48px;
@@ -108,69 +123,15 @@
     --ease: cubic-bezier(0.32, 0.72, 0, 1);
   }
 
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) {
-      --bg: #fff;
-      --bg-1: #f5f5f7;
-      --surface: #f5f5f7;
-      --surface-2: #e8e8ed;
-      --glass: rgba(255, 255, 255, 0.72);
-      --text: #1d1d1f;
-      --text-2: #6e6e73;
-      --text-3: #86868b;
-
-      /* 文本链接对比度：Apple 蓝 #0071e3 在 --bg-1(#f5f5f7) 上仅 4.31:1，
-         AA 小字需 4.5 —— 深一档到 #06c（≈5.1:1，白底 5.57:1）。
-         深色主题的 #0a84ff 在 #0a0a0a 上 ≈5.4:1，无需调整。 */
-      --accent: #06c;
-      --danger: #d70015;
-      --hairline: rgba(0, 0, 0, 0.16);
-      --hairline-soft: rgba(0, 0, 0, 0.07);
-      --fill: rgba(120, 120, 128, 0.16);
-      --fill-strong: rgba(120, 120, 128, 0.28);
-      --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.08);
-      --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.08), 0 30px 70px rgba(0, 0, 0, 0.16);
-    }
-  }
-
-  /* 手动主题切换：亮色主题（覆盖系统暗色） */
+  /* 手动主题 = 只改 color-scheme：light-dark() 与 UA 控件/滚动条都据此取值，
+     所以它同时覆盖系统偏好，且**不需要第二套颜色值**。
+     注意这里只有 color-scheme，没有颜色——颜色永远只有上面那一份成对声明。 */
   :root[data-theme="light"] {
-    --bg: #fff;
-    --bg-1: #f5f5f7;
-    --surface: #f5f5f7;
-    --surface-2: #e8e8ed;
-    --glass: rgba(255, 255, 255, 0.72);
-    --text: #1d1d1f;
-    --text-2: #6e6e73;
-    --text-3: #86868b;
-    --accent: #06c;
-    --danger: #d70015;
-    --hairline: rgba(0, 0, 0, 0.16);
-    --hairline-soft: rgba(0, 0, 0, 0.07);
-    --fill: rgba(120, 120, 128, 0.16);
-    --fill-strong: rgba(120, 120, 128, 0.28);
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.08);
-    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.08), 0 30px 70px rgba(0, 0, 0, 0.16);
+    color-scheme: light;
   }
 
-  /* 手动主题切换：暗色主题（覆盖系统亮色） */
   :root[data-theme="dark"] {
-    --bg: #000;
-    --bg-1: #0a0a0a;
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --glass: rgba(10, 10, 11, 0.72);
-    --text: #f5f5f7;
-    --text-2: #a1a1a6;
-    --text-3: #86868b;
-    --accent: #0a84ff;
-    --danger: #ff453a;
-    --hairline: rgba(255, 255, 255, 0.16);
-    --hairline-soft: rgba(255, 255, 255, 0.07);
-    --fill: rgba(120, 120, 128, 0.28);
-    --fill-strong: rgba(120, 120, 128, 0.44);
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.45);
-    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 30px 70px rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
   }
 
   html {
@@ -375,9 +336,28 @@
     --room-adapt-deep: #000;
     --room-adapt-glow: rgba(255, 255, 255, 0.05);
 
+    /* 亮色侧把环境色按固定比例压进页面底色（照片落在浅色台面上）。用 light-dark() 内联，
+       不再另开 @media (prefers-color-scheme: light)：那种写法只认**系统**偏好，手动切到
+       亮色（系统仍暗）时会漏掉这次洗淡——实测 body 已是 #fff，序厅底纹却还是
+       rgb(10,10,10)→rgb(0,0,0) 的黑房间。内联后也不再依赖「必须放在层末尾压住基础值」。 */
     background:
-      radial-gradient(ellipse 68% 44% at 50% 4%, var(--room-adapt-glow), transparent 68%),
-      linear-gradient(180deg, var(--room-adapt) 0%, var(--room-adapt-deep) 100%);
+      radial-gradient(
+        ellipse 68% 44% at 50% 4%,
+        light-dark(
+          color-mix(in oklab, var(--room-adapt-glow) 40%, transparent),
+          var(--room-adapt-glow)
+        ),
+        transparent 68%
+      ),
+      linear-gradient(
+        180deg,
+        light-dark(color-mix(in oklab, var(--room-adapt) 22%, var(--bg)), var(--room-adapt)) 0%,
+        light-dark(
+            color-mix(in oklab, var(--room-adapt-deep) 8%, var(--bg)),
+            var(--room-adapt-deep)
+          )
+          100%
+      );
     touch-action: pan-y;
     user-select: none;
     -webkit-user-select: none;
@@ -1058,49 +1038,68 @@
     color: var(--danger);
   }
 
+  /* 库房设置面板：popover。放 top layer，天然不受祖先 overflow / stacking 影响；
+     light dismiss 与 Esc 关闭都是 UA 行为（不需要一行 JS）。
+     默认 display:none 是**兜底**而不是装饰：万一浏览器不支持 popover，面板只是打不开，
+     不会退化成「opacity:0 却仍可聚焦」的隐形表单（那才是真陷阱）。 */
   .gh-panel {
-    margin-top: 28px;
-    text-align: left;
-    border: 1px solid var(--hairline-soft);
-    border-radius: var(--r-md);
-    padding: 0 16px 16px;
-    background: transparent;
-  }
-
-  .gh-panel > summary {
-    cursor: pointer;
-    list-style: none;
-    padding: 16px 0;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    color: var(--text-2);
-    transition: color 0.25s var(--ease);
-  }
-
-  /* 展开指示：右缘雪佛龙，展开时翻转 */
-  .gh-panel > summary::after {
-    content: "";
-    float: right;
-    width: 8px;
-    height: 8px;
-    margin-top: 6px;
-    border-right: 1.5px solid currentcolor;
-    border-bottom: 1.5px solid currentcolor;
-    transform: rotate(45deg);
-    transition: transform 0.3s var(--ease);
-  }
-
-  .gh-panel[open] > summary::after {
-    transform: rotate(-135deg);
-  }
-
-  .gh-panel > summary:hover {
-    color: var(--text);
-  }
-
-  .gh-panel > summary::-webkit-details-marker {
     display: none;
+
+    /* 居中刻意写进 `transform`，不要拆成独立的 `translate` 属性：
+       vite8 的 CSS 管线是 lightningcss 1.33，它会把「写在 `transform` **之前**的
+       `translate`/`rotate`/`scale`」静默吞掉（写在之后才会被合并进 transform 存活）。
+       被吞的后果不是报错，而是面板整块掉到右下象限——功能全好、只有 e2e 的
+       居中断言抓得住。见 .gh-panel 下方 e2e「库房设置面板走 popover」。 */
+    position: fixed;
+    inset: auto;
+    top: 50%;
+    left: 50%;
+    margin: 0;
+    width: min(420px, calc(100vw - 32px));
+    max-height: min(80vh, 640px);
+    overflow: auto;
+    text-align: left;
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-md);
+    padding: 18px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-2);
+
+    /* 进出场：opacity/transform 是可见过渡；display/overlay 必须显式允许离散过渡，
+       否则 display:none 与「移出 top layer」会立刻生效，过渡没有收尾帧。 */
+    opacity: 0;
+    transform: translate(-50%, -50%) translateY(10px) scale(0.98);
+    transition:
+      opacity 0.24s var(--ease),
+      transform 0.24s var(--ease),
+      display 0.24s allow-discrete,
+      overlay 0.24s allow-discrete;
+  }
+
+  .gh-panel:popover-open {
+    display: block;
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+
+  /* @starting-style 给「刚进 top layer」的那一帧一个起点；缺了它 popover 一出现就是
+     终态，上面的 opacity/transform 过渡没有可插值的初值（实测：不加时直接可见）。 */
+  @starting-style {
+    .gh-panel:popover-open {
+      opacity: 0;
+      transform: translate(-50%, -50%) translateY(10px) scale(0.98);
+    }
+  }
+
+  /* ::backdrop 对 popover 同样成立（auto popover 会生成 backdrop 盒）；
+     用 light-dark() 让遮罩深浅跟着主题走，而不是写死一层黑。 */
+  .gh-panel::backdrop {
+    background: light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.45));
+  }
+
+  .gh-toggle {
+    margin-top: 18px;
   }
 
   .gh-fields {
@@ -1175,14 +1174,26 @@
     overflow: hidden;
     color: var(--text);
 
-    /* 同序厅：随画环境色由 JS 写入，过渡写在变量本身 */
-    --room-adapt: #0a0a0a;
-    --room-adapt-deep: #000;
-    --room-adapt-glow: rgba(255, 255, 255, 0.05);
-
+    /* 同序厅：随画环境色由 JS 写入，过渡写在变量本身。
+       亮色侧的洗淡与序厅同一套 light-dark() 写法（理由见 .hero-carousel 注释）。 */
     background:
-      radial-gradient(ellipse 62% 44% at 50% 0%, var(--room-adapt-glow), transparent 66%),
-      linear-gradient(180deg, var(--room-adapt) 0%, var(--room-adapt-deep) 100%);
+      radial-gradient(
+        ellipse 62% 44% at 50% 0%,
+        light-dark(
+          color-mix(in oklab, var(--room-adapt-glow) 40%, transparent),
+          var(--room-adapt-glow)
+        ),
+        transparent 66%
+      ),
+      linear-gradient(
+        180deg,
+        light-dark(color-mix(in oklab, var(--room-adapt) 22%, var(--bg)), var(--room-adapt)) 0%,
+        light-dark(
+            color-mix(in oklab, var(--room-adapt-deep) 8%, var(--bg)),
+            var(--room-adapt-deep)
+          )
+          100%
+      );
     overscroll-behavior: contain;
     touch-action: none;
     padding-left: env(safe-area-inset-left);
@@ -1430,25 +1441,11 @@
     touch-action: none;
   }
 
-  /* —— 亮色主题：环境色只作底纹，主调仍是页面底色——照片落在浅色台面上。
-        放在本层末尾：它与上面 .hero-carousel / .lightbox 的基础 background
-        同层同权重，靠源序取胜，上移就会被基础值压死。 —— */
-  @media (prefers-color-scheme: light) {
-    .hero-carousel,
-    .lightbox {
-      background:
-        radial-gradient(
-          ellipse 68% 44% at 50% 4%,
-          color-mix(in oklab, var(--room-adapt-glow) 40%, transparent),
-          transparent 68%
-        ),
-        linear-gradient(
-          180deg,
-          color-mix(in oklab, var(--room-adapt) 22%, var(--bg)) 0%,
-          color-mix(in oklab, var(--room-adapt-deep) 8%, var(--bg)) 100%
-        );
-    }
-  }
+  /* 这里原有「亮色主题：环境色只作底纹」的 @media (prefers-color-scheme: light)
+     （只覆盖 .hero-carousel / .lightbox 的 background）。已并入上面两条基础规则里的
+     light-dark()，两个坑一起消失：① 那处媒体查询只看**系统**偏好，手动切亮色会被跳过
+     （实测：body 已 #fff 而序厅底纹仍是黑房间）；② 它靠本层内的源序压住基础值，
+     规则一上移就失效。 */
 }
 
 @layer sections {
@@ -1806,7 +1803,7 @@
     .card-media img,
     .card-anno,
     .lightbox-img,
-    .gh-panel > summary::after {
+    .gh-panel {
       animation: none !important;
       transition: none !important;
     }
@@ -1844,22 +1841,9 @@
     }
   }
 
-  /* 入场 stagger：卡片按序入场（仅首次渲染，由 JS 添加 is-enter 类） */
-  @media (prefers-reduced-motion: no-preference) {
-    .card.is-enter {
-      animation: card-enter 0.5s var(--ease) both;
-    }
-
-    @keyframes card-enter {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-  }
+  /* 这里曾有「入场 stagger」的 .card.is-enter + @keyframes card-enter。
+     已删：JS 侧的添加点从未执行过（见 app.js 的 renderGallery 注释），是死规则；
+     而把它救活反而更糟 —— .card.is-enter 的 animation 简写会顶掉上面 @supports
+     里那条滚动驱动 card-rise（实测 animation-timeline 由 view() 变 auto）。
+     卡片的入场感以 card-rise 为唯一实现，不要再引入第二个动画源。 */
 }

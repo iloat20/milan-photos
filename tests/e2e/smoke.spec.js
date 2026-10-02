@@ -546,6 +546,115 @@ test.describe("画廊冒烟", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  test("缺 #siteNav 时同样降级（启动期量高不得裸取 offsetHeight）", async ({ page }) => {
+    // 与上一条同源，但破坏点更致命：measureHeroEnd() 在启动期就于
+    // renderFilters / renderGallery / loadFolderPhotos **之前**碰 #siteNav。
+    // 修复前它裸取 siteNav.offsetHeight，删掉 <header id="siteNav"> 即 TypeError
+    // 中断整个 IIFE —— 实测 cards=0、#gallerySkeleton.hidden=false、主题按钮未绑，
+    // 比「灯箱缺元素」严重得多（灯箱缺了只是少一个域，这里整站停在骨架屏）。
+    const pageErrors = [];
+    page.on("pageerror", (err) => pageErrors.push(String(err)));
+
+    await page.route("**/*", async (route) => {
+      if (route.request().resourceType() !== "document") return route.continue();
+      const res = await route.fetch();
+      const html = (await res.text()).replace(/<header[\s\S]*?<\/header>/, "");
+      const headers = { ...res.headers() };
+      delete headers["content-length"];
+      await route.fulfill({ status: res.status(), headers, body: html });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect(page.locator("#gallerySkeleton")).toBeHidden();
+    expect(pageErrors).toEqual([]);
+  });
+
+  test("主题按钮：未手动选过时首击即翻转（跟随系统不等于已选 light）", async ({ page }) => {
+    // 回归：原先 `current = document.documentElement.dataset.theme` 在未手动选过时是
+    // undefined，`next` 于是恒为 "light" —— 亮色系统的用户第一击只是把 undefined
+    // 写成 "light"，页面毫无变化（实测背景仍 rgb(255,255,255)），要第二击才变暗。
+    // 现在缺省时先问系统当前主题，保证一击必反转。
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/");
+    // 等展厅就绪：IIFE 早已跑完，主题绑定必然已完成（绑定早于卡片渲染）
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+    const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    const lightBg = await bg();
+
+    await page.locator("#themeToggle").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(await bg()).not.toBe(lightBg);
+    expect(await page.evaluate(() => localStorage.getItem("milan-theme"))).toBe("dark");
+
+    await page.locator("#themeToggle").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await bg()).toBe(lightBg);
+  });
+
+  test("手动亮色压过系统暗色（序厅底纹随主题洗淡，不再只看系统偏好）", async ({ browser }) => {
+    // 回归：亮色「洗淡」原先是 styles.css 里的一段 @media (prefers-color-scheme: light)，
+    // 只认**系统**偏好 —— 系统暗色 + 手动切亮时 body 已是 #fff，序厅底纹却仍是
+    // rgb(10,10,10)→rgb(0,0,0) 的黑房间（实测）。改用 light-dark() 后两处同源。
+    // 断言取**结构**（洗淡会把 color-mix 落成 oklab）而非具体色值：与 1.2s 的
+    // 环境色过渡、与各张 palette 的具体数值都无竞态。
+    const heroBgWith = async (colorScheme, manualTheme) => {
+      const ctx = await browser.newContext({
+        colorScheme,
+        viewport: { width: 1280, height: 900 },
+      });
+      if (manualTheme) {
+        await ctx.addInitScript((v) => localStorage.setItem("milan-theme", v), manualTheme);
+      }
+      const p = await ctx.newPage();
+      await p.goto("/");
+      await expect(p.locator(".card")).toHaveCount(18);
+      const bg = await p.evaluate(
+        () => getComputedStyle(document.querySelector(".hero-carousel")).backgroundImage
+      );
+      await ctx.close();
+      return bg;
+    };
+
+    expect(await heroBgWith("light", null)).toContain("oklab");
+    expect(await heroBgWith("dark", null)).not.toContain("oklab");
+    // 本次修复点：手动亮色必须与「系统亮色」同等洗淡
+    expect(await heroBgWith("dark", "light")).toContain("oklab");
+  });
+
+  test("库房设置面板走 popover：点开、原生 Esc 关、关闭即不可见", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    const panel = page.locator("#ghPanel");
+    // 收起态：display:none（兜底写法，见 styles.css 的 .gh-panel 注释）
+    await expect(panel).toBeHidden();
+
+    await page.locator("#upload").scrollIntoViewIfNeeded();
+    await page.locator("#ghToggle").click();
+    await expect(panel).toBeVisible();
+    await expect(page.locator("#ghRepo")).toBeVisible();
+    // 真在 top layer 的打开态，而不是「恰好显示了」
+    await expect.poll(() => panel.evaluate((el) => el.matches(":popover-open"))).toBe(true);
+
+    // 居中：面板中心 = 视口中心。别小看这条——styles.css 里用的是
+    // `top:50%; left:50%; translate:-50% -50%`，而构建管线（vite8/lightningcss）会把
+    // 「写在 transform 之前的独立 translate/rotate/scale」静默吞掉，居中当场失效、
+    // 面板整块掉到右下象限（页面照样能开关，肉眼不盯着截图看不出来）。
+    const box = await panel.boundingBox();
+    const vp = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(Math.abs(box.x + box.width / 2 - vp.width / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.y + box.height / 2 - vp.height / 2)).toBeLessThanOrEqual(1);
+
+    // Esc 关闭是 UA 行为（本仓没有为它写 keydown）；light dismiss 同理
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await expect.poll(() => panel.evaluate((el) => el.matches(":popover-open"))).toBe(false);
+  });
+
   test("序厅画作可键盘打开，且非活动 slide 不在 Tab 序列内", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
@@ -771,20 +880,31 @@ test.describe("画廊冒烟", () => {
     const startHash = await hashOf(page);
 
     await page.mouse.click(cx, cy); // 真实第一击：乐观切图
-    await expect.poll(() => hashOf(page), { timeout: 3_000 }).not.toBe(startHash);
 
-    // 越过旧实现的 450ms tapTimer（它过期后第二击会当成独立单击，再切一张）
-    await page.waitForTimeout(600);
-
-    await page.evaluate(
-      ({ x, y }) => {
-        const stage = document.querySelector(".lightbox-stage");
-        const init = { bubbles: true, detail: 2, clientX: x, clientY: y };
-        stage.dispatchEvent(new MouseEvent("click", init));
-        stage.dispatchEvent(new MouseEvent("dblclick", init));
-      },
+    // 第二击必须落在与第一击**同组**的 GROUP_MS(1000ms) 窗口内：否则 groupStart 会记在
+    // 「切图之后」的位置上，dblclick 的绝对回退就变成退到第二张（实测红态：期望
+    // #p=<第 1 张> 收到 #p=<第 2 张>，正是 groupStart=1 的指纹）。原写法是 Node 侧
+    // waitForTimeout(600) + 再发事件，中间夹着 poll 与两趟 IPC——并行负载下这点开销
+    // 就能吃掉剩下的 400ms，本用例因此偶发变红（隔离跑 3/3 绿）。
+    // 现在等待与两次派发都在一个 evaluate 内由页面自己的计时器完成，Node↔浏览器只剩
+    // 「mouse.click → evaluate」一跳；顺带把「第一击后到了哪张」从页面里带回来，
+    // 替代原来那段纯为断言而花的 poll。
+    const hashAtSecondClick = await page.evaluate(
+      ({ x, y }) =>
+        new Promise((done) => {
+          setTimeout(() => {
+            const stage = document.querySelector(".lightbox-stage");
+            const init = { bubbles: true, detail: 2, clientX: x, clientY: y };
+            // 越过旧实现的 450ms tapTimer（它过期后第二击会被当成独立单击，再切一张）
+            const mid = location.hash;
+            stage.dispatchEvent(new MouseEvent("click", init));
+            stage.dispatchEvent(new MouseEvent("dblclick", init));
+            done(mid);
+          }, 500);
+        }),
       { x: cx, y: cy }
     );
+    expect(hashAtSecondClick).not.toBe(startHash);
 
     // 回到第一击之前的位置（旧实现会停在「前进两张」），且确实完成了放大
     await expect.poll(() => hashOf(page), { timeout: 3_000 }).toBe(startHash);

@@ -4,7 +4,9 @@ import globals from "globals";
 export default [
   {
     // dist/** 是构建产物：源码侧改 lint 规则时它永远是旧的，只对源码负责
-    ignores: ["node_modules/**", "dist/**", "photos/**", "assets/**", ".lighthouseci/**", "test-results/**", "playwright-report/**"],
+    // .workbuddy/** 是 AGENTS 指定的本地 Agent 工作记忆（gitignore，不入仓库）：
+    // 里面的草稿脚本用 Node + 浏览器双端全局，被 lint 扫到只会把 `npm run lint` 无故搞红
+    ignores: ["node_modules/**", "dist/**", "photos/**", "assets/**", ".lighthouseci/**", "test-results/**", "playwright-report/**", ".workbuddy/**"],
   },
   js.configs.recommended,
   {

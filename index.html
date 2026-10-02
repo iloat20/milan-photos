@@ -149,8 +149,14 @@
         <input type="file" id="photoInput" accept="image/*" multiple hidden />
         <p class="upload-status" id="uploadStatus" role="status" aria-live="polite"></p>
 
-        <details class="gh-panel" id="ghPanel">
-          <summary>同步馆藏数据到 GitHub</summary>
+        <!-- 库房设置面板：popover（top layer + light dismiss + 原生 Esc），不再是 <details>。
+             面板不再挤占流内空间、点外部/按 Esc 即关都是 UA 行为，无需 JS。
+             CSS 侧默认 display:none 是**刻意的兜底**：不支持 popover 的浏览器只是打不开它，
+             而不会变成一块「opacity:0 却仍可聚焦」的隐形表单。 -->
+        <button class="btn btn-ghost gh-toggle" type="button" id="ghToggle"
+          popovertarget="ghPanel">同步馆藏数据到 GitHub</button>
+
+        <div class="gh-panel" id="ghPanel" popover>
           <div class="gh-fields">
             <label class="gh-field">
               <span>仓库</span>
@@ -174,7 +180,7 @@
               Token 只存在这台设备的浏览器里。
             </p>
           </div>
-        </details>
+        </div>
       </div>
     </section>
   </main>

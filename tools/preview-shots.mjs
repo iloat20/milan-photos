@@ -49,7 +49,7 @@ for (const s of SCENES) {
     await page.waitForFunction(() => document.getElementById("lbImg")?.currentSrc);
   } else if (s.act === "upload") {
     await page.locator("#upload").scrollIntoViewIfNeeded();
-    await page.locator("#ghPanel > summary").click();
+    await page.locator("#ghToggle").click();
     await page.mouse.move(0, 0);
   } else if (s.act === "about") {
     await page.locator("#about").scrollIntoViewIfNeeded();

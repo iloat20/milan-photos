@@ -1,5 +1,5 @@
 """把 photos/ 下的母版限制在长边上限内（默认 2560），避免手机原图（6000–8000px）
-以数十 MB 的体积进入公开仓库与 Pages 产物——而站内展示用的 medium 只有 1600px，
+以数十 MB 的体积进入公开仓库与 Pages 产物——而站内展示用的 medium 只有 1280px，
 原图从不被访客请求（见 src/util.js 的 heroSrc / lightboxSrc）。
 
 用法：
@@ -7,7 +7,7 @@
   python tools/downscale_photos.py --check    # 只检查，存在超限文件时返回非零
   python tools/downscale_photos.py --max 3200 # 覆盖上限
 
-⚠️ 上限必须 > photos_lib.MEDIUM_MAX_EDGE(=1600)。低于或等于该值时
+⚠️ 上限必须 > photos_lib.MEDIUM_MAX_EDGE(=1280)。低于或等于该值时
    ensure_medium() 会直接不生成 medium，灯箱将回落原文件、反而更糊。
 
 副作用（有意为之）：JPEG 重新编码会丢弃全部 EXIF，包括 GPS。
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -27,8 +28,14 @@ ROOT = Path(__file__).resolve().parents[1]
 PHOTOS = ROOT / "photos"
 JPEG_SUFFIXES = {".jpg", ".jpeg"}
 DEFAULT_MAX = 2560
-MEDIUM_MAX_EDGE = 1600
 QUALITY = 85
+
+# medium 的生成阈值只有**一处**：photos_lib.MEDIUM_MAX_EDGE。
+# 本文件曾自带第三份拷贝 `MEDIUM_MAX_EDGE = 1600`，在 8f0117e 把 medium 降到 1280
+# 之后它没跟着改 —— 后果是 `--max 1400`（合法上限）被拒，且报错信息里印着错阈值。
+# 就地 import（同 sync_photos.py 的写法）让两边不可能再漂。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from photos_lib import MEDIUM_MAX_EDGE  # noqa: E402
 
 
 def jpeg_masters() -> list[Path]:

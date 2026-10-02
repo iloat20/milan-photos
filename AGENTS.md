@@ -13,7 +13,7 @@ python tools/downscale_photos.py [--check]  # 母版长边上限 2560（超限�
 python tools/sanitize_photos.py  [--check]  # 字节级剥离 JPEG GPS EXIF（零像素改动；--check 只检）
 npm run lint                # ESLint + Stylelint
 npm run test:unit           # 纯函数单测（node --test，零新依赖，毫秒级）
-npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，27 项）
+npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，31 项）
 npm run lhci                # Lighthouse CI（先 build 再审，a11y/BP/SEO 满分断言）
 node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / dev 5173——dev 用 BASE 指端口；产物 tools/preview-apple-*.png，已 gitignore）
 ```
@@ -33,7 +33,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | `photos/meta.json` | 可选：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此** |
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
-| `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1600（原图 ≤1600 时不生成，灯箱用原图） |
+| `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成，灯箱用原图） |
 | `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入，另补拷 `assets/` 与 `sitemap.xml`（见 `copyStaticPlugin` 注释） |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
@@ -50,15 +50,18 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 
 背景（2026-09-29 治理，见 `research/milan-museum-design/2026-09-29-original-photo-remediation-design.md`）：
 入库的 5 张手机原图是 6144×8192 / 29.3 MB 量级，且**带 GPS EXIF 与蜂窝基站号（CELLID）**——
-站内展示只用 1600px 的 medium，那 73 MB 原图从未被访客下载，却把拍摄地点公开发布了出去。
+站内展示只用 ≤1280px 的 medium，那 73 MB 原图从未被访客下载，却把拍摄地点公开发布了出去。
 
 新增照片时：
 
-- **上限必须 > `photos_lib.MEDIUM_MAX_EDGE`（1600）**。低于或等于该值时 `ensure_medium()`
-  会直接不生成 medium，灯箱回落原文件、**反而更糊**。工具自身对此有断言（`--max` 小于等于 1600 报错退出）。
+- **上限必须 > `photos_lib.MEDIUM_MAX_EDGE`（当前 1280，全局只此一处定义）**。低于或等于该值时 `ensure_medium()`
+  会直接不生成 medium，灯箱回落原文件、**反而更糊**。工具自身对此有断言（`--max` 小于等于该值报错退出），
+  阈值的唯一来源是 `photos_lib`：`downscale_photos.py` 就地 `from photos_lib import MEDIUM_MAX_EDGE`
+  （它曾自带第三份拷贝 `= 1600`，在 medium 降到 1280 后没跟着改，导致 `--max 1400` 这种合法上限被拒——
+  别再复制这个常量）。
 - 降采样会**丢弃全部 EXIF**（JPEG 重编码的副作用，也是有意为之的「去定位」路径）；
   对不超限、只想清 GPS 的文件用 `sanitize_photos.py`——它做字节级手术，**不重压缩像素、保留 Orientation**。
-  这一区别很关键：8 张 1024×901 的图长边 ≤1600、没有 medium，灯箱**直接加载原图**并依赖 EXIF 方向。
+  这一区别很关键：8 张 1024×901 的图长边 ≤1280、没有 medium，灯箱**直接加载原图**并依赖 EXIF 方向。
 - `sync-photos.yml` 会在生成派生图**之前**先跑这两个工具，并用 `git add -A -- photos` 提交，
   所以新入馆的超限/GPS 图片会被 CI 自动治好后落库，而不是等人发现。
 
@@ -119,9 +122,49 @@ done
 2. **`!important` 会反转 `@layer` 优先级。** 同一属性都带 `!important` 时**低优先级层胜出**，判断「哪条赢」不能只看层顺序。现存相关写法：`.hero-carousel-pause[hidden] { display: none !important }`（components 层）压住一切非 `!important` 的 display；给 `[hidden]` 元素补显隐样式时不要用同属性 `!important` 去顶，层序会反噬。当前全文件仅 3 处 `!important`（上述一处 + reduced-motion 的 `animation/transition: none`），新增前先问「不加能不能赢」。
 3. **删 CSS 前先确认它是否被 JS 隐式依赖。** 现行实例：`.lightbox-frame.is-lit img { animation: none }`（components）**不可删**——它实际关掉 `.lightbox-img` 的 `lb-in` 入场动画，原位注释（约 `:1091`）已把这条钉住。历史上还清过一批纯 no-op 墓碑（`.hero-art::after` / `.card-media::after` / `.lightbox-frame::after` 的 `content: none`）——可删判据是「全文再无任何地方为这些伪元素定义 `content`」。
 
+## 必做：会被构建管线静默改写的 CSS 声明
+
+`npm run build` 的 CSS 走 **vite 8 + lightningcss**（不是老 vite 的 esbuild，`node_modules/vite/package.json`
+的依赖里是 `rolldown` + `lightningcss`）。已实证一条**会静默丢声明**的行为：
+
+- 同一条规则里，**`translate` / `rotate` / `scale` 写在 `transform` 之前** → lightningcss 1.33 试图把它们
+  合并进 `transform`，却把值丢了（`minify:false` 也一样丢）；写在 `transform` **之后**才会被正确合并成
+  `transform: … translate(-50%,-50%)`：
+
+  ```js
+  // node 复现：lightningcss.transform({code, minify:true})
+  ".a{translate:-50% -50%;transform:translateY(4px)}"  // => ".a{transform:translateY(4px)}"                 ← 丢了
+  ".a{transform:translateY(4px);translate:-50% -50%}"  // => ".a{transform:translateY(4px)translate(-50%,-50%)}" ← 活
+  ```
+
+- 后果**不是报错**，是那条声明凭空消失：`.gh-panel` 的居中（`top:50%` + `translate:-50% -50%`）就这么丢过，
+  面板整块掉到右下象限，页面照样能开关、肉眼不看截图根本发现不了，只有 e2e 的「面板中心 = 视口中心」
+  断言抓得住。
+- 三条纪律：① 位移/居中一律写进 **`transform`**，别用独立 `translate`/`rotate`/`scale` 属性；② 改完 CSS
+  以 **`dist/styles.css`** 为准核对（源码里有 ≠ 产物里有，`Select-String dist\styles.css translate:` 即可）；
+  ③ 定位类新断言先跑一次**红态**——这条 bug 当时正好是活的，断言一加就是 `Received: 209.99…`（恰好半个
+  面板宽），修完转绿。
+
 ## 设计意图（勿当 bug「修好」）
 
 当前是**「无字陈列」+ 亮/暗双主题**（Apple 式系统语言）。「无字」的**现行实现**是墙签默认不可见：`.card-anno { opacity: 0 }`，hover / 键盘聚焦才浮现（`.card:hover .card-anno` / `.card:focus-visible .card-anno`，见 `styles.css:810` 附近注释）。**不要**改成标签常显的馆藏 UI（Met/卢浮宫式一图一签）——那是外部对标结论里的「不建议」项，不是缺陷；亮/暗主题跟随系统（`prefers-color-scheme`）是**有意设计**，也别当成机构风要裁掉。
+
+- **亮/暗主题的唯一事实源是 `light-dark()` + `color-scheme`**（2026-10-01 起）：`:root` 里每个颜色只声明
+  **一对** `light-dark(亮, 暗)`；手动切换只写 `:root[data-theme=…] { color-scheme: light | dark }`。
+  **不要**再为手动主题写第二套颜色值（2026-10-01 之前同一组颜色在「`:root` / 亮色媒体查询 /
+  `[data-theme=light]`」三处各写一遍，是典型的漂移温床），也**不要**用 `@media (prefers-color-scheme: …)`
+  做亮色专属覆盖——那种写法只认系统偏好，`data-theme` 手动覆盖时会被静默跳过。实测教训：
+  序厅/观画室的亮色「洗淡」原本就写在这样一个媒体查询里，结果「系统暗 + 手动亮」时 body 已是 `#fff`
+  而底纹仍是 `rgb(10,10,10)→rgb(0,0,0)` 的黑房间。现两处都用 `light-dark()` 内联进 `background`，
+  顺带摆脱了「必须放在 @layer 末尾压住基础值」的源序陷阱。护栏：e2e「手动亮色压过系统暗色…」。
+  基线：`light-dark()`（Chrome 123 / Safari 17.5 / Firefox 120）**早于**本站已在用的 `color-mix()`
+  与 `content-visibility: auto`，故可硬依赖；装饰性特性仍按惯例包 `@supports`。
+- **库房的 GitHub 设置面板是 `<div popover>` + 带 `popovertarget` 的按钮**（2026-10-01 起，不再是 `<details>`）：
+  top layer 不受祖先 overflow / stacking 影响，light dismiss 与 Esc 关闭都是 UA 行为 —— **不要**为它写
+  keydown。`.gh-panel { display: none }` 是**刻意兜底**：不支持 popover 的浏览器只是打不开它，不能退化成
+  「opacity:0 却仍可聚焦」的隐形表单。进出场靠 `@starting-style` + `display/overlay … allow-discrete`
+  三者配套，缺一则要么没有入场动画、要么退场被立刻截断。改名或删 `#ghToggle` 要同步
+  `tools/preview-shots.mjs`（库房那张截图靠它开面板）。
 
 历史记录：旧版曾用一份 `display: none !important` 清单（藏 `.hero-kicker` / `.chapter-sub` / `.card-meta` / `.lb-index` / `.upload-sub` / `.footer-note` 等）做「无字」，其中多数选择器早已无节点（no-op 声明）。2026-09-30 重绘时**清单连同这些死选择器整体删除**——这些名字**不要**再写成样式定义（写了就是新的死 CSS）。
 

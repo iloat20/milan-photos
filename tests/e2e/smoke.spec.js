@@ -1065,4 +1065,84 @@ test.describe("画廊冒烟", () => {
         .not.toBe(atOpen);
     });
   });
+
+  /* ── 缺陷回归护栏（2026-10-02 审查确认的三个 bug）──
+     每条都做过红态验证：先写断言、确认在未修复的 app.js 上真的会红，再修、再转绿。 */
+
+  test("筛选 chip 激活后焦点保持在筛选栏内（整组重建不得把焦点打回 body）", async ({ page }) => {
+    // renderFilters 每次 applyFilter 都 filterBar.innerHTML="" 整组重建：键盘 Enter
+    // 激活 chip 后，被聚焦的按钮连根销毁，焦点回落 <body>，键盘用户的 Tab 位置全丢
+    // （APG 切换按钮组要求激活后焦点留在原 chip）。红态实测：Enter 后 activeElement === body。
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    const chips = page.locator(".filter-chip");
+    await expect.poll(() => chips.count(), { timeout: 5_000 }).toBeGreaterThan(1);
+    const target = chips.nth(1);
+    const label = (await target.textContent()).trim();
+    await target.focus();
+    await page.keyboard.press("Enter");
+    // 卡片数变化 = 筛选已落地 = filterBar 已重建
+    await expect.poll(() => page.locator(".card").count(), { timeout: 5_000 }).toBeLessThan(18);
+    const focused = await page.evaluate(() => {
+      const el = document.activeElement;
+      return {
+        inBar: Boolean(el && el.closest && el.closest("#filterBar")),
+        text: (el && el.textContent) || "",
+      };
+    });
+    expect(focused.inBar, `激活后焦点跑到「${focused.text || "body"}」，不在筛选栏内`).toBe(true);
+    expect(focused.text).toBe(label);
+  });
+
+  test("序厅为空（清单失败/零照片）时顶栏馆名不得被隐去", async ({ browser }) => {
+    // measureHeroEnd 只在启动期与 resize 时执行：hero 被标 is-empty（display:none）后
+    // heroEnd 仍是启动期量的整屏高，scrollY(0) < heroEnd 恒真 → is-at-hero 常驻 →
+    // .site-nav-logo visibility:hidden —— 首屏既无序厅大字又无馆名。
+    // 红态实测：nav 带 is-at-hero、logo computed visibility=hidden。
+    const ctx = await browser.newContext({
+      serviceWorkers: "block",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await ctx.newPage();
+    await page.route("**/photos/manifest.json", (route) => route.abort());
+    await page.goto("/");
+    await expect(page.locator("#empty")).toBeVisible();
+    await expect(page.locator("#heroCarousel")).toHaveClass(/is-empty/);
+    await expect(page.locator("#siteNav")).not.toHaveClass(/is-at-hero/);
+    await expect(page.locator(".site-nav-logo")).toBeVisible();
+    await ctx.close();
+  });
+
+  test("图片预载必须带 type 提示（imagesrcset 按首个候选扩展名判定）", async ({ page }) => {
+    // preloadImage 用 /\.avif$/i.test(整条 srcset) 判格式，而候选串以 "900w" 这样的
+    // 宽度描述符结尾，$ 锚点永远不命中 → type 从未写上，注释里「不支持该格式的浏览器
+    // 跳过预载」形同虚设。红态实测：带 imagesrcset 的 preload 其 type 属性为 null。
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            [...document.querySelectorAll('link[rel="preload"][as="image"]')].some((l) =>
+              l.getAttribute("imagesrcset")
+            )
+          ),
+        { timeout: 5_000 }
+      )
+      .toBe(true);
+    const entries = await page.evaluate(() =>
+      [...document.querySelectorAll('link[rel="preload"][as="image"]')]
+        .filter((l) => l.getAttribute("imagesrcset"))
+        .map((l) => ({
+          type: l.getAttribute("type"),
+          srcset: l.getAttribute("imagesrcset").slice(0, 64),
+        }))
+    );
+    expect(entries.length).toBeGreaterThan(0);
+    for (const e of entries) {
+      expect(e.type || "", `imagesrcset=${e.srcset}… 的预载缺 type 提示`).toMatch(
+        /^image\/(avif|webp)$/
+      );
+    }
+  });
 });

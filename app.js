@@ -359,10 +359,18 @@ import { createLightbox } from "./src/lightbox.js";
       if (opts.sizes) link.setAttribute("imagesizes", opts.sizes);
     }
     // 声明 type：不支持该格式的浏览器跳过预载，避免 AVIF 在老浏览器白下。
-    // 有 imagesrcset 时按候选判定——候选才是实际会被选中下载的格式
-    const fmt = opts.srcset || href;
-    if (/\.avif$/i.test(fmt)) link.type = "image/avif";
-    else if (/\.webp$/i.test(fmt)) link.type = "image/webp";
+    // 有 imagesrcset 时按**首个候选的 URL** 判定格式。这里曾拿整条候选串去
+    // /\.avif$/ 匹配——而候选串是以宽度描述符结尾的（"…-400.avif 300w, …900w"），
+    // $ 锚点永远落在 "900w" 后面，条件恒假 → type 从未写上，上面那句注释形同虚设
+    // （e2e 红态实证：带 imagesrcset 的 preload，type 属性为空）。
+    // 同一 srcset 的候选由 photos_lib 按同一格式整体产出（AVIF 串全是 .avif），
+    // 故只看首个候选即可；退化为单 URL 的 href 同样适配。
+    const firstUrl = String(opts.srcset || href || "")
+      .split(",")[0]
+      .trim()
+      .split(/\s+/)[0];
+    if (/\.avif$/i.test(firstUrl)) link.type = "image/avif";
+    else if (/\.webp$/i.test(firstUrl)) link.type = "image/webp";
     link.setAttribute("fetchpriority", priority);
     document.head.appendChild(link);
     if (priority !== "high") {
@@ -678,6 +686,10 @@ import { createLightbox } from "./src/lightbox.js";
     if (!list.length) {
       heroCarousel.classList.add("is-empty");
       syncHeroPauseButton();
+      // 序厅塌成 display:none 后必须重测：heroEnd 原本量的是整屏高，
+      // 而 onScrollNav 只在启动期与 resize 时跑 —— scrollY(0) < 整屏高 恒真，
+      // is-at-hero 常驻、顶栏馆名在首屏被隐去，而序厅大字并不在场（两者同时消失）。
+      syncNavToHero();
       return;
     }
     heroCarousel.classList.remove("is-empty");
@@ -762,6 +774,8 @@ import { createLightbox } from "./src/lightbox.js";
     syncHeroPauseButton();
     applyHeroSources();
     startHeroAuto();
+    // slides 建完后 hero 高度才定：与启动期那次测量对齐（最小高度 100vh，通常是同值）
+    syncNavToHero();
   }
 
   if (heroPauseBtn) {
@@ -872,6 +886,14 @@ import { createLightbox } from "./src/lightbox.js";
 
   function renderFilters() {
     if (!filterBar) return;
+    // 键盘焦点保持：本函数每次 applyFilter 都整组重建 chip，被 Enter 激活的那个按钮
+    // 会连根销毁 → 焦点回落 <body>，键盘用户的 Tab 位置全丢（APG 切换按钮组要求
+    // 激活后焦点留在原 chip）。故先记下重建前焦点所在 chip，重建后原位还回。
+    const focusedChipId =
+      document.activeElement instanceof HTMLElement &&
+      filterBar.contains(document.activeElement)
+        ? document.activeElement.dataset.filterId || ""
+        : "";
     const keys = collectFilters(photos);
     filterBar.innerHTML = "";
 
@@ -891,12 +913,22 @@ import { createLightbox } from "./src/lightbox.js";
       btn.className = "filter-chip" + (opt.id === activeFilter ? " is-active" : "");
       btn.textContent = opt.id === "all" ? "全部展厅" : `${ymLabel(opt.id)}`;
       btn.setAttribute("aria-pressed", opt.id === activeFilter ? "true" : "false");
+      // 焦点归属的稳定标识：重建后按它找回同一个 chip（不能用索引——选项集合会变）
+      btn.dataset.filterId = opt.id;
       btn.addEventListener("click", () => {
         activeFilter = opt.id;
         applyFilter(true);
       });
       filterBar.appendChild(btn);
     });
+
+    if (focusedChipId) {
+      const restored = [...filterBar.children].find(
+        (el) => el.dataset.filterId === focusedChipId
+      );
+      // preventScroll：键盘用户刚激活的 chip 就在眼前，重建不该引起页面跳动
+      if (restored) restored.focus({ preventScroll: true });
+    }
   }
 
   async function loadFolderPhotos() {
@@ -1653,29 +1685,41 @@ import { createLightbox } from "./src/lightbox.js";
   const siteNav = document.getElementById("siteNav");
   // 序厅门厅大字与顶栏馆名同屏重复：大字在场时隐去顶栏馆名，滚入展厅再浮现
   let heroEnd = Infinity;
-  const measureHeroEnd = () => {
+  function measureHeroEnd() {
     // siteNav 缺失（HTML 结构调整 / SW 旧壳层配新页面）时**不得**裸取 offsetHeight：
     // 本条在启动期就于 renderFilters / renderGallery / loadFolderPhotos **之前**求值，
     // 抛 TypeError 会中断整个 IIFE —— 展厅 0 卡、骨架屏永不退场、主题按钮也没绑上。
     // 这正是 on() 守卫要挡的那类故障（实证：删掉 <header id="siteNav"> 后 cards=0、
     // skeleton.hidden=false、pageerror「Cannot read properties of null」）。
+    //
+    // is-empty（display:none）必须显式按 0 处理：display:none 的元素 offset 都是 0，
+    // 但「0 高」与「未测量」都会给出 0，靠 offset 区分不出来 —— 而语义完全不同：
+    // 序厅不在场时没有任何大字需要避让，馆名必须一直可见（heroEnd=0 → scrollY(0) 不小于它）。
     heroEnd =
-      heroCarousel && siteNav
+      heroCarousel && siteNav && !heroCarousel.classList.contains("is-empty")
         ? heroCarousel.offsetTop + heroCarousel.offsetHeight - siteNav.offsetHeight
-        : Infinity;
-  };
-  const onScrollNav = () => {
+        : 0;
+  }
+  function onScrollNav() {
     if (!siteNav) return;
     siteNav.classList.toggle("is-scrolled", window.scrollY > 40);
     siteNav.classList.toggle("is-at-hero", window.scrollY < heroEnd);
-  };
-  measureHeroEnd();
-  window.addEventListener("scroll", onScrollNav, { passive: true });
-  window.addEventListener("resize", () => {
+  }
+  /**
+   * 序厅高度变化后的一次「重量 + 同步」。
+   *
+   * 为什么必须有：heroEnd 只在启动期与 resize 时被测，但序厅高度是**会变的**——
+   * 空馆藏/清单失败时 renderHeroCarousel 给它挂上 `is-empty` 塌成 display:none。
+   * 不重测的话 scrollY(0) < 旧值（整屏高）恒真，`is-at-hero` 常驻，
+   * 顶栏馆名被隐去而序厅大字并不在场——两者同时从首屏消失（e2e 红态实证）。
+   */
+  function syncNavToHero() {
     measureHeroEnd();
     onScrollNav();
-  }, { passive: true });
-  onScrollNav();
+  }
+  syncNavToHero();
+  window.addEventListener("scroll", onScrollNav, { passive: true });
+  window.addEventListener("resize", syncNavToHero, { passive: true });
 
   renderFilters();
   renderGallery();

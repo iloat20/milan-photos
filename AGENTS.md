@@ -13,7 +13,7 @@ python tools/downscale_photos.py [--check]  # 母版长边上限 2560（超限�
 python tools/sanitize_photos.py  [--check]  # 字节级剥离 JPEG GPS EXIF（零像素改动；--check 只检）
 npm run lint                # ESLint + Stylelint
 npm run test:unit           # 纯函数单测（node --test，零新依赖，毫秒级）
-npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，31 项）
+npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，34 项）
 npm run lhci                # Lighthouse CI（先 build 再审，a11y/BP/SEO 满分断言）
 node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / dev 5173——dev 用 BASE 指端口；产物 tools/preview-apple-*.png，已 gitignore）
 ```
@@ -144,6 +144,25 @@ done
   以 **`dist/styles.css`** 为准核对（源码里有 ≠ 产物里有，`Select-String dist\styles.css translate:` 即可）；
   ③ 定位类新断言先跑一次**红态**——这条 bug 当时正好是活的，断言一加就是 `Received: 209.99…`（恰好半个
   面板宽），修完转绿。
+
+## 必做：三处易复发点（整组重建 / 一次性测量 / 串内格式判定）
+
+2026-10-02 审查确认并修复，三条都由 e2e 护栏钉住（先做红态验证，确认断言真能抓住）：
+
+1. **`renderFilters()` 整组重建要给回焦点**：`filterBar.innerHTML = ""` 会销毁持有焦点的
+   chip，键盘 Enter 激活后焦点回落 `<body>`，Tab 位置全丢（APG 要求激活后焦点留在原 chip）。
+   现按 `btn.dataset.filterId` 记住重建前焦点归属，重建后用 `focus({ preventScroll: true })` 还回。
+   **凡是 `innerHTML = ""` 重建交互控件的函数，都要先问一句「焦点怎么办」。**
+2. **序厅高度会变，`heroEnd` 必须重量**：空馆藏/清单失败时 `renderHeroCarousel` 给序厅挂
+   `is-empty`（display:none），而 `heroEnd` 只在启动期与 resize 被测 —— `scrollY(0) < 旧值
+   （整屏高）` 恒真，`is-at-hero` 常驻，顶栏馆名与序厅大字**同时**从首屏消失（红态实证）。
+   现 `measureHeroEnd()` 对 `is-empty` 显式取 0（display:none 的 offset 也是 0，无法与
+   「未测量」区分，必须显式判），`renderHeroCarousel()` 收尾调 `syncNavToHero()`，resize 同用。
+   **任何「启动期只量一次」的布局常量，先确认它不会随后续 DOM 变化而变。**
+3. **preload 的 `type` 判定要拆候选**：srcset 串以宽度描述符结尾（`…-400.avif 300w, …900w`），
+   拿整串 `/\.avif$/` 匹配永远不命中 → `type` 从未写上，注释里「不支持该格式的浏览器跳过
+   预载」形同虚设。现取**首个候选的 URL** 判扩展名（同一 srcset 由 `photos_lib` 按同一格式
+   整体产出）。**凡对 srcset 字符串做正则，先想清楚 `$` 锚在哪个 token 后面。**
 
 ## 设计意图（勿当 bug「修好」）
 

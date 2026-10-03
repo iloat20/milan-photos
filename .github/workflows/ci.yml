@@ -28,7 +28,7 @@ jobs:
       - name: Install Pillow (downscale --check 需要；本机 sync 生成 manifest 同样靠它)
         run: pip install "Pillow>=11"
       # 护栏：母版既不得带 GPS，也不得超过长边上限。
-      # 背景——手机原图可达 6000–8000px / 数十 MB，而站内展示只用 1600px 的 medium，
+      # 背景——手机原图可达 6000–8000px / 数十 MB，而站内展示只用 ≤1280px 的 medium，
       # 原图从不被访客请求（src/util.js 的 heroSrc / lightboxSrc 只取 medium|thumb）。
       # 两者都是「加入新照片时才会触发」的检查，放在 lint 之前，失败得最早最省时。
       - name: Verify photo privacy (no GPS EXIF)

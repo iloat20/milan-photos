@@ -75,12 +75,12 @@ photos/                    原图 + meta.json + manifest.json
 photos/thumbs/             列表缩略图（WebP + AVIF，400/800/1200 三档）
 photos/medium/             灯箱用中尺寸（WebP + AVIF ≤1280px；原图 ≤1280 时不生成）
 tools/sync_photos.py       生成 manifest + 缩略图 + 中尺寸 + AVIF（CI 权威跑）
-tests/e2e/                 Playwright 冒烟（27 项）
+tests/e2e/                 Playwright 冒烟（34 项）
 .github/workflows/         sync-photos（清单回写）+ ci（lint → e2e → Lighthouse）+ deploy（构建并发布 Pages）
 .github/dependabot.yml     npm + GitHub Actions 每周依赖巡检
 AGENTS.md                  项目约定（命令 / 生成物 / 无障碍契约）
 research/                  设计研究文档（brief / findings / a11y audit）
-package.json               仅 dev 工具（应用本身零依赖零构建）
+package.json               仅 dev 工具（应用运行时零依赖；dev/build 工具链见 vite.config.js）
 ```
 
 ## 工程化与测试
@@ -108,4 +108,4 @@ npm run lhci      # Lighthouse CI（构建后审计，a11y / best-practices / SE
 - 支持 GIF / 动图：列表显示静帧 + 角标，灯箱播放原文件
 - 页面内本地上传（上传前客户端压缩为 ≤2048px WebP；GIF 保留原文件）
 - 支持 `prefers-reduced-motion`（关闭自动轮播与非必要动效）
-- 展厅墙面 `sampleRoomColor()` 随画采样，并钳制墙色亮度以保证金字/象牙字对比度
+- 展厅墙面：sync 阶段用同一算法预计算 `palette` 写进 manifest，客户端只做样式赋值并按对比度压暗；仅浏览器内上传的图（无 manifest 条目）回退到 `sampleRoomColor()` 采样

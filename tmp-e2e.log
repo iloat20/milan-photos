@@ -1,0 +1,42 @@
+
+
+
+
+
+Running 34 tests using 6 workers
+
+[1/34] [chromium] › tests\e2e\smoke.spec.js:4:3 › 画廊冒烟 › 首页渲染 18 张卡片且缩略图走 AVIF 协商
+[2/34] [chromium] › tests\e2e\smoke.spec.js:27:3 › 画廊冒烟 › manifest 提供 thumbAvifSrcset 字段
+[3/34] [chromium] › tests\e2e\smoke.spec.js:124:3 › 画廊冒烟 › hero 轮播切换与分页点
+[4/34] [chromium] › tests\e2e\smoke.spec.js:54:3 › 画廊冒烟 › 手机宽度保持双列展厅且灯箱可用
+[5/34] [chromium] › tests\e2e\smoke.spec.js:78:3 › 画廊冒烟 › 筛选切换卡片数量
+[6/34] [chromium] › tests\e2e\smoke.spec.js:98:3 › 画廊冒烟 › URL 深链：#f 筛选 / #p 灯箱 / 关灯箱恢复 / 直达
+[7/34] [chromium] › tests\e2e\smoke.spec.js:36:3 › 画廊冒烟 › 灯箱开合（<dialog> 原生模态）
+[8/34] [chromium] › tests\e2e\smoke.spec.js:145:3 › 画廊冒烟 › Service Worker 激活只清理本站旧缓存
+[9/34] [chromium] › tests\e2e\smoke.spec.js:194:3 › 画廊冒烟 › Service Worker 离线仍可服务
+[10/34] [chromium] › tests\e2e\smoke.spec.js:307:3 › 画廊冒烟 › 控制台无错误
+[11/34] [chromium] › tests\e2e\smoke.spec.js:330:3 › 画廊冒烟 › 展厅间距按断点取值（无字陈列层叠回归）
+[12/34] [chromium] › tests\e2e\smoke.spec.js:363:3 › 画廊冒烟 › 画心裁切盒与墙面光分层（射灯回归）
+[13/34] [chromium] › tests\e2e\smoke.spec.js:398:3 › 画廊冒烟 › 窄屏箭头隐藏且不覆盖画心，翻页交回手势
+[14/34] [chromium] › tests\e2e\smoke.spec.js:458:3 › 画廊冒烟 › 桌面端灯箱箭头让开画心
+[15/34] [chromium] › tests\e2e\smoke.spec.js:475:3 › 画廊冒烟 › 骨架屏与真实展厅布局一致（列 / gap / 内边距 / 宽度）
+[16/34] [chromium] › tests\e2e\smoke.spec.js:522:3 › 画廊冒烟 › 缺元素时降级运行而非整站白屏（事件绑定守卫）
+[17/34] [chromium] › tests\e2e\smoke.spec.js:549:3 › 画廊冒烟 › 缺 #siteNav 时同样降级（启动期量高不得裸取 offsetHeight）
+[18/34] [chromium] › tests\e2e\smoke.spec.js:575:3 › 画廊冒烟 › 主题按钮：未手动选过时首击即翻转（跟随系统不等于已选 light）
+[19/34] [chromium] › tests\e2e\smoke.spec.js:598:3 › 画廊冒烟 › 手动亮色压过系统暗色（序厅底纹随主题洗淡，不再只看系统偏好）
+[20/34] [chromium] › tests\e2e\smoke.spec.js:628:3 › 画廊冒烟 › 库房设置面板走 popover：点开、原生 Esc 关、关闭即不可见
+[21/34] [chromium] › tests\e2e\smoke.spec.js:658:3 › 画廊冒烟 › 序厅画作可键盘打开，且非活动 slide 不在 Tab 序列内
+[22/34] [chromium] › tests\e2e\smoke.spec.js:690:3 › 画廊冒烟 › 筛选栏语义为 group，chip 仍是 aria-pressed 切换按钮
+[23/34] [chromium] › tests\e2e\smoke.spec.js:706:3 › 画廊冒烟 › 墙色取自 manifest 预计算调色板，而非客户端采样（P1-6）
+[24/34] [chromium] › tests\e2e\smoke.spec.js:853:3 › 画廊冒烟 › 放大态单击缩回 1×，且不切图
+[25/34] [chromium] › tests\e2e\smoke.spec.js:865:3 › 画廊冒烟 › 放大态双击只缩回一次，不切图也不重新放大
+[26/34] [chromium] › tests\e2e\smoke.spec.js:877:3 › 画廊冒烟 › 手慢双击不跳过两张（跨过旧 tapTimer 的 450ms 仍判为双击）
+[27/34] [chromium] › tests\e2e\smoke.spec.js:914:3 › 画廊冒烟 › 单击后键盘翻页再双击：落在键盘翻页后的位置（连击组不跨路径泄漏）
+[28/34] [chromium] › tests\e2e\smoke.spec.js:942:5 › 画廊冒烟 › 触屏手势 › 双击放大后可单击缩回，且两种手势都不切图
+[29/34] [chromium] › tests\e2e\smoke.spec.js:1015:5 › 画廊冒烟 › 序厅→灯箱 过渡源 › 无筛选点序厅：配对源是序厅画面，不是屏外的展厅卡片
+[30/34] [chromium] › tests\e2e\smoke.spec.js:1025:5 › 画廊冒烟 › 序厅→灯箱 过渡源 › 筛选不含该画时点序厅：同样以序厅画面作配对源
+[31/34] [chromium] › tests\e2e\smoke.spec.js:1039:5 › 画廊冒烟 › 序厅→灯箱 过渡源 › 灯箱会话期间序厅停止自动轮播，关闭后恢复
+[32/34] [chromium] › tests\e2e\smoke.spec.js:1072:3 › 画廊冒烟 › 筛选 chip 激活后焦点保持在筛选栏内（整组重建不得把焦点打回 body）
+[33/34] [chromium] › tests\e2e\smoke.spec.js:1097:3 › 画廊冒烟 › 序厅为空（清单失败/零照片）时顶栏馆名不得被隐去
+[34/34] [chromium] › tests\e2e\smoke.spec.js:1116:3 › 画廊冒烟 › 图片预载必须带 type 提示（imagesrcset 按首个候选扩展名判定）
+  34 passed (36.8s)

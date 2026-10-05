@@ -13,6 +13,8 @@
       "mediumAvif": "photos/medium/mmexport1788447848472.avif",
       "width": 1279,
       "height": 1706,
+      "heroSrcset": "photos/thumbs/mmexport1788447848472-400.webp 300w, photos/thumbs/mmexport1788447848472-800.webp 600w, photos/thumbs/mmexport1788447848472.webp 900w, photos/medium/mmexport1788447848472.webp 960w",
+      "heroAvifSrcset": "photos/thumbs/mmexport1788447848472-400.avif 300w, photos/thumbs/mmexport1788447848472-800.avif 600w, photos/thumbs/mmexport1788447848472.avif 900w, photos/medium/mmexport1788447848472.avif 960w",
       "palette": {
         "wall": "rgba(74, 75, 65, 1)",
         "deep": "rgba(42, 45, 38, 1)",
@@ -33,6 +35,8 @@
       "mediumAvif": "photos/medium/IMG20260817164949_01.avif",
       "width": 1536,
       "height": 2048,
+      "heroSrcset": "photos/thumbs/IMG20260817164949_01-400.webp 300w, photos/thumbs/IMG20260817164949_01-800.webp 600w, photos/thumbs/IMG20260817164949_01.webp 900w, photos/medium/IMG20260817164949_01.webp 960w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260817164949_01-400.avif 300w, photos/thumbs/IMG20260817164949_01-800.avif 600w, photos/thumbs/IMG20260817164949_01.avif 900w, photos/medium/IMG20260817164949_01.avif 960w",
       "palette": {
         "wall": "rgba(58, 70, 71, 1)",
         "deep": "rgba(34, 42, 42, 1)",
@@ -53,6 +57,8 @@
       "mediumAvif": "photos/medium/IMG20260817164045.avif",
       "width": 1536,
       "height": 2048,
+      "heroSrcset": "photos/thumbs/IMG20260817164045-400.webp 300w, photos/thumbs/IMG20260817164045-800.webp 600w, photos/thumbs/IMG20260817164045.webp 900w, photos/medium/IMG20260817164045.webp 960w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260817164045-400.avif 300w, photos/thumbs/IMG20260817164045-800.avif 600w, photos/thumbs/IMG20260817164045.avif 900w, photos/medium/IMG20260817164045.avif 960w",
       "palette": {
         "wall": "rgba(56, 67, 68, 1)",
         "deep": "rgba(33, 41, 40, 1)",
@@ -73,6 +79,8 @@
       "mediumAvif": "photos/medium/IMG20260817155446.avif",
       "width": 1536,
       "height": 2048,
+      "heroSrcset": "photos/thumbs/IMG20260817155446-400.webp 300w, photos/thumbs/IMG20260817155446-800.webp 600w, photos/thumbs/IMG20260817155446.webp 900w, photos/medium/IMG20260817155446.webp 960w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260817155446-400.avif 300w, photos/thumbs/IMG20260817155446-800.avif 600w, photos/thumbs/IMG20260817155446.avif 900w, photos/medium/IMG20260817155446.avif 960w",
       "palette": {
         "wall": "rgba(43, 57, 40, 1)",
         "deep": "rgba(27, 36, 27, 1)",
@@ -91,6 +99,8 @@
       "thumbAvifSrcset": "photos/thumbs/1700559942072-400.avif 360w",
       "width": 360,
       "height": 360,
+      "heroSrcset": "photos/thumbs/1700559942072-400.webp 360w",
+      "heroAvifSrcset": "photos/thumbs/1700559942072-400.avif 360w",
       "palette": {
         "wall": "rgba(33, 49, 40, 1)",
         "deep": "rgba(22, 32, 26, 1)",
@@ -109,6 +119,8 @@
       "thumbAvifSrcset": "photos/thumbs/08-portrait-silhouette-400.avif 400w, photos/thumbs/08-portrait-silhouette-800.avif 800w, photos/thumbs/08-portrait-silhouette.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/08-portrait-silhouette-400.webp 400w, photos/thumbs/08-portrait-silhouette-800.webp 800w, photos/thumbs/08-portrait-silhouette.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/08-portrait-silhouette-400.avif 400w, photos/thumbs/08-portrait-silhouette-800.avif 800w, photos/thumbs/08-portrait-silhouette.avif 1024w",
       "palette": {
         "wall": "rgba(52, 51, 38, 1)",
         "deep": "rgba(31, 33, 25, 1)",
@@ -127,6 +139,8 @@
       "thumbAvifSrcset": "photos/thumbs/07-botanical-400.avif 400w, photos/thumbs/07-botanical-800.avif 800w, photos/thumbs/07-botanical.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/07-botanical-400.webp 400w, photos/thumbs/07-botanical-800.webp 800w, photos/thumbs/07-botanical.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/07-botanical-400.avif 400w, photos/thumbs/07-botanical-800.avif 800w, photos/thumbs/07-botanical.avif 1024w",
       "palette": {
         "wall": "rgba(46, 52, 39, 1)",
         "deep": "rgba(28, 33, 26, 1)",
@@ -145,6 +159,8 @@
       "thumbAvifSrcset": "photos/thumbs/06-neon-window-400.avif 400w, photos/thumbs/06-neon-window-800.avif 800w, photos/thumbs/06-neon-window.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/06-neon-window-400.webp 400w, photos/thumbs/06-neon-window-800.webp 800w, photos/thumbs/06-neon-window.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/06-neon-window-400.avif 400w, photos/thumbs/06-neon-window-800.avif 800w, photos/thumbs/06-neon-window.avif 1024w",
       "palette": {
         "wall": "rgba(58, 57, 39, 1)",
         "deep": "rgba(34, 36, 26, 1)",
@@ -163,6 +179,8 @@
       "thumbAvifSrcset": "photos/thumbs/05-desert-dunes-400.avif 400w, photos/thumbs/05-desert-dunes-800.avif 800w, photos/thumbs/05-desert-dunes.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/05-desert-dunes-400.webp 400w, photos/thumbs/05-desert-dunes-800.webp 800w, photos/thumbs/05-desert-dunes.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/05-desert-dunes-400.avif 400w, photos/thumbs/05-desert-dunes-800.avif 800w, photos/thumbs/05-desert-dunes.avif 1024w",
       "palette": {
         "wall": "rgba(62, 56, 40, 1)",
         "deep": "rgba(36, 35, 27, 1)",
@@ -181,6 +199,8 @@
       "thumbAvifSrcset": "photos/thumbs/04-mist-lake-400.avif 400w, photos/thumbs/04-mist-lake-800.avif 800w, photos/thumbs/04-mist-lake.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/04-mist-lake-400.webp 400w, photos/thumbs/04-mist-lake-800.webp 800w, photos/thumbs/04-mist-lake.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/04-mist-lake-400.avif 400w, photos/thumbs/04-mist-lake-800.avif 800w, photos/thumbs/04-mist-lake.avif 1024w",
       "palette": {
         "wall": "rgba(51, 63, 62, 1)",
         "deep": "rgba(31, 38, 37, 1)",
@@ -199,6 +219,8 @@
       "thumbAvifSrcset": "photos/thumbs/03-light-trails-400.avif 400w, photos/thumbs/03-light-trails-800.avif 800w, photos/thumbs/03-light-trails.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/03-light-trails-400.webp 400w, photos/thumbs/03-light-trails-800.webp 800w, photos/thumbs/03-light-trails.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/03-light-trails-400.avif 400w, photos/thumbs/03-light-trails-800.avif 800w, photos/thumbs/03-light-trails.avif 1024w",
       "palette": {
         "wall": "rgba(56, 56, 46, 1)",
         "deep": "rgba(33, 35, 29, 1)",
@@ -217,6 +239,8 @@
       "thumbAvifSrcset": "photos/thumbs/02-staircase-400.avif 400w, photos/thumbs/02-staircase-800.avif 800w, photos/thumbs/02-staircase.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/02-staircase-400.webp 400w, photos/thumbs/02-staircase-800.webp 800w, photos/thumbs/02-staircase.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/02-staircase-400.avif 400w, photos/thumbs/02-staircase-800.avif 800w, photos/thumbs/02-staircase.avif 1024w",
       "palette": {
         "wall": "rgba(52, 54, 41, 1)",
         "deep": "rgba(31, 34, 27, 1)",
@@ -235,6 +259,8 @@
       "thumbAvifSrcset": "photos/thumbs/01-city-rain-400.avif 400w, photos/thumbs/01-city-rain-800.avif 800w, photos/thumbs/01-city-rain.avif 1024w",
       "width": 1024,
       "height": 901,
+      "heroSrcset": "photos/thumbs/01-city-rain-400.webp 400w, photos/thumbs/01-city-rain-800.webp 800w, photos/thumbs/01-city-rain.webp 1024w",
+      "heroAvifSrcset": "photos/thumbs/01-city-rain-400.avif 400w, photos/thumbs/01-city-rain-800.avif 800w, photos/thumbs/01-city-rain.avif 1024w",
       "palette": {
         "wall": "rgba(48, 50, 39, 1)",
         "deep": "rgba(29, 32, 26, 1)",
@@ -255,6 +281,8 @@
       "mediumAvif": "photos/medium/IMG20260916193852.avif",
       "width": 2560,
       "height": 1920,
+      "heroSrcset": "photos/thumbs/IMG20260916193852-400.webp 400w, photos/thumbs/IMG20260916193852-800.webp 800w, photos/thumbs/IMG20260916193852.webp 1200w, photos/medium/IMG20260916193852.webp 1280w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260916193852-400.avif 400w, photos/thumbs/IMG20260916193852-800.avif 800w, photos/thumbs/IMG20260916193852.avif 1200w, photos/medium/IMG20260916193852.avif 1280w",
       "palette": {
         "wall": "rgba(30, 37, 30, 1)",
         "deep": "rgba(21, 26, 22, 1)",
@@ -275,6 +303,8 @@
       "mediumAvif": "photos/medium/IMG20260916193836.avif",
       "width": 2560,
       "height": 1920,
+      "heroSrcset": "photos/thumbs/IMG20260916193836-400.webp 400w, photos/thumbs/IMG20260916193836-800.webp 800w, photos/thumbs/IMG20260916193836.webp 1200w, photos/medium/IMG20260916193836.webp 1280w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260916193836-400.avif 400w, photos/thumbs/IMG20260916193836-800.avif 800w, photos/thumbs/IMG20260916193836.avif 1200w, photos/medium/IMG20260916193836.avif 1280w",
       "palette": {
         "wall": "rgba(31, 38, 31, 1)",
         "deep": "rgba(21, 26, 22, 1)",
@@ -295,6 +325,8 @@
       "mediumAvif": "photos/medium/IMG20260916193647.avif",
       "width": 1920,
       "height": 2560,
+      "heroSrcset": "photos/thumbs/IMG20260916193647-400.webp 300w, photos/thumbs/IMG20260916193647-800.webp 600w, photos/thumbs/IMG20260916193647.webp 900w, photos/medium/IMG20260916193647.webp 960w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260916193647-400.avif 300w, photos/thumbs/IMG20260916193647-800.avif 600w, photos/thumbs/IMG20260916193647.avif 900w, photos/medium/IMG20260916193647.avif 960w",
       "palette": {
         "wall": "rgba(40, 45, 37, 1)",
         "deep": "rgba(25, 30, 25, 1)",
@@ -315,6 +347,8 @@
       "mediumAvif": "photos/medium/IMG20260817155358.avif",
       "width": 1920,
       "height": 2560,
+      "heroSrcset": "photos/thumbs/IMG20260817155358-400.webp 300w, photos/thumbs/IMG20260817155358-800.webp 600w, photos/thumbs/IMG20260817155358.webp 900w, photos/medium/IMG20260817155358.webp 960w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260817155358-400.avif 300w, photos/thumbs/IMG20260817155358-800.avif 600w, photos/thumbs/IMG20260817155358.avif 900w, photos/medium/IMG20260817155358.avif 960w",
       "palette": {
         "wall": "rgba(56, 68, 69, 1)",
         "deep": "rgba(33, 41, 40, 1)",
@@ -335,6 +369,8 @@
       "mediumAvif": "photos/medium/IMG20260817155311.avif",
       "width": 1920,
       "height": 2560,
+      "heroSrcset": "photos/thumbs/IMG20260817155311-400.webp 300w, photos/thumbs/IMG20260817155311-800.webp 600w, photos/thumbs/IMG20260817155311.webp 900w, photos/medium/IMG20260817155311.webp 960w",
+      "heroAvifSrcset": "photos/thumbs/IMG20260817155311-400.avif 300w, photos/thumbs/IMG20260817155311-800.avif 600w, photos/thumbs/IMG20260817155311.avif 900w, photos/medium/IMG20260817155311.avif 960w",
       "palette": {
         "wall": "rgba(53, 65, 67, 1)",
         "deep": "rgba(32, 40, 39, 1)",

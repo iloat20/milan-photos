@@ -1,0 +1,38 @@
+✅  .lighthouseci/ directory writable
+✅  Configuration file found
+✅  Chrome installation found
+⚠️   GitHub token not set
+Healthcheck passed!
+
+Started a web server on port 56443...
+Running Lighthouse 1 time(s) on http://localhost:56443/index.html
+Run #1...done.
+Done running Lighthouse!
+
+Checking assertions against 1 URL(s), 1 total run(s)
+
+All results processed!
+
+Dumping 1 reports to disk at C:\Users\Administrator\Downloads\work\milan\.lighthouseci\reports...
+Done writing reports to disk.
+
+Done running autorun.
+✅  .lighthouseci/ directory writable
+✅  Configuration file found
+✅  Chrome installation found
+⚠️   GitHub token not set
+Healthcheck passed!
+
+Started a web server on port 56508...
+Running Lighthouse 1 time(s) on http://localhost:56508/index.html
+Run #1...done.
+Done running Lighthouse!
+
+Checking assertions against 1 URL(s), 1 total run(s)
+
+All results processed!
+
+Dumping 1 reports to disk at C:\Users\Administrator\Downloads\work\milan\.lighthouseci\reports...
+Done writing reports to disk.
+
+Done running autorun.

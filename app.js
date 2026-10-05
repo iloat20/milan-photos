@@ -17,6 +17,7 @@ import {
   lightboxAvifOrFallback,
 } from "./src/util.js";
 import { createLightbox } from "./src/lightbox.js";
+import { createInstallPrompt } from "./src/install.js";
 
 (() => {
   /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,fileName?:string,custom?:boolean,width?:number,height?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
@@ -86,6 +87,17 @@ import { createLightbox } from "./src/lightbox.js";
     filterHash: currentFilterHash,
     prefersVT: prefersViewTransitions,
     startVT,
+  });
+
+  /* —— 安装引导域装配 ——
+     与 createLightbox 同一范式：工厂自带状态与事件接线，这里只注入 DOM 引用与
+     window / matchMedia 这类跨域能力。入口默认 hidden，只有 beforeinstallprompt
+     真的到来才显示；按钮缺失时工厂整体静默降级（HTML 结构调整不该打挂启动）。 */
+  createInstallPrompt({
+    button: document.getElementById("installBtn"),
+    win: window,
+    matchMedia: (q) => window.matchMedia(q),
+    on,
   });
 
   /** 从画作采样，生成可用于展厅的低饱和墙色。
@@ -984,6 +996,11 @@ import { createLightbox } from "./src/lightbox.js";
           id: item.file || item.src || `f${i}`,
           width: Number(item.width) || 0,
           height: Number(item.height) || 0,
+          // 序厅预载候选：sync 预算好的整串（hero-srcset 规则的家在 photos_lib）。
+          // index.html 的内联脚本直接读 manifest 原件（不走这里）；本字段是给
+          // app.js 的 preloadImage 用的兜底——两处取到同一串，才不会重复下不同候选。
+          heroSrcset: item.heroSrcset || "",
+          heroAvifSrcset: item.heroAvifSrcset || "",
           // 预计算墙色调色板：这里是逐字段白名单拷贝，新字段必须显式接管，
           // 漏掉不会报错、只会静默退回客户端采样（P1-6 就是这么被吞过一次）
           palette: item.palette || null,
@@ -1757,6 +1774,23 @@ import { createLightbox } from "./src/lightbox.js";
       });
     });
   }
+
+  /* —— 离线提示 ——
+     本站离线仍可用（壳层 + 清单 + 已看过的图都进了 SW 缓存），但访客需要知道
+     「现在看到的是缓存的、未看的画取不到」，否则只会觉得图片坏了。
+     判定用 navigator.onLine：它只反映有没有网络接口，是个近似量——这里正是要
+     近似（真去探连通性反而会多一次请求），故不额外探测。
+     文本由 JS 写：live region 靠**文本变化**播报，节点常驻空串既不会在联网时
+     被辅助技术读到一句反话，也能在离线瞬间被播报。 */
+  const offlineNote = document.getElementById("offlineNote");
+  function syncOfflineNote() {
+    const off = navigator.onLine === false;
+    document.body.classList.toggle("is-offline", off);
+    if (offlineNote) offlineNote.textContent = off ? "离线观展 · 已缓存的作品仍可浏览" : "";
+  }
+  window.addEventListener("offline", syncOfflineNote);
+  window.addEventListener("online", syncOfflineNote);
+  syncOfflineNote();
 
   /* —— 主题切换：跟随系统 + 手动覆盖 —— */
   const THEME_KEY = "milan-theme";

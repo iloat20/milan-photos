@@ -1,0 +1,1 @@
+{"name":"milan-photos","scripts":{"dev":"vite","build":"vite build","test:unit":"vitest run","lint:ts":"tsc --noEmit"},"devDependencies":{"typescript":"^5.7.0","vitest":"^3.0.0","jsdom":"^26.0.0"}}

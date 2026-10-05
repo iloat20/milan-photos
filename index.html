@@ -60,6 +60,35 @@
   <script>
     window.__milanManifest = fetch("photos/manifest.json", { cache: "no-store" });
     window.__milanManifest.catch(() => {});
+
+    /* LCP 图（序厅首图）的预载也留在解析期 —— 不能交给 app.js。
+       实测（4× CPU 节流，移动视口）：清单在 58ms 到手，但 app.js 的解析 + 执行
+       要 ~180ms，其内联的 preloadImage 因此把高优先级图推迟到 270ms 才发起。
+       内联脚本没法 import src/util.js，所以候选串由 sync 预算进 manifest
+       （heroSrcset / heroAvifSrcset，与 palette 同一范式）：这里只搬运字符串，
+       不重算任何规则。规则仍在 src/util.js 里，只在「清单是旧/降级版」时由
+       app.js 的 preloadImage 兜底（两组值一致由 tests/unit/hero-srcset.test.mjs
+       拿提交的 manifest 逐条钉住；imagesizes 与 HERO_SIZES 同值由同测试钉住）。 */
+    window.__milanManifest
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((data) => {
+        const first = data && (Array.isArray(data) ? data[0] : (data.photos || [])[0]);
+        const srcset = first && (first.heroAvifSrcset || first.heroSrcset);
+        if (!srcset) return; // 旧/降级清单：交给 app.js 兜底
+        const link = document.createElement("link");
+        link.rel = "preload";
+        link.as = "image";
+        // href 是「不支持 imagesrcset 时的回退」，与 src/util.js 的 heroSrc 同序：
+        // medium → thumb（动图没有 medium，因此与 heroSrc 的 thumb 分支同值）
+        link.href = first.medium || first.thumb || first.src || "";
+        link.setAttribute("imagesrcset", srcset);
+        link.setAttribute("imagesizes", "min(86vw, 880px)");
+        // 格式由字段名判定：heroAvifSrcset 只由 AVIF 候选拼成，首个候选必是 AVIF
+        link.type = first.heroAvifSrcset ? "image/avif" : "image/webp";
+        link.setAttribute("fetchpriority", "high");
+        document.head.appendChild(link);
+      })
+      .catch(() => {});
   </script>
   <link rel="stylesheet" href="styles.css" />
   <!-- 入口脚本放头部：type="module" 默认 defer（不阻塞解析、解析完才执行），且头部
@@ -77,15 +106,25 @@
         <a href="#about">前言</a>
         <a href="#archive">库房</a>
       </nav>
-      <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题" title="切换主题">
-        <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/>
-          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-        <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+      <div class="site-nav-actions">
+        <!-- 安装到桌面：默认隐藏。beforeinstallprompt 不是 Baseline（Firefox / iOS
+             Safari 不派发），只有它真的到来才说明此刻这台浏览器可安装 —— 时序由
+             src/install.js 负责，「默认隐藏」不能省（不支持时不该留一个死按钮）。 -->
+        <button class="install-toggle" id="installBtn" type="button" aria-label="安装到桌面" title="安装到桌面" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 3v11M7.5 9.5 12 14l4.5-4.5M4.5 17v2.5h15V17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换主题" title="切换主题">
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -193,6 +232,11 @@
       <p class="footer-copy">© 2026 米兰美术馆</p>
     </div>
   </footer>
+
+  <!-- 离线提示：内容是 JS 写入的（app.js 的 syncOfflineNote），无常驻文字 ——
+       live region 靠「文本变化」播报，因此这里保持空节点，显示/隐藏走 body.is-offline。
+       不常驻文字也避免未离线时被辅助技术读到一句和现实相反的话。 -->
+  <p class="offline-note" id="offlineNote" role="status" aria-live="polite"></p>
 
   <dialog class="lightbox" id="lightbox" aria-label="观画室">
     <div class="lightbox-chrome">

@@ -310,6 +310,51 @@ def ensure_medium(src: Path) -> tuple[str, str | None] | None:
     return _write_webp_variant(src, MEDIUM, MEDIUM_MAX_EDGE, MEDIUM_QUALITY)
 
 
+def medium_width(item: dict) -> int:
+    """按长边上限反推中图的像素宽（中图尺寸本身不进 manifest）。
+
+    与 ``src/util.js`` 的 ``mediumWidth()`` 是**同一条规则的两份实现**——前者给
+    Python 侧用（下面组 heroSrcset），后者给无 manifest 条目的本机上传图兜底。
+    两份漂移会让序厅预载选中与 ``<picture>`` 不同的候选（白下一次图），
+    由 ``tests/unit/hero-srcset.test.mjs`` 拿提交的 manifest 逐条钉住。
+
+    取整刻意用 floor(x + 0.5) 而不是内置 ``round()``：Python 的 round 是
+    银行家舍入（round(0.5) == 0），JS 的 Math.round 是四舍五入（0.5 → 1）。
+    """
+    w, h = item.get("width"), item.get("height")
+    if not isinstance(w, int) or not isinstance(h, int) or w <= 0 or h <= 0:
+        return 0
+    long_edge = max(w, h)
+    if long_edge <= MEDIUM_MAX_EDGE:
+        return w
+    return int(math.floor(w * MEDIUM_MAX_EDGE / long_edge + 0.5))
+
+
+def hero_srcsets(item: dict) -> dict:
+    """序厅首图（= LCP 元素）的响应式候选，供 HTML 解析期直接预载。
+
+    为什么预算在 sync 而不是留给前端算：``index.html`` 的内联脚本要在 app.js
+    执行**之前**发出预载，而它没法 import ``src/util.js``。把规则留在前端就等于
+    在 HTML 里抄一份 —— 这里预算好，内联脚本只搬运字符串，规则仍只有一份
+    （本函数），前端只在「清单是旧/降级版」时用 ``heroSrcset()`` 兜底。
+
+    与 ``src/util.js`` 的 ``heroSrcset`` / ``heroAvifSrcset`` 同构：
+    缩略图各档 + 中图（大屏兜底）；动图没有中图，因此自然只剩缩略图。
+    """
+    out: dict[str, str] = {}
+    width = medium_width(item)
+    for key, width_key in (("heroSrcset", "thumbSrcset"), ("heroAvifSrcset", "thumbAvifSrcset")):
+        parts = []
+        if item.get(width_key):
+            parts.append(item[width_key])
+        medium_key = "medium" if key == "heroSrcset" else "mediumAvif"
+        if item.get(medium_key) and width:
+            parts.append(f"{item[medium_key]} {width}w")
+        if parts:
+            out[key] = ", ".join(parts)
+    return out
+
+
 def list_photo_files() -> list[Path]:
     """列出 photos/ 下的图片文件。
 
@@ -398,6 +443,8 @@ def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None)
             item["mediumAvif"] = medium[1]
     if size:
         item["width"], item["height"] = size
+    # 序厅首图的预载候选：必须在 width/height 之后组（中图宽度由原图宽高反推）
+    item.update(hero_srcsets(item))
     palette = photo_palette(path)
     if palette:
         # 客户端只做样式赋值；缺失（无 Pillow / 解码失败）时回落浏览器采样

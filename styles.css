@@ -878,7 +878,7 @@
     width: 100%;
     aspect-ratio: 4 / 3;
     padding: var(--frame-inset);
-    border: 2px solid var(--hairline-soft);
+    border: 4px solid #d4af37;
     border-radius: var(--r-lg);
     background: var(--surface);
     box-shadow: var(--shadow-1);
@@ -1262,7 +1262,7 @@
   /* 画作容器：图不得大于框 */
   .lightbox-frame {
     --frame-pad: 6px;
-    --frame-border: 2px;
+    --frame-border: 4px;
 
     /* 观画室放足画面：上限取 72vh，竖构图才撑得开（横构图先触 940px 宽度限） */
     --frame-max-w: min(86vw, 940px);
@@ -1278,10 +1278,10 @@
     align-items: center;
     justify-content: center;
     padding: var(--frame-pad);
-    border: var(--frame-border) solid var(--hairline-soft);
+    border: var(--frame-border) solid #d4af37;
     border-radius: 18px;
-    background: color-mix(in oklab, var(--surface) 72%, transparent);
-    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
+    background: color-mix(in oklab, #d4af37 15%, transparent);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(212, 175, 55, 0.25);
     overflow: hidden;
   }
 
@@ -1297,8 +1297,8 @@
     display: block;
     width: auto;
     height: auto;
-    max-width: calc(var(--frame-max-w, 940px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 2px));
-    max-height: calc(var(--frame-max-h, 760px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 2px));
+    max-width: calc(var(--frame-max-w, 940px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 4px));
+    max-height: calc(var(--frame-max-h, 760px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 4px));
     object-fit: contain;
     border-radius: 12px;
     animation: lb-in 0.4s var(--ease) both;

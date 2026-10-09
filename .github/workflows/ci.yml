@@ -40,7 +40,7 @@ jobs:
       - name: Stylelint
         run: npm run lint:css
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: E2E smoke
         run: npm run test:e2e
       - name: Lighthouse CI

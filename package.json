@@ -12,7 +12,7 @@
     "lint": "npm run lint:js && npm run lint:css",
     "test:unit": "node --test",
     "test:e2e": "playwright test",
-    "lhci": "npm run build && lhci autorun"
+    "lhci": "npm run build && npx lhci autorun"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

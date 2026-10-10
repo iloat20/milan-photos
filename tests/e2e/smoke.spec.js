@@ -81,16 +81,60 @@ test.describe("画廊冒烟", () => {
     await expect(lightbox).toBeHidden();
   });
 
-  test("观画室策展说明：有则显示原文、无则隐藏，且题名区高度恒定", async ({ page, request }) => {
+  test("观画室策展说明：有则显示原文、无则隐藏，且题名区高度恒定", async ({
+    page,
+    request,
+  }) => {
     /* 座位号与 manifest 下标一一对应：展厅按 manifest 顺序渲染，筛选 all 时
        visible = photos.slice()，故 .card 第 i 张 = manifest 第 i 条。
        下标从清单里现算，不写死 —— 换图/换序都不会让这条悄悄测错对象。 */
     const res = await request.get("/photos/manifest.json");
     const list = (await res.json()).photos;
     const withCap = list.findIndex((p) => (p.caption || "").trim());
-    const withoutCap = list.findIndex((p) => !(p.caption || "").trim());
     expect(withCap, "清单里得有带策展说明的条目").toBeGreaterThanOrEqual(0);
-    expect(withoutCap, "清单里得有无说明的条目").toBeGreaterThanOrEqual(0);
+
+    // ④ 要用的最长策展句。先算好，下面挑空样本时必须避开它
+    const longest = list
+      .map((p, i) => ({ i, n: (p.caption || "").trim().length }))
+      .sort((a, b) => b.n - a.n)[0];
+    expect(longest.n, "清单里没有策展说明，④ 会空洞通过").toBeGreaterThan(0);
+
+    /* 「无说明」这一支原先靠「清单里恰好有空说明的条目」供养（findIndex 找不到
+       下标就直接红）。18 件全部写完策展说明后，真实清单里已无空样本，那条断言
+       就从「验行为」退化成「验内容形状」—— 内容一补齐，护栏自动失效。
+       改为自造样本：把一条既不是 withCap、也不是 longest 的条目抹空再喂给页面。
+
+       拦在页面 JS 层而不是 page.route()：index.html 的内联脚本在解析期就
+       fetch("photos/manifest.json") 并把 Promise 挂到 window.__milanManifest
+       （app.js 复用同一 Promise），而该请求由 sw.js 的 isManifest 分支接管，
+       page.route 拦不到 SW 发起的取数。addInitScript 在文档创建时注入，
+       先于内联脚本执行，能确定性命中；SW 自身的 install 快照不受影响。
+
+       注入是否真的生效，由下面的 ① 自己看守：条目若没被抹空，第 blankIdx 张
+       会带着真说明显示出来，① 的 toBeHidden 立刻红 —— 样本造假不成立。 */
+    const blankIdx = list.findIndex((_, i) => i !== withCap && i !== longest.i);
+    expect(blankIdx, "至少需要第三张图来自造空说明样本").toBeGreaterThanOrEqual(0);
+    const patched = JSON.parse(JSON.stringify(list));
+    patched[blankIdx].caption = "";
+    await page.addInitScript(
+      ({ body, needle }) => {
+        const original = window.fetch;
+        window.fetch = function (input, init) {
+          const url = typeof input === "string" ? input : (input && input.url) || "";
+          if (url.includes(needle)) {
+            return Promise.resolve(
+              new Response(body, {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              })
+            );
+          }
+          return original.call(this, input, init);
+        };
+      },
+      { body: JSON.stringify({ photos: patched }), needle: "photos/manifest.json" }
+    );
+    const withoutCap = blankIdx;
 
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
@@ -136,11 +180,7 @@ test.describe("画廊冒烟", () => {
       "切到无说明的图时题名区高度变了，上方画框会整块跳一下"
     ).toBeLessThanOrEqual(0.5);
 
-    // ④ 移动端：最长的策展句（17 字）仍须单行 —— 换行同样会破坏 ③ 的高度恒定
-    const longest = list
-      .map((p, i) => ({ i, n: (p.caption || "").trim().length }))
-      .sort((a, b) => b.n - a.n)[0];
-    expect(longest.n, "清单里没有策展说明，④ 会空洞通过").toBeGreaterThan(0);
+    // ④ 移动端：最长的策展句仍须单行 —— 换行同样会破坏 ③ 的高度恒定
     await page.setViewportSize({ width: 390, height: 844 });
     await openAt(longest.i);
     const cap = await page.locator("#lbCaption").evaluate((el) => ({

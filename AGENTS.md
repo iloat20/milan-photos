@@ -30,7 +30,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | 路径 | 角色 |
 |------|------|
 | `photos/*.{jpg,png,webp,gif,avif}` | 原图（源）— **长边 ≤2560px、不含 GPS EXIF**（见下「必做」） |
-| `photos/meta.json` | 可选：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem |
+| `photos/meta.json` | **策展源**：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem。改了 `title`/`caption` 必须跑 `npm run sync` 才会落到 manifest（`slug` 不进 manifest，由生成器直接读本文件） |
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成，灯箱用原图） |
@@ -193,7 +193,7 @@ done
 - 画框是**中性细边 + 圆角**：卡片 = `--surface` 底 + `2px var(--hairline-soft)` + `--r-lg`，照片再内缩 `--frame-inset: 4px`；灯箱同构（`--frame-pad: 6px` / `--frame-border: 2px` / radius 18px）。**不要**加宽/提亮成装饰性金框或粗边，那会压过画心。
 - 环境光晕落在画框**之外**的四周（`.card-media::before`：径向 `--card-accent`、`opacity .45`、`inset: -28px -20px`、`z-index: -1`），**不要**打在画心上；为此 `.card-media` 自身 `overflow: visible` 不裁切，裁切只交给 `.card-media-glass`（管 hover 缩放不出框）。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
-- 观画室的**题下策展说明**（`.lb-caption`，取 `meta.json` 的 `caption`）必须**恒占一行**：`.lightbox-meta` 是 `flex-shrink: 0` 且高度由内容撑开，而全馆 18 件里只有 8 件写了说明 —— 空值若用 `display: none`（或干脆不占位），切到无说明的图时上方画框会被挤得**整块跳一下**。空值一律 `visibility: hidden` + `min-height: 1lh`（红态实证：改成 `display: none` 后题名区高度差 26.8px）。护栏是 e2e「题名区高度恒定」那条 —— 只断言「元素不可见」抓不住它。取值归 `util.captionText()`（trim 后为空即视为没有，**不**做《无题》式降级）。
+- 观画室的**题下策展说明**（`.lb-caption`，取 `meta.json` 的 `caption`）必须**恒占一行**：`.lightbox-meta` 是 `flex-shrink: 0` 且高度由内容撑开，而空说明确实会遇到（浏览器内上传的图没有 manifest 条目、也就没有 caption；2026-10-10 起馆藏 18 件已全部写完策展说明）—— 空值若用 `display: none`（或干脆不占位），切到无说明的图时上方画框会被挤得**整块跳一下**。空值一律 `visibility: hidden` + `min-height: 1lh`（红态实证：改成 `display: none` 后题名区高度差 26.8px）。护栏是 e2e「题名区高度恒定」那条 —— 只断言「元素不可见」抓不住它。该用例的空说明样本由**页面 JS 层拦 `photos/manifest.json` 自造**（馆藏补齐后清单里已无空样本；该请求归 SW 的 `isManifest` 分支接管，`page.route` 拦不到，故包 `window.fetch`）。取值归 `util.captionText()`（trim 后为空即视为没有，**不**做《无题》式降级）。
 - 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
 - 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2` + 边框提亮到 `--hairline`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
 - 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。

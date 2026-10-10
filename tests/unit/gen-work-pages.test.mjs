@@ -40,6 +40,11 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(ROOT, "photos", "manifest.json"), "utf8")
 );
+/* 策展源：title / slug / caption / date 都写在这里，`npm run sync` 用它重建 manifest
+   （slug 不进 manifest，由生成器直接读本文件） */
+const META = JSON.parse(
+  fs.readFileSync(path.join(ROOT, "photos", "meta.json"), "utf8")
+);
 
 /* ────────────────────────── slug ────────────────────────── */
 
@@ -58,7 +63,7 @@ test("slugSource：文件名去扩展名（形态是 manifest 里的 photos/<fil
   assert.equal(slugSource({ file: "photos/IMG_0001.JPEG" }), "IMG_0001");
 });
 
-test("resolveSlugs：8 件策展作品沿用文件名，10 件无题作品也拿到合法 slug", () => {
+test("resolveSlugs：meta 无覆盖时全部回退文件名 stem，且合法、两两不同", () => {
   const slugs = resolveSlugs(MANIFEST, {});
   assert.equal(slugs.length, MANIFEST.photos.length);
   for (const slug of slugs) {
@@ -273,5 +278,36 @@ test("真 manifest：18 页、slug 唯一、标题两两不同、canonical 自�
   assert.equal(locs.length, pages.length + 1);
   for (const page of pages) {
     assert.ok(locs.includes(`${SITE_URL}p/${page.slug}/`), `sitemap 缺 ${page.slug}`);
+  }
+});
+
+test("真 meta.json：18 件都定了标题，地址里不再有数码导出名", () => {
+  /* 这一条钉的是「内容补齐」这件事本身：标题一旦漏写，清单会退回《无题 · NN》，
+     slug 也会退回文件名 stem（img2026… / mmexport…），症状是 SERP 里一列
+     「无题 · 05」和一堆不可读 URL —— 页面照样 200，只有这里拦得住。 */
+  for (const photo of MANIFEST.photos) {
+    const info = META[photo.file];
+    assert.ok(info, `meta.json 缺 ${photo.file} 的条目`);
+    assert.ok(
+      String(info.title || "").trim(),
+      `${photo.file} 没写 title —— 清单里会退回《无题 · NN》`
+    );
+  }
+
+  const slugs = resolveSlugs(MANIFEST, META);
+  for (const slug of slugs) {
+    assert.doesNotMatch(
+      slug,
+      /^(?:img|dsc|pxl|mmexport|photo|image)\d/,
+      `slug "${slug}" 仍是文件名式地址（该在 meta.json 里给它写 slug）`
+    );
+  }
+  assert.equal(new Set(slugs).size, slugs.length, "slug 必须两两不同");
+
+  // 显式覆盖确实被采用，而不是「恰好文件名也可读」
+  for (const [file, info] of Object.entries(META)) {
+    if (info.slug) {
+      assert.ok(slugs.includes(info.slug), `${file} 的 slug "${info.slug}" 没被采用`);
+    }
   }
 });

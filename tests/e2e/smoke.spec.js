@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const { createHash } = require("node:crypto");
 
 test.describe("画廊冒烟", () => {
   test("首页渲染 18 张卡片且缩略图走 AVIF 协商", async ({ page }) => {
@@ -1188,5 +1189,122 @@ test.describe("画廊冒烟", () => {
         /^image\/(avif|webp)$/
       );
     }
+  });
+
+  test("产物带全指令集 CSP，且内联脚本 hash 自洽（无悬空 / 无漏算）", async ({ request }) => {
+    const res = await request.get("/");
+    expect(res.ok()).toBeTruthy();
+    const html = await res.text();
+
+    const meta = html.match(
+      /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/i
+    );
+    expect(meta, "index.html 应含构建期注入的 CSP meta").not.toBeNull();
+    const csp = meta[1];
+
+    for (const directive of [
+      "default-src 'self'",
+      "style-src 'self'",
+      "img-src 'self'",
+      "connect-src 'self' https://api.github.com", // 库房「同步馆藏数据到 GitHub」直连该源
+      "worker-src 'self'", // sw.js
+      "manifest-src 'self'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+    ]) {
+      expect(csp, `CSP 缺少指令：${directive}`).toContain(directive);
+    }
+    // 不得预置逃生阀：本站无 markup 内联样式、无 <style> 注入（样式写入全走 CSSOM）
+    expect(csp).not.toContain("unsafe-inline");
+    expect(csp).not.toContain("unsafe-eval");
+
+    /* hash 双向自洽：声明的每个 hash 都能在页面某段内联脚本上验证通过（无悬空 hash），
+       每段内联脚本也都被声明（无漏算）。CRLF→LF 归一是按 HTML 解析器的算法来的。
+       ⚠️ 本条**不能**证明 hash 会被浏览器接受——它与构建脚本用的是同一条归一规则，
+       两边一起错就一起通过。真正的地面真值是下面那条运行时零违规用例。 */
+    const declared = (csp.match(/'(sha256-[A-Za-z0-9+/=]+)'/g) || [])
+      .map((s) => s.slice(1, -1))
+      .sort();
+    const actual = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+      .map(
+        (m) =>
+          "sha256-" +
+          createHash("sha256")
+            .update(m[1].replace(/\r\n?/g, "\n"))
+            .digest("base64")
+      )
+      .sort();
+    // JSON-LD + 主题初值 + LCP 预载，三段；少一段说明锚点漂了
+    expect(actual).toHaveLength(3);
+    expect(declared).toEqual(actual);
+  });
+
+  test("CSP 运行时零违规（走过主题切换 / 灯箱 / 库房面板全交互）", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__cspViolations = [];
+      document.addEventListener("securitypolicyviolation", (e) => {
+        window.__cspViolations.push({
+          directive: e.violatedDirective,
+          blockedURI: e.blockedURI,
+          sample: String(e.sample || "").slice(0, 160),
+        });
+      });
+    });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    await page.locator("#themeToggle").click(); // 手动主题写入路径
+    await page.locator(".card").first().click(); // 灯箱：srcset 协商 + medium/AVIF
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const img = document.getElementById("lbImg");
+        return img && img.currentSrc;
+      },
+      null,
+      { timeout: 10_000 }
+    );
+    await page.locator("#close").click();
+    await page.locator("#upload").scrollIntoViewIfNeeded(); // 库房 popover
+    await page.locator("#ghToggle").click();
+    await expect(page.locator("#ghPanel")).toBeVisible();
+    await page.waitForTimeout(300);
+
+    // 非空断言：上面若哪一步没跑到，这条会以「违规 0」空洞通过
+    expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
+    await expect(page.locator("#ghPanel")).toBeVisible();
+  });
+
+  test("主题初值不依赖 app.js：拦掉它也必须已带 data-theme", async ({ browser }) => {
+    /* 钉住「解析期内联脚本」这个机制本身。若初值又回到 app.js 的模块执行期，
+       这里 data-theme 必为空 → 直接红，不赌任何测量时机。
+       这条同时是 CSP hash 的**地面真值**：hash 若被浏览器拒绝，内联脚本不执行，
+       data-theme 同样为空 → 必红（自洽性用例做不到这点，它和自己用的是同一套归一规则）。 */
+    const ctx = await browser.newContext({
+      colorScheme: "light",
+      viewport: { width: 1280, height: 900 },
+    });
+    await ctx.addInitScript(() => {
+      try {
+        localStorage.setItem("milan-theme", "dark");
+      } catch {
+        /* 隐私模式 / 禁用 cookie —— 与 index.html 内联脚本同一因由，这里静默即可 */
+      }
+    });
+    const page = await ctx.newPage();
+    await page.route("**/app.js", (route) => route.abort());
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForFunction(
+      () => getComputedStyle(document.documentElement).colorScheme !== ""
+    );
+
+    const state = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme || null,
+      colorScheme: getComputedStyle(document.documentElement).colorScheme,
+    }));
+    expect(state.theme).toBe("dark");
+    expect(state.colorScheme).toBe("dark"); // 存 dark + 系统 light → 必须按 dark 解析
+    await ctx.close();
   });
 });

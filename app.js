@@ -1792,13 +1792,14 @@ import { createInstallPrompt } from "./src/install.js";
   window.addEventListener("online", syncOfflineNote);
   syncOfflineNote();
 
-  /* —— 主题切换：跟随系统 + 手动覆盖 —— */
+  /* —— 主题切换：跟随系统 + 手动覆盖 ——
+     注意这里**不再**读 localStorage 设初值：那件事已移到 index.html 的解析期内联脚本
+     （在样式表之前执行，首帧即带 data-theme，消除主题闪烁）。此处留一份只会把
+     「内联脚本被 CSP hash 失配拦下」这类故障**静默化**（闪烁回来但页面照常可用）——
+     而回归网（smoke.spec.js 的 CSP 零违规 + 主题不依赖 app.js 两个用例）正是要抓它。
+     手动切换的**写入**仍在这里，与内联脚本无重叠。 */
   const THEME_KEY = "milan-theme";
   const themeToggle = document.getElementById("themeToggle");
-  const storedTheme = localStorage.getItem(THEME_KEY);
-  if (storedTheme === "light" || storedTheme === "dark") {
-    document.documentElement.dataset.theme = storedTheme;
-  }
   if (themeToggle) {
     themeToggle.addEventListener("click", () => {
       // 没手动选过时 data-theme 缺省、页面跟随系统。此时必须先问系统当前是什么，

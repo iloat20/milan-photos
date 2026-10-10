@@ -30,16 +30,18 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | 路径 | 角色 |
 |------|------|
 | `photos/*.{jpg,png,webp,gif,avif}` | 原图（源）— **长边 ≤2560px、不含 GPS EXIF**（见下「必做」） |
-| `photos/meta.json` | 可选：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此** |
+| `photos/meta.json` | 可选：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem |
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成，灯箱用原图） |
-| `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入，另补拷 `assets/` 与 `sitemap.xml`（见 `copyStaticPlugin` 注释） |
+| `tools/gen_work_pages.mjs` | 逐图展签页 `/p/<slug>/` + `sitemap.xml` 的生成器（构建期 `closeBundle` 里跑；规则可被单测直接调用） |
+| `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入，另补拷 `assets/`（见 `copyStaticPlugin` 注释）。`dist/p/<slug>/index.html`（逐图页）与 `dist/sitemap.xml` 由 `workPagesPlugin` 生成——**仓库根曾有一份 `sitemap.xml`，已删除**（它只有 1 条 URL，且唯一消费者就是那段拷贝） |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
 - 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
 - 原图**从不被访客请求**：`src/util.js` 的 `heroSrc` / `lightboxSrc` 都是 `medium || thumb || src`，只有动图才回落原文件。所以母版只是「生成派生图的源 + 留档」，其体积不进入访客的关键路径——这正是它该被限长的原因。
 - 上传页可把压缩图写进 IndexedDB 本机预览；GitHub Token 只存浏览器 `localStorage`，勿写入仓库。
+- **逐图展签页 `/p/<slug>/`**（`tools/gen_work_pages.mjs`，构建期生成）：每件作品一个静态 HTML——`<img>` + 标题 + 策展说明 + 日期 + prev/next。存在理由是 SEO：站内深链 `#p=<file>` 是**哈希，搜索引擎不索引**，图片搜索入口此前为 0；逐图页同时让社交分享拿到**逐图**卡片（`og:image` = 该作中图）。改版式时注意三点：① 页面在 `/p/<slug>/` 下，所有资源引用都要 `../../` 前缀（`<picture>` 的 404 会**静默回落**到 `<img src>` 原图，页面看不出坏）；② slug 冲突**报错退出**，不静默去重；③ prev/next 首尾**不绕环**（爬虫看到环即断链判据失效）。
 
 ## 必做：母版的两条不变量（长边上限 + 无 GPS）
 

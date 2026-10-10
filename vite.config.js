@@ -12,6 +12,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
 
 const ROOT = __dirname;
 
@@ -24,9 +25,11 @@ const ROOT = __dirname;
  *     public/manifest.webmanifest 引用——两种都不经资源图（也不能整体搬进 public：
  *     index.html 相对引用 ./assets/favicon-32.png，HTML 引用 public 目录会被 Vite 警告）。
  *     同名的 favicon/icon-192 已被 HTML 相对引用进产物，覆盖即同内容，无害。
- *   - sitemap.xml：robots.txt 里是绝对 URL 引用。
  * 漏拷的后果是线上 404，且被 vite preview 的 SPA 兜底掩盖成本地 200（S1 实证），
  * e2e globalSetup 对策 5 会拦。
+ *
+ * sitemap.xml 原先也在这里拷，现交由 workPagesPlugin 生成（逐图页要进 sitemap，
+ * 静态那份只有 1 条 URL）。仓库根的 sitemap.xml 因此已删除——它的唯一消费者就是本函数。
  */
 function copyStaticPlugin() {
   return {
@@ -38,7 +41,30 @@ function copyStaticPlugin() {
       fs.cpSync(path.join(ROOT, "assets"), path.join(ROOT, "dist", "assets"), {
         recursive: true,
       });
-      fs.cpSync(path.join(ROOT, "sitemap.xml"), path.join(ROOT, "dist", "sitemap.xml"));
+    },
+  };
+}
+
+/**
+ * 生成逐图展签页 `/p/<slug>/index.html` × N 与 `dist/sitemap.xml`（P1 设计稿 §4）。
+ *
+ * 为什么在 closeBundle 里 `await import()` 而不是 require：
+ * 生成器是 `.mjs`，全部规则要能被 `node --test` 直接覆盖（slug / 转义 / 版式 / sitemap），
+ * 而本配置是 CJS。用 file URL 导入是显式的——CJS 里的相对 `import()` 解析基准容易踩坑。
+ *
+ * 与 cspPlugin 无先后依赖：本插件只写 `dist/p/**` 与 `dist/sitemap.xml`，
+ * 不碰 `dist/index.html`，而 closeBundle 是并行钩子（Rollup 语义），不该假设顺序。
+ * 同理它也不依赖 copyStaticPlugin——sitemap 已不在那边的拷贝清单里。
+ */
+function workPagesPlugin() {
+  return {
+    name: "work-pages",
+    async closeBundle() {
+      const { writeWorkPages } = await import(
+        pathToFileURL(path.join(ROOT, "tools", "gen_work_pages.mjs")).href
+      );
+      const { count } = writeWorkPages({ distDir: path.join(ROOT, "dist") });
+      console.log(`work-pages: 生成 ${count} 个展签页 + sitemap.xml`);
     },
   };
 }
@@ -115,7 +141,7 @@ module.exports = {
   // SPA 回退毫无用处；dev 下未知路径也直接 404，不误导。
   appType: "mpa",
   publicDir: "public", // sw.js / robots.txt / manifest.webmanifest：原样搬运、不做转换
-  plugins: [copyStaticPlugin(), cspPlugin()],
+  plugins: [copyStaticPlugin(), cspPlugin(), workPagesPlugin()],
   build: {
     outDir: "dist",
     // 服务 worker 在 dev 下必须原样返回（Vite 会转换根目录 .js，会破坏它），

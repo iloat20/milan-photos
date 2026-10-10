@@ -1,5 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const { createHash } = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
 
 test.describe("画廊冒烟", () => {
   test("首页渲染 18 张卡片且缩略图走 AVIF 协商", async ({ page }) => {
@@ -1377,5 +1379,170 @@ test.describe("画廊冒烟", () => {
     expect(state.theme).toBe("dark");
     expect(state.colorScheme).toBe("dark"); // 存 dark + 系统 light → 必须按 dark 解析
     await ctx.close();
+  });
+});
+
+/* ────────────────────────── 逐图展签页（P1 设计稿 §4） ──────────────────────────
+   被测对象仍是构建产物：`dist/p/<slug>/index.html` 由 tools/gen_work_pages.mjs 在
+   closeBundle 里生成，sitemap.xml 也由它产出（仓库根那份已删除）。
+
+   判据分两路，各取所长：
+   - **HTTP**（sitemap 声明的 URL 是否真的可达）—— 这是爬虫实际看到的世界，
+     只有它能证明「目录 + index.html」在静态托管下确实可用。
+   - **磁盘**（逐页内容与资源引用）—— 18 页 × 数个字段用 HTTP 全查要重复下载，
+     而磁盘上就是被服务的那份（globalSetup 已核对新鲜度）。资源存在性顺带覆盖
+     `/p/<slug>/` 相对深度写错的经典坏法：srcset 少一层 `../` 会 404，而
+     `<picture>` 会静默回落到 `<img src>`（原图），页面上完全看不出来。 */
+test.describe("逐图展签页", () => {
+  const SITE = "https://iloat20.github.io/milan-photos/";
+  const DIST = path.resolve(__dirname, "..", "..", "dist");
+  const WORK_DIR = path.join(DIST, "p");
+
+  /** 绝对 URL → 站点内路径（剥掉部署前缀 /milan-photos/；本仓 robots/globalSetup 同一手法） */
+  const pagePath = (loc) => new URL(loc).pathname.replace(/^\/[^/]+\//, "/");
+
+  function readPages() {
+    expect(fs.existsSync(WORK_DIR), "dist/p/ 不存在——生成器没跑？").toBeTruthy();
+    return fs
+      .readdirSync(WORK_DIR, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name)
+      .sort()
+      .map((slug) => ({
+        slug,
+        dir: path.join(WORK_DIR, slug),
+        html: fs.readFileSync(path.join(WORK_DIR, slug, "index.html"), "utf8"),
+      }));
+  }
+
+  test("sitemap 声明的逐图页全部可达，且条数与馆藏一致", async ({ request }) => {
+    const manifest = await (await request.get("/photos/manifest.json")).json();
+    const photos = manifest.photos || [];
+    expect(photos.length).toBeGreaterThan(0);
+
+    const res = await request.get("/sitemap.xml");
+    expect(res.status()).toBe(200);
+    const locs = [...(await res.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+
+    expect(locs.length, "sitemap = 主页 1 条 + 逐图 N 条").toBe(photos.length + 1);
+    expect(pagePath(locs[0])).toBe("/");
+
+    for (const loc of locs.slice(1)) {
+      const page = await request.get(pagePath(loc));
+      expect(page.status(), `${loc} 应 200（静态托管的「目录 + index.html」）`).toBe(200);
+      expect(page.headers()["content-type"]).toContain("text/html");
+    }
+  });
+
+  test("逐页 SEO 字段齐备：title 唯一 / canonical 自指 / og:image 绝对且可达 / alt 非空 / JSON-LD 可解析", async () => {
+    const pages = readPages();
+    const titles = new Map();
+
+    for (const { slug, dir, html } of pages) {
+      const canonical = /<link rel="canonical" href="([^"]+)"/.exec(html);
+      expect(canonical, `${slug} 缺 canonical`).not.toBeNull();
+      expect(canonical[1], `${slug} 的 canonical 必须自指`).toBe(`${SITE}p/${slug}/`);
+
+      const title = /<title>([^<]+)<\/title>/.exec(html);
+      expect(title, `${slug} 缺 <title>`).not.toBeNull();
+      expect(title[1].trim().length, `${slug} 的 <title> 不能为空`).toBeGreaterThan(0);
+      // 书名号不进 SERP 标题（《》是站内版式，不是检索词）
+      expect(title[1], `${slug} 的 <title> 不该带书名号`).not.toContain("《");
+      titles.set(title[1], (titles.get(title[1]) || 0) + 1);
+
+      const ogImage = /<meta property="og:image" content="([^"]+)"/.exec(html);
+      expect(ogImage, `${slug} 缺 og:image`).not.toBeNull();
+      expect(ogImage[1].startsWith(`${SITE}`), `${slug} 的 og:image 必须是绝对 URL`).toBe(true);
+      expect(
+        fs.existsSync(path.join(DIST, ogImage[1].slice(SITE.length))),
+        `${slug} 的 og:image 指向的产物不存在：${ogImage[1]}`
+      ).toBeTruthy();
+
+      const ogType = /<meta property="og:type" content="([^"]+)"/.exec(html);
+      expect(ogType, `${slug} 缺 og:type`).not.toBeNull();
+
+      const img = /<img\s[^>]*src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>/.exec(html);
+      expect(img, `${slug} 缺 <img>`).not.toBeNull();
+      expect(img[2].trim().length, `${slug} 的 alt 不能为空（a11y + 图片搜索）`).toBeGreaterThan(0);
+      expect(html, `${slug} 的 <img> 应有显式 width/height（防 CLS）`).toMatch(
+        /<img\s[^>]*width="\d+"\s+height="\d+"/
+      );
+
+      // <picture> 的每个候选 + <img src> + 样式表都必须能落到产物文件上
+      const candidates = [
+        ...html.matchAll(/srcset="([^"]+)"/g),
+      ].flatMap((m) =>
+        m[1]
+          .split(",")
+          .map((part) => part.trim().split(/\s+/)[0])
+          .filter(Boolean)
+      );
+      candidates.push(img[1]);
+      expect(candidates.length, `${slug} 应至少有一组响应式候选`).toBeGreaterThan(0);
+      for (const rel of candidates) {
+        expect(
+          fs.existsSync(path.resolve(dir, rel)),
+          `${slug} 引用的图片在产物中不存在：${rel}（相对深度写错？）`
+        ).toBeTruthy();
+      }
+      const css = /<link rel="stylesheet" href="([^"]+)"/.exec(html);
+      expect(css, `${slug} 缺样式表引用`).not.toBeNull();
+      expect(fs.existsSync(path.resolve(dir, css[1])), `${slug} 的样式表不存在`).toBeTruthy();
+
+      const ld = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html);
+      expect(ld, `${slug} 缺 JSON-LD`).not.toBeNull();
+      const data = JSON.parse(ld[1]);
+      expect(data["@type"]).toBe("Photograph");
+      expect(data.contentUrl.startsWith(`${SITE}`)).toBe(true);
+      expect(data.name.trim().length).toBeGreaterThan(0);
+    }
+
+    // 非空断言：上面的循环若一页都没跑到，重复数为 0 会空洞通过
+    expect(pages.length).toBeGreaterThan(0);
+    const duplicated = [...titles.entries()].filter(([, n]) => n > 1);
+    expect(duplicated, `标题重复：${JSON.stringify(duplicated)}`).toEqual([]);
+  });
+
+  test("prev/next 是一条有端点、无环、覆盖全部页的链", async () => {
+    const pages = readPages();
+    const bySlug = new Map(pages.map((p) => [p.slug, p.html]));
+
+    const nextOf = new Map();
+    const prevOf = new Map();
+    for (const { slug, html } of pages) {
+      const next = /href="\.\.\/([^"/]+)\/" rel="next"/.exec(html);
+      const prev = /href="\.\.\/([^"/]+)\/" rel="prev"/.exec(html);
+      if (next) nextOf.set(slug, next[1]);
+      if (prev) prevOf.set(slug, prev[1]);
+    }
+
+    // 端点：恰好各一个（不绕环 → 首件无 prev、末件无 next）
+    expect(prevOf.size, "应恰好有 N-1 条 prev（首件没有）").toBe(pages.length - 1);
+    expect(nextOf.size, "应恰好有 N-1 条 next（末件没有）").toBe(pages.length - 1);
+
+    const first = pages.map((p) => p.slug).find((s) => !prevOf.has(s));
+    expect(first, "应存在唯一的入口页（无 prev）").toBeTruthy();
+
+    const visited = [];
+    let cursor = first;
+    while (cursor) {
+      expect(visited, `链条出现环：${cursor}`).not.toContain(cursor);
+      visited.push(cursor);
+      expect(bySlug.has(cursor), `链条指向不存在的页：${cursor}`).toBe(true);
+      cursor = nextOf.get(cursor);
+    }
+    // 集合相等（不是顺序）：链的顺序是**陈列顺序**，与磁盘目录的字典序无关
+    expect([...visited].sort(), "从入口页应一路走遍全部展签页").toEqual(
+      pages.map((p) => p.slug)
+    );
+
+    // 反向也要还原出同一条链
+    let back = visited[visited.length - 1];
+    const reversed = [];
+    while (back) {
+      reversed.push(back);
+      back = prevOf.get(back);
+    }
+    expect(reversed.reverse()).toEqual(visited);
   });
 });

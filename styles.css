@@ -1606,6 +1606,102 @@
   p {
     text-wrap: pretty;
   }
+
+  /* —— 逐图展签页（/p/<slug>/，构建期静态生成，不带 app.js）——
+     站内唯一不经过 app.js 的页面：内容全是解析期就位的静态 HTML，所以它只复用
+     tokens 与 chrome 组件（.site-nav / .footer / .btn），版式自己一套。
+     颜色一律走 var(--*)，本生成器不写任何色值（颜色只有上方那一份成对声明）。 */
+  .work-page {
+    /* .site-nav 是 position:fixed，内容必须自己让开 */
+    padding-top: calc(var(--nav-h) + 40px);
+  }
+
+  .work {
+    max-width: var(--max-wide);
+    margin: 0 auto;
+    padding: 0 24px 72px;
+  }
+
+  .work-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 860px;
+    margin: 0 auto 20px;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--text-2);
+  }
+
+  /* 两侧定宽，中缝的「6 / 18」才是真正居中（不定宽会被长短不一的题名推开） */
+  .work-pager-slot {
+    flex: 0 0 6em;
+  }
+
+  .work-pager-slot.is-next {
+    text-align: right;
+  }
+
+  .work-pager a {
+    color: var(--text-2);
+  }
+
+  .work-pager a:hover {
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  /* 链条两端（第 1 件无上一件、末件无下一件）留灰字占位，不隐藏 —— 版式不跳 */
+  .work-pager-link.is-disabled {
+    color: var(--text-3);
+  }
+
+  .work-frame {
+    max-width: 860px;
+    margin: 0 auto;
+    background: var(--surface);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-2);
+  }
+
+  .work-frame img {
+    width: 100%;
+    height: auto;
+  }
+
+  .work-label {
+    max-width: 640px;
+    margin: 28px auto 0;
+    text-align: center;
+  }
+
+  .work-title {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--text);
+    padding-left: 0.08em; /* 抵消 letter-spacing 造成的整体右偏 */
+  }
+
+  .work-caption {
+    margin-top: 12px;
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-2);
+  }
+
+  .work-meta {
+    margin-top: 14px;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--text-2);
+  }
+
+  .work-enter {
+    margin-top: 24px;
+  }
 }
 
 /* —— View Transitions —— */
@@ -1667,6 +1763,24 @@
     .site-nav-links a {
       font-size: 12px;
       letter-spacing: 0.02em;
+    }
+
+    /* 展签页：窄屏收边距、题名降一档；两侧占位同步收窄，否则中缝被挤出
+       （320px 下 3 段宽度和会超过内容宽导致换行） */
+    .work {
+      padding: 0 20px 56px;
+    }
+
+    .work-pager-slot {
+      flex-basis: 5em;
+    }
+
+    .work-title {
+      font-size: 19px;
+    }
+
+    .work-label {
+      margin-top: 22px;
     }
 
     .hero-plate {

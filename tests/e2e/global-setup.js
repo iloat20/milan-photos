@@ -37,6 +37,8 @@ const SHELL_FILES = ["index.html", "app.js", "styles.css", "sw.js"];
 
 // 判定 dist 新鲜度的源码面：任一比 dist/index.html 新就重建。
 // photos/ 整棵进列表——thumbs/medium 变了而 manifest 没变时同样要重拷进 dist。
+// sitemap.xml 已不在列表：它不再是仓库里的源文件，而是 tools/gen_work_pages.mjs 的产物；
+// 该生成器必须在列表里，否则改它不会触发重建，跑的就是旧展签页。
 const SOURCES = [
   "index.html",
   "app.js",
@@ -44,11 +46,11 @@ const SOURCES = [
   "vite.config.js",
   "public",
   "src",
+  "tools/gen_work_pages.mjs",
   "package.json",
   "package-lock.json",
   "photos",
   "assets",
-  "sitemap.xml",
 ];
 
 function sha256(buf) {

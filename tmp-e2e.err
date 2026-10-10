@@ -1,4 +1,0 @@
-[WebServer] npm notice run build
-[WebServer] npm notice run vite build
-[WebServer] npm notice run preview
-[WebServer] npm notice run vite preview --host 127.0.0.1 --port 8080 --strictPort

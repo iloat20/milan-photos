@@ -1,1 +1,1 @@
-已选定：React 19 + Tailwind CSS v4 + Zustand + Vite + TypeScript + Vitest + Playwright
+已选定：Vite + Vanilla JavaScript + CSS Grid + Service Worker + Lighthouse CI + Playwright E2E

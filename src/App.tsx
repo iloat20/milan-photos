@@ -1,1 +1,0 @@
-import { useGallery } from "./store"; export default function App() { const { photos } = useGallery(); return <div className="bg-stone-950 text-stone-100">{photos.map(p => <img src={p.src} />)}</div>; }

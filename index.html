@@ -70,7 +70,12 @@
        app.js 的 preloadImage 兜底（两组值一致由 tests/unit/hero-srcset.test.mjs
        拿提交的 manifest 逐条钉住；imagesizes 与 HERO_SIZES 同值由同测试钉住）。 */
     window.__milanManifest
-      .then((res) => (res && res.ok ? res.json() : null))
+      /* 必须读**副本**：同一 Response 还要交给 app.js 消费（app.js 复用这个 Promise
+         并 res.json()）。这里直接读原件会把 body 消费掉，app.js 随后拿到
+         `TypeError: body stream already read` → folderPhotos 置空 → 全站静默白屏
+         （展厅 0 卡 / 序厅 0 画面，且控制台零报错）。clone() 须在 body 被读前调用，
+         此处顺序天然安全；回归由 tests/e2e/smoke.spec.js 的「只被消费一次」用例钉住。 */
+      .then((res) => (res && res.ok ? res.clone().json() : null))
       .then((data) => {
         const first = data && (Array.isArray(data) ? data[0] : (data.photos || [])[0]);
         const srcset = first && (first.heroAvifSrcset || first.heroSrcset);

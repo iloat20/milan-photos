@@ -24,6 +24,33 @@ test.describe("画廊冒烟", () => {
     );
   });
 
+  test("manifest 响应体只被消费一次（不得有第二个消费者）", async ({ page }) => {
+    // 回归锁（2026-10-10 审查）：index.html 的解析期预载脚本与 app.js 曾共用同一个
+    // Response 并各自 .json() —— 第二个消费者抛 `TypeError: body stream already read`，
+    // app.js 的 catch 把 folderPhotos 置空 → 展厅 0 卡、序厅 0 画面，且控制台零报错。
+    // 修复是内联脚本改读 res.clone()：原始响应体只交给 app.js 一个消费者。
+    // 这里直接观察「有没有人 json() 到一个已被消费的 body」，比「卡片数 = 18」
+    // 更早失败、也更直接指向根因（注意：修复后原始响应体 bodyUsed 应为 true——
+    // app.js 消费了它；所以不能断言 bodyUsed === false，只能断言无人读到已消费的 body）。
+    await page.addInitScript(() => {
+      window.__jsonReads = [];
+      const orig = Response.prototype.json;
+      Response.prototype.json = function (...args) {
+        window.__jsonReads.push({ bodyUsed: this.bodyUsed, url: this.url });
+        return orig.apply(this, args);
+      };
+    });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    const reads = await page.evaluate(() => window.__jsonReads);
+    const manifestReads = reads.filter((r) => String(r.url).includes("manifest.json"));
+    // 前置：确实抓到了清单解析（解析期预载 + app.js 两处），否则下面的空数组是空洞通过
+    expect(manifestReads.length).toBeGreaterThanOrEqual(2);
+    // 核心：没有任何一次 json() 落在已被消费的 body 上
+    expect(manifestReads.filter((r) => r.bodyUsed)).toEqual([]);
+  });
+
   test("manifest 提供 thumbAvifSrcset 字段", async ({ request }) => {
     const res = await request.get("/photos/manifest.json");
     expect(res.ok()).toBeTruthy();

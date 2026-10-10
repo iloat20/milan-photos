@@ -670,11 +670,28 @@ test.describe("画廊冒烟", () => {
     // `top:50%; left:50%; translate:-50% -50%`，而构建管线（vite8/lightningcss）会把
     // 「写在 transform 之前的独立 translate/rotate/scale」静默吞掉，居中当场失效、
     // 面板整块掉到右下象限（页面照样能开关，肉眼不盯着截图看不出来）。
-    const box = await panel.boundingBox();
+    //
+    // 但读法必须**轮询到过渡收敛**，不能同步读一次：面板开启有 0.24s 的 transform
+    // 过渡（@starting-style 自 translateY(10px) scale(0.98) 起，见 styles.css .gh-panel）。
+    // 探针实测垂直偏移随时间是 t=0→10px、t≈33ms→8.24px、t≈82ms→1.79px、t≈250ms→0；
+    // CI 正是读在 ~33ms / ~82ms 处，于是拿到 8.24 / 1.79 而假红（本地只是赌赢了时机）。
+    // 若居中真被吞掉，偏移会停在 height/2 量级、此轮询超时仍会红——护栏语义不变。
     const vp = page.viewportSize();
-    expect(box).not.toBeNull();
-    expect(Math.abs(box.x + box.width / 2 - vp.width / 2)).toBeLessThanOrEqual(1);
-    expect(Math.abs(box.y + box.height / 2 - vp.height / 2)).toBeLessThanOrEqual(1);
+    expect(await panel.boundingBox()).not.toBeNull();
+    const offsetFromCentre = async () => {
+      const b = await panel.boundingBox();
+      if (!b) return Infinity;
+      return Math.max(
+        Math.abs(b.x + b.width / 2 - vp.width / 2),
+        Math.abs(b.y + b.height / 2 - vp.height / 2)
+      );
+    };
+    await expect
+      .poll(offsetFromCentre, {
+        timeout: 3_000,
+        message: "库房面板未收敛到视口中心（居中是否被构建管线吞掉？）",
+      })
+      .toBeLessThanOrEqual(1);
 
     // Esc 关闭是 UA 行为（本仓没有为它写 keydown）；light dismiss 同理
     await page.keyboard.press("Escape");

@@ -71,6 +71,7 @@ import { createInstallPrompt } from "./src/install.js";
     img: document.getElementById("lbImg"),
     source: document.getElementById("lbSource"),
     title: document.getElementById("lbTitle"),
+    caption: document.getElementById("lbCaption"),
     prevBtn: document.getElementById("prev"),
     nextBtn: document.getElementById("next"),
     closeBtn: document.getElementById("close"),

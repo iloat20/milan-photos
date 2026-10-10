@@ -79,6 +79,77 @@ test.describe("画廊冒烟", () => {
     await expect(lightbox).toBeHidden();
   });
 
+  test("观画室策展说明：有则显示原文、无则隐藏，且题名区高度恒定", async ({ page, request }) => {
+    /* 座位号与 manifest 下标一一对应：展厅按 manifest 顺序渲染，筛选 all 时
+       visible = photos.slice()，故 .card 第 i 张 = manifest 第 i 条。
+       下标从清单里现算，不写死 —— 换图/换序都不会让这条悄悄测错对象。 */
+    const res = await request.get("/photos/manifest.json");
+    const list = (await res.json()).photos;
+    const withCap = list.findIndex((p) => (p.caption || "").trim());
+    const withoutCap = list.findIndex((p) => !(p.caption || "").trim());
+    expect(withCap, "清单里得有带策展说明的条目").toBeGreaterThanOrEqual(0);
+    expect(withoutCap, "清单里得有无说明的条目").toBeGreaterThanOrEqual(0);
+
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    const openAt = async (i) => {
+      await page.locator(".card").nth(i).click();
+      await expect(page.locator("#lightbox")).toBeVisible();
+      await page.waitForFunction(
+        () => {
+          const img = document.getElementById("lbImg");
+          return img && img.currentSrc;
+        },
+        null,
+        { timeout: 10_000 }
+      );
+    };
+    const closeLb = async () => {
+      await page.locator("#close").click();
+      await expect(page.locator("#lightbox")).toBeHidden();
+    };
+    const metaHeight = () =>
+      page.locator(".lightbox-meta").evaluate((el) => el.getBoundingClientRect().height);
+
+    // ① 无说明：元素**必须仍在 DOM 里**（占位靠它撑高），且不可见
+    await openAt(withoutCap);
+    await expect(page.locator("#lbCaption")).toHaveCount(1);
+    await expect(page.locator("#lbCaption")).toBeHidden();
+    const hEmpty = await metaHeight();
+    await closeLb();
+
+    // ② 有说明：逐字等于 manifest 值（不是「非空」这类空洞断言）
+    await openAt(withCap);
+    await expect(page.locator("#lbCaption")).toBeVisible();
+    await expect(page.locator("#lbCaption")).toHaveText(list[withCap].caption.trim());
+    const hFilled = await metaHeight();
+    await closeLb();
+
+    // ③ 零跳动：题名区高度不给「有无说明」左右。这条才是真正的护栏 ——
+    //    把 .is-empty 从 visibility:hidden 改成 display:none（或删掉 min-height）同样
+    //    能通过 ① 的「不可见」，但画框会被挤动，只有这里抓得住。
+    expect(
+      Math.abs(hFilled - hEmpty),
+      "切到无说明的图时题名区高度变了，上方画框会整块跳一下"
+    ).toBeLessThanOrEqual(0.5);
+
+    // ④ 移动端：最长的策展句（17 字）仍须单行 —— 换行同样会破坏 ③ 的高度恒定
+    const longest = list
+      .map((p, i) => ({ i, n: (p.caption || "").trim().length }))
+      .sort((a, b) => b.n - a.n)[0];
+    expect(longest.n, "清单里没有策展说明，④ 会空洞通过").toBeGreaterThan(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openAt(longest.i);
+    const cap = await page.locator("#lbCaption").evaluate((el) => ({
+      h: el.getBoundingClientRect().height,
+      lh: parseFloat(getComputedStyle(el).lineHeight),
+    }));
+    expect(cap.h, "策展说明在 390px 下换行了（换行即破坏高度恒定）").toBeLessThanOrEqual(
+      cap.lh * 1.5
+    );
+  });
+
   test("手机宽度保持双列展厅且灯箱可用", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");

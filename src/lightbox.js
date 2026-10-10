@@ -13,7 +13,7 @@
  * **依赖方向**：`lightbox.js` → `util.js`（纯函数叶子）；不反向 import `app.js`，无环。
  * 跨域能力一律走端口注入，见 `createLightbox` 的 JSDoc。
  */
-import { displayTitle, lightboxSrc, lightboxAvifOrFallback } from "./util.js";
+import { captionText, displayTitle, lightboxSrc, lightboxAvifOrFallback } from "./util.js";
 
 /* ────────────────────────── 纯数学（可被单测直接覆盖） ──────────────────────────
    刻意导出：这四段是本域唯一有真实边界条件（缩放钳制 1–4、平移钳到溢出半幅、
@@ -95,6 +95,10 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  * @param {HTMLImageElement|null} ports.img   `#lbImg`
  * @param {HTMLSourceElement|null} ports.source `#lbSource`（AVIF 协商）
  * @param {HTMLElement|null} ports.title      `#lbTitle`（无字陈列下恒空）
+ * @param {HTMLElement|null} ports.caption    `#lbCaption`（题下策展说明）
+ *        无说明的图**不是**把它藏掉就完事：`.lightbox-meta` 高度由内容撑开，
+ *        少一行会让上方画框整块跳一下。故这里只切换 `.is-empty`，占位由 CSS 的
+ *        `min-height` + `visibility: hidden` 保证（见 styles.css 的 .lb-caption）。
  * @param {HTMLElement|null} ports.prevBtn / nextBtn / closeBtn
  * @param {(el:any,type:string,fn:Function,opts?:any)=>void} ports.on
  *        绑定守卫：元素缺失时静默降级，而不是抛 TypeError 中断整个 IIFE。
@@ -132,6 +136,7 @@ export function createLightbox({
   img,
   source,
   title,
+  caption,
   prevBtn,
   nextBtn,
   closeBtn,
@@ -387,6 +392,14 @@ export function createLightbox({
     img.alt = titleText;
     // 观画室底部题名：与卡片墙签同一套 displayTitle 产出，切图时同步更新
     if (title) title.textContent = titleText;
+    // 题下策展说明：与标题同路径更新。无说明时置空 + .is-empty（CSS 里 visibility: hidden
+    // 而非 display:none）——这一行必须**恒占高度**，否则切到无说明的图时 .lightbox-meta
+    // 变矮、上方画框整块跳一下。空值判定在 util.captionText（trim 后为空即视为没有）。
+    if (caption) {
+      const captionValue = captionText(photo);
+      caption.textContent = captionValue;
+      caption.classList.toggle("is-empty", !captionValue);
+    }
     const frame = lightbox.querySelector(".lightbox-frame");
     if (frame) {
       frame.classList.remove("is-lit");

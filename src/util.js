@@ -46,6 +46,13 @@ export function displayTitle(photo, index) {
   return `《无题 · ${String(index + 1).padStart(2, "0")}》`;
 }
 
+/** 题下策展说明的取值：trim 后为空即视为「无说明」。
+ *  与 title 不同，说明**不**做《无题 · NN》式降级 —— 没写就是没有，不替作者编话。
+ *  返回值同时决定观画室里那一行是显示还是隐藏（`src/lightbox.js` 的 sync）。 */
+export function captionText(photo) {
+  return (photo?.caption || "").trim();
+}
+
 /** 墙号（展厅序号标签） */
 export function wallNumber(index) {
   return `MIL · ${String(index + 1).padStart(3, "0")}`;

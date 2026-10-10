@@ -19,6 +19,7 @@ import {
   safeDecode,
   looksLikeFileTitle,
   displayTitle,
+  captionText,
   wallNumber,
   toLocalDate,
   ymKey,
@@ -70,6 +71,18 @@ test("displayTitle：真标题加书名号，文件名式标题退化为《无�
   assert.equal(displayTitle({}, 9), "《无题 · 10》");
   // 前后空白应被裁掉再判定
   assert.equal(displayTitle({ title: "  千里江山图  " }, 0), "《千里江山图》");
+});
+
+test("captionText：trim 后原样返回；空 / 纯空白 / 缺失一律空串（不降级成占位文案）", () => {
+  assert.equal(captionText({ caption: "  雨珠把城市拆成散景。  " }), "雨珠把城市拆成散景。");
+  assert.equal(captionText({ caption: "一束侧光，让植物变成雕塑。" }), "一束侧光，让植物变成雕塑。");
+  // 与 title 不同：没写就是没有，不替作者编话
+  assert.equal(captionText({ caption: "" }), "");
+  assert.equal(captionText({ caption: "   \n\t " }), "");
+  assert.equal(captionText({}), "");
+  assert.equal(captionText({ caption: null }), "");
+  assert.equal(captionText(null), "");
+  assert.equal(captionText(undefined), "");
 });
 
 test("wallNumber：MIL · 三位零填充序号", () => {

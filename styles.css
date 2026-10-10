@@ -1436,6 +1436,31 @@
     color: var(--text-2);
   }
 
+  /* 题下策展说明（仅观画室；画廊卡与序厅保持「无字陈列」）。
+     关键约束是**零跳动**：18 件里只有 8 件写了说明，而 .lightbox-meta 是
+     flex-shrink:0、高度由内容撑开的弹性子块 —— 若轮到无说明的那 10 件时它矮一截，
+     上方画框会被挤得整块跳一下。故空值**不用** display:none，而是
+     `.is-empty { visibility: hidden }` + 恒占一行，使标题与画面在任意两张图之间不动。
+     min-height 先写 px 再写 1lh：后者与 line-height 1.6 × 13px = 20.8px 恒等，认得
+     `lh` 单位的引擎取后者（与实际行高严格同步），不认的取前者，两值相等故无副作用。
+     配色沿用 .lb-title 的 --text-2（主题对，且该值已做过 AA 对比度核对）—— 不再乘一层
+     透明度：那会在「随画而变的墙面底色」上造出一个没人核对过的颜色（--text-3 就被
+     本仓显式标注为「小字对比度不足 AA」）。主从关系靠字号/行高，不靠继续压暗。 */
+  .lb-caption {
+    min-height: 20.8px;
+    min-height: 1lh;
+    margin: 6px auto 0;
+    max-width: min(46ch, 100%);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-2);
+    text-wrap: pretty;
+  }
+
+  .lb-caption.is-empty {
+    visibility: hidden;
+  }
+
   body.lb-open {
     overflow: hidden;
     touch-action: none;

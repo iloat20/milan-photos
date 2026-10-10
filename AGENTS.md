@@ -92,7 +92,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 
 ## 字体：系统栈（子集工具已退役）
 
-2026-09-30 起标题不再自托管字体：`assets/fonts/`、`tools/build-font-subset.js`、`tools/font-glyphs.js`、`tests/unit/font-subset.test.mjs` 与 `sw.js` 里的字体快照**全部移除**，`--font` 是纯系统字体栈（Windows 中文衬线走系统回退）。改文案**不再有**「重跑字体生成」这一步（`meta.json` 的 `caption` 依旧站内无处渲染，与字体无关）。
+2026-09-30 起标题不再自托管字体：`assets/fonts/`、`tools/build-font-subset.js`、`tools/font-glyphs.js`、`tests/unit/font-subset.test.mjs` 与 `sw.js` 里的字体快照**全部移除**，`--font` 是纯系统字体栈（Windows 中文衬线走系统回退）。改文案**不再有**「重跑字体生成」这一步（`meta.json` 的 `caption` 自 2026-10-10 起已在观画室题下渲染，见下方 `.lb-caption` 条目；与字体无关）。
 
 历史教训仍有效——将来若重新引入自托管子集，三件护栏必须一起恢复（均被实证明必要）：
 
@@ -191,6 +191,7 @@ done
 - 画框是**中性细边 + 圆角**：卡片 = `--surface` 底 + `2px var(--hairline-soft)` + `--r-lg`，照片再内缩 `--frame-inset: 4px`；灯箱同构（`--frame-pad: 6px` / `--frame-border: 2px` / radius 18px）。**不要**加宽/提亮成装饰性金框或粗边，那会压过画心。
 - 环境光晕落在画框**之外**的四周（`.card-media::before`：径向 `--card-accent`、`opacity .45`、`inset: -28px -20px`、`z-index: -1`），**不要**打在画心上；为此 `.card-media` 自身 `overflow: visible` 不裁切，裁切只交给 `.card-media-glass`（管 hover 缩放不出框）。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
+- 观画室的**题下策展说明**（`.lb-caption`，取 `meta.json` 的 `caption`）必须**恒占一行**：`.lightbox-meta` 是 `flex-shrink: 0` 且高度由内容撑开，而全馆 18 件里只有 8 件写了说明 —— 空值若用 `display: none`（或干脆不占位），切到无说明的图时上方画框会被挤得**整块跳一下**。空值一律 `visibility: hidden` + `min-height: 1lh`（红态实证：改成 `display: none` 后题名区高度差 26.8px）。护栏是 e2e「题名区高度恒定」那条 —— 只断言「元素不可见」抓不住它。取值归 `util.captionText()`（trim 后为空即视为没有，**不**做《无题》式降级）。
 - 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
 - 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2` + 边框提亮到 `--hairline`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
 - 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。

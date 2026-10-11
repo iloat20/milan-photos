@@ -6,12 +6,18 @@
  * 这也是 P2-2 拆分的第一份收益：这些函数此前埋在 app.js 的 IIFE 里，
  * 任何一行改动都只能靠 e2e 冒烟间接观察。
  *
+ * 唯一读取真实文件的是末尾那条「真清单契约」—— 灯箱取图链路必须对**真实 18 件**
+ * 成立，纯函数自身的用例（含空值）覆盖不到「真实数据里到底有没有落到原图」。
+ *
  * 注意：本文件是 .mjs（强制 ESM），而 src/util.js 的 ESM 身份由
  * src/package.json 的 {"type":"module"} 声明 —— 仓库根 package.json
  * 必须保持无 type，否则 playwright.config.js 的 require 会失效。
  */
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   pad,
@@ -29,6 +35,9 @@ import {
   stripExt,
   safeFileName,
   heroSrc,
+  largestSrcsetUrl,
+  largestStill,
+  largestAvif,
   lightboxSrc,
   lightboxAvifOrFallback,
 } from "../../src/util.js";
@@ -157,6 +166,44 @@ test("safeFileName：时间戳前缀 + 清掉非 \\w 字符（含 Date.now，只
   assert.match(safeFileName({ name: "###" }), /^[0-9a-z]+-photo\.jpg$/);
 });
 
+test("largestSrcsetUrl：取 w 描述符最大的候选；无描述符取首个非空项；空/缺失 → \"\"", () => {
+  // 真实形状（photos_lib 按宽度升序写出三档）
+  assert.equal(
+    largestSrcsetUrl(
+      "photos/thumbs/a-400.avif 400w, photos/thumbs/a-800.avif 800w, photos/thumbs/a.avif 1024w"
+    ),
+    "photos/thumbs/a.avif"
+  );
+  // 乱序：仍取 w 最大，与书写顺序无关
+  assert.equal(largestSrcsetUrl("a.avif 800w, b.avif 1024w, c.avif 400w"), "b.avif");
+  // 单档（360×360 那张只有 -400）
+  assert.equal(largestSrcsetUrl("photos/thumbs/t-400.avif 360w"), "photos/thumbs/t-400.avif");
+  // 全部无 w 描述符：首个非空项胜出（结果确定，不依赖遍历顺序的偶然）
+  assert.equal(largestSrcsetUrl("x.avif, y.avif"), "x.avif");
+  // 空 / 缺失 / 纯空白 / 只有逗号
+  assert.equal(largestSrcsetUrl(""), "");
+  assert.equal(largestSrcsetUrl(null), "");
+  assert.equal(largestSrcsetUrl(undefined), "");
+  assert.equal(largestSrcsetUrl("  ,  "), "");
+});
+
+test("largestStill / largestAvif：档位优先级，且无 AVIF 变体时返回空串（交调用方回落）", () => {
+  assert.equal(largestStill({ medium: "m", thumb: "t", src: "s" }), "m");
+  assert.equal(largestStill({ thumb: "t", src: "s" }), "t");
+  assert.equal(largestStill({ src: "s" }), "s");
+  assert.equal(largestStill({}), "");
+  assert.equal(largestStill(null), "");
+
+  assert.equal(
+    largestAvif({ mediumAvif: "ma.avif", thumbAvifSrcset: "t-400.avif 400w, t.avif 1024w" }),
+    "ma.avif"
+  );
+  assert.equal(largestAvif({ thumbAvifSrcset: "t-400.avif 400w, t.avif 1024w" }), "t.avif");
+  // 无 AVIF 变体 → 空串（不是回落 WebP，那是调用方的事）
+  assert.equal(largestAvif({ thumb: "t" }), "");
+  assert.equal(largestAvif({}), "");
+});
+
 test("heroSrc：动图只用静态缩略图，避免首屏拉原文件", () => {
   assert.equal(heroSrc({ animated: true, thumb: "t", medium: "m", src: "s" }), "t");
   assert.equal(heroSrc({ medium: "m", thumb: "t", src: "s" }), "m");
@@ -165,17 +212,63 @@ test("heroSrc：动图只用静态缩略图，避免首屏拉原文件", () => {
   assert.equal(heroSrc({}), "");
 });
 
-test("lightboxSrc：动图走原文件保证能播，其余优先中图", () => {
+test("lightboxSrc：动图走原文件保证能播；静态图取最大可用档 medium → thumb → src", () => {
   assert.equal(lightboxSrc({ animated: true, medium: "m", src: "s" }), "s");
-  assert.equal(lightboxSrc({ medium: "m", src: "s" }), "m");
+  assert.equal(lightboxSrc({ medium: "m", thumb: "t", src: "s" }), "m");
+  // 回归锁（P-3）：无中图的 9/18 张必须落到 thumb —— 旧实现此处返回 src（原图）
+  assert.equal(lightboxSrc({ thumb: "t", src: "s" }), "t");
   assert.equal(lightboxSrc({ src: "s" }), "s");
   assert.equal(lightboxSrc({}), "");
 });
 
-test("lightboxAvifOrFallback：AVIF 优先，动图仍走原文件", () => {
+test("lightboxAvifOrFallback：AVIF 优先；无 AVIF 现算顶层；动图仍走原文件", () => {
   assert.equal(lightboxAvifOrFallback({ mediumAvif: "a.avif", medium: "m" }), "a.avif");
+  // 回归锁（P-3）：无 mediumAvif 时从 thumbAvifSrcset 取顶层，而非直接回落 WebP
+  assert.equal(
+    lightboxAvifOrFallback({
+      thumbAvifSrcset: "t-400.avif 400w, t.avif 1024w",
+      thumb: "t.webp",
+    }),
+    "t.avif"
+  );
   assert.equal(lightboxAvifOrFallback({ medium: "m" }), "m");
   // 动图即使有 AVIF 变体也不能用（会丢帧）
   assert.equal(lightboxAvifOrFallback({ animated: true, src: "s", mediumAvif: "a.avif" }), "s");
   assert.equal(lightboxAvifOrFallback({}), "");
+});
+
+/* ───────────────── 真清单契约：灯箱永不请求原图（P-3 主护栏） ─────────────────
+   纯函数用例用的是合成对象，覆盖不到「真实 18 件里到底有没有落到 .jpg」。
+   这条读真实 manifest，对全部条目断言灯箱取图来自派生目录 ——
+   毫秒级、覆盖全量、不可能同义反复。 */
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const MANIFEST = JSON.parse(
+  fs.readFileSync(path.join(ROOT, "photos", "manifest.json"), "utf8")
+);
+
+test("真清单契约：全部静态作品的灯箱取图都来自派生图，无一落到 jpg/png 原图", () => {
+  const photos = MANIFEST.photos;
+  assert.equal(photos.length, 18, "样本量变了就得重新审视这条断言");
+  const originRe = /\.(?:jpe?g|png)$/i;
+  const derivedRe = /^photos\/(?:medium|thumbs)\//;
+  for (const p of photos) {
+    if (p.animated) continue;
+    assert.match(lightboxSrc(p), derivedRe, `${p.file} 的灯箱落到了 ${lightboxSrc(p)}`);
+    assert.doesNotMatch(
+      lightboxSrc(p),
+      originRe,
+      `${p.file} 的灯箱仍加载原图：${lightboxSrc(p)}`
+    );
+    assert.doesNotMatch(
+      lightboxAvifOrFallback(p),
+      originRe,
+      `${p.file} 的 AVIF 侧回落到原图：${lightboxAvifOrFallback(p)}`
+    );
+  }
+  // 反向自证：样本里确实有无 medium 的条目，否则上面「不落原图」是空架子
+  assert.ok(
+    photos.some((p) => !p.medium),
+    "没有无 medium 的样本，这条契约就测不到 P-3"
+  );
 });

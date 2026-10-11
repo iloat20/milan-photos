@@ -111,10 +111,43 @@ export function safeFileName(file) {
   return `${stamp}-${base || "photo.jpg"}`;
 }
 
+/** 从 srcset 串取 **w 描述符最大**的候选 URL；无候选 / 无描述符时取首个非空项，空串返回 ""。
+ *  「取最大档」这条语义在 WebP 侧由 `photo.thumb`（= 最大缩略档）承担，
+ *  AVIF 侧没有对应的标量字段，故从 `thumbAvifSrcset` 现算 —— 与 mediumWidth
+ *  「由原图反推而非存储」同一范式，避免新增 manifest 字段与一次 sync。 */
+export function largestSrcsetUrl(srcset) {
+  let best = "";
+  let bestW = -1;
+  for (const part of String(srcset || "").split(",")) {
+    const [url, descriptor] = part.trim().split(/\s+/);
+    if (!url) continue;
+    const m = /^(\d+)w$/.exec(descriptor || "");
+    const w = m ? Number(m[1]) : 0;
+    if (w > bestW) {
+      bestW = w;
+      best = url;
+    }
+  }
+  return best;
+}
+
+/** 静态图最大可用档（WebP 侧）：medium > thumb > src。
+ *  `thumb` 是最大缩略档，缺失（无 Pillow 的降级构建）时才落到原文件。 */
+export function largestStill(photo) {
+  return photo?.medium || photo?.thumb || photo?.src || "";
+}
+
+/** 静态图最大可用档（AVIF 侧）：mediumAvif > thumbAvifSrcset 顶层。
+ *  `thumbAvifSrcset` 的档位与 medium 同参数生成（`thumb` 与 `medium` 共用质量常量），
+ *  故对无 medium 的图，顶层 AVIF 是**质量中性**的替换而非降级。 */
+export function largestAvif(photo) {
+  return photo?.mediumAvif || largestSrcsetUrl(photo?.thumbAvifSrcset);
+}
+
 /** 序厅轮播用图：动图只用静态缩略图，避免首屏拉原文件 */
 export function heroSrc(photo) {
   if (photo?.animated) return photo.thumb || photo.src || "";
-  return photo?.medium || photo?.thumb || photo?.src || "";
+  return largestStill(photo);
 }
 
 // 与 tools/photos_lib.py 的 MEDIUM_MAX_EDGE 对齐；
@@ -151,14 +184,17 @@ export function heroAvifSrcset(photo) {
   return parts.filter(Boolean).join(", ");
 }
 
-/** 灯箱用图：动图走原文件保证能播，其余优先中图 */
+/** 灯箱用图：动图走原文件保证能播，其余取**最大可用档**
+ *  （medium → thumb → src）。原图 `src` 只在派生图全缺时才被触达 ——
+ *  这正是 P-1「母版移出产物」的前置：修完后静态作品不再请求 `photos/<name>.<ext>`。 */
 export function lightboxSrc(photo) {
   if (photo?.animated) return photo.src || "";
-  return photo?.medium || photo?.src || "";
+  return largestStill(photo);
 }
 
-/** 预载须与灯箱 <picture> 实际选中一致：AVIF 优先，动图仍走原文件 */
+/** 预载须与灯箱 <picture> 实际选中一致：AVIF 优先，动图仍走原文件。
+ *  无 AVIF 变体时返回 WebP，`type="image/avif"` 会让浏览器跳过它、回落同值 —— 无重复下载。 */
 export function lightboxAvifOrFallback(photo) {
   if (photo?.animated) return photo?.src || "";
-  return photo?.mediumAvif || lightboxSrc(photo);
+  return largestAvif(photo) || largestStill(photo);
 }

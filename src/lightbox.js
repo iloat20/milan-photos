@@ -386,8 +386,10 @@ export function createLightbox({
     // 换图复位缩放/平移
     resetZoom(false);
     const titleText = displayTitle(photo, pos);
-    // AVIF source 优先；动图/无中图留空，浏览器回退 img.src
-    if (source) source.srcset = photo.animated ? "" : photo.mediumAvif || "";
+    // AVIF source 必须与预载**同源**（都走 lightboxAvifOrFallback）：若这里只填
+    // mediumAvif，无中图的图 srcset 即为空 → 浏览器会跳过 source、回落 img.src 的
+    // WebP，而预载早已下过 AVIF —— 同一张图下两次。动图留空，走 img.src 原文件。
+    if (source) source.srcset = photo.animated ? "" : lightboxAvifOrFallback(photo);
     img.src = lightboxSrc(photo);
     img.alt = titleText;
     // 观画室底部题名：与卡片墙签同一套 displayTitle 产出，切图时同步更新

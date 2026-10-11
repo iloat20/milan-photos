@@ -70,7 +70,8 @@ test.describe("画廊冒烟", () => {
     const lightbox = page.locator("#lightbox");
     await cards.first().click();
     await expect(lightbox).toBeVisible();
-    // 灯箱图走 medium AVIF（原图 ≤1600 无 medium 时回退 jpg，二者都算通过协商）；src 异步设置，等它落地
+    // 灯箱图走 AVIF 派生图（有中图 → medium.avif；无中图 → thumb 顶层 .avif）。
+    // 契约收口后已无「回退 jpg 原图」这条路径，档位回归锁见下一条用例。src 异步设置，等它落地
     await page.waitForFunction(() => {
       const img = document.getElementById("lbImg");
       return img && img.currentSrc;
@@ -79,6 +80,47 @@ test.describe("画廊冒烟", () => {
     expect(src).toBeTruthy();
     await page.locator("#close").click();
     await expect(lightbox).toBeHidden();
+  });
+
+  test("灯箱档位回退：无中图作品也走派生图，不再回落 jpg 原图（P-3 回归锁）", async ({
+    page,
+    request,
+  }) => {
+    /* 座位号同「观画室策展说明」：筛选 all 时 .card 第 i 张 = manifest 第 i 条，
+       下标从清单现算，不写死 —— 换图/换序不会让这条悄悄测错对象。 */
+    const res = await request.get("/photos/manifest.json");
+    const list = (await res.json()).photos;
+    const idx = list.findIndex((p) => !p.medium && !p.animated);
+    expect(idx, "清单里得有无中图的作品，否则这条测不到 P-3").toBeGreaterThanOrEqual(0);
+    expect(list[idx].thumbAvifSrcset, "样本得带 AVIF 变体").toBeTruthy();
+
+    await page.goto("/");
+    const cards = page.locator(".card");
+    await expect(cards).toHaveCount(18);
+    await cards.nth(idx).scrollIntoViewIfNeeded();
+    await cards.nth(idx).click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const img = document.getElementById("lbImg");
+        return img && img.currentSrc;
+      },
+      null,
+      { timeout: 10_000 }
+    );
+
+    const src = await page.locator("#lbImg").evaluate((img) => img.currentSrc);
+    const srcset = await page
+      .locator("#lbSource")
+      .evaluate((s) => s.getAttribute("srcset") || "");
+    // 核心：落到 AVIF 派生图（旧实现此处是 photos/<name>.jpg 原图）
+    expect(src).toMatch(/\.avif$/);
+    expect(src).toContain("/photos/thumbs/");
+    // <picture> 的 AVIF source 必须非空且与预载同源，否则「预载 avif、渲染 webp」下两次
+    expect(srcset).toContain(".avif");
+
+    await page.locator("#close").click();
+    await expect(page.locator("#lightbox")).toBeHidden();
   });
 
   test("观画室策展说明：有则显示原文、无则隐藏，且题名区高度恒定", async ({

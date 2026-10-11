@@ -1,7 +1,7 @@
 # P3/P4 设计稿：灯箱取图档位回退修正
 
 - 日期：2026-10-11
-- 状态：**设计定稿，待实施**（实施后在此处补 §7 实施记录）
+- 状态：**已实施完成**（验收与偏差见 §8）
 - 前置：`2026-10-10-upgrade-opportunity-audit.md` §4 的 P-3 / P-4（§9 优先级总表里的 P1）
 - 对齐方式：逐项 brainstorming（范围 → AVIF 来源 → 边界用例，三轮问答；决策见 §0）
 - 提交边界：单独一个 commit，`research/` 文档与实施代码分开提交
@@ -182,3 +182,47 @@ if (source) source.srcset = photo.animated ? "" : lightboxAvifOrFallback(photo);
 4. 两条红态验证均决定性通过（§2.5）
 5. 预览目视：任取一张无 medium 作品，灯箱开图与放大到 4× 的画质与有 medium 的作品一致
 6. `AGENTS.md:42` 与实现一致（契约不再漂移）
+
+---
+
+## 8. 实施记录
+
+### 8.1 验收结果
+
+| # | 项 | 结果 |
+|---|---|---|
+| 1 | `npm run lint` | ✅ eslint + stylelint 干净 |
+| 2 | `npm run test:unit` | ✅ **61/61**（58 → 61：新增 `largestSrcsetUrl`、`largestStill`/`largestAvif`、真清单契约各 1 条） |
+| 3 | `npx playwright test` | ✅ **43/43**（42 → 43：新增「灯箱档位回退」抽检 1 条） |
+| 4 | 红态验证 ①（`lightboxSrc` 改回 `medium \|\| src`） | ✅ `not ok 20`，报 `1700559942072.jpg 的灯箱落到了 photos/1700559942072.jpg`；字节级恢复一致 |
+| 5 | 红态验证 ②（撤销 `lightbox.js` 同源化） | ✅ e2e 报 `Expected pattern: /\.avif$/ / Received string: "…/photos/thumbs/1700559942072.webp"` —— 证明旧实现下 `<picture>` 的 AVIF source 为空、回落 `img.src` 的 WebP |
+| 6 | 预览目视 | ✅ 见 §8.3 |
+| 7 | `AGENTS.md` 契约对齐 | ✅ 两处（`:36` medium 行、`:42` 取图链） |
+
+### 8.2 实施中的偏差与新增决定
+
+1. **`largestSrcsetUrl` 的 minify 判定探针**：`dist/app.js` 里 esbuild 把 `|| ""` 压成了**模板字面量** ` `` `，
+   所以「源码里 `mediumAvif || ""`」这条 grep 在产物里**找不到**（我第一次的产物核验因此误判为「破坏没进产物」而中止）。
+   改为按语义判定：`srcset=<x>.animated?``:<w>` 之后跟的是**函数调用**（绿）还是 `.mediumAvif`（红）。
+   探针落在 `.workbuddy/scratch/probe-srcset.mjs`。
+2. **`AGENTS.md:36` 也有一处同类漂移**（设计稿只点了 `:42`）：原文写 `photos/medium/` 「原图 ≤1280 时不生成，
+   **灯箱用原图**」—— 修完之后应改为「灯箱改用最大缩略档 `thumbs/`」。已一并修正。
+3. **未新增 manifest 字段、未跑 sync**，与设计一致。
+
+### 8.3 预览目视（`vite preview` 实测）
+
+| 作品 | 有无 medium | 灯箱 `currentSrc` | 内在尺寸 | 显示尺寸 |
+|---|---|---|---|---|
+| `01-city-rain.jpg` | 无 | `photos/thumbs/01-city-rain.avif` | 1024×901 | 685×603 |
+| `mmexport1788447848472.jpg` | 有 | `photos/medium/mmexport1788447848472.avif` | 960×1280 | 452×603 |
+
+- 滚轮放大到 `--lb-zoom = 3.76`（上限 4），画心清晰、无可见编码劣化；题名与策展说明照常渲染。
+- 失败请求 **0**。截图：`.workbuddy/scratch/lb-no-medium-1x.png`、`lb-no-medium-zoom.png`。
+- `01-city-rain` 三档字节实测：原图 JPEG `106 312` → 顶层 WebP `55 138` → **顶层 AVIF `51 345`**，与 §4 预期逐字节一致。
+
+### 8.4 遗留（本项未动）
+
+`01-city-rain` 这类 1024px 的作品在 4× 放大时仍会发虚 —— 这是**源本身没有更大档**造成的，
+本次并未加剧（改前加载的 1024px JPEG 与改后的 1024px AVIF **像素数完全相同**，只是编码更小）。
+真正的解在 **P-2（1920–2048 高清档）**，与本项正交。
+`1700559942072` 仅 360×360，放大发虚属 **D-1**，另有 4× 上限的取舍空间。

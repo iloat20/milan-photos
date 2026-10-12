@@ -123,6 +123,64 @@ test.describe("画廊冒烟", () => {
     await expect(page.locator("#lightbox")).toBeHidden();
   });
 
+  /* —— P-2：观画室按需求选档（2048 高清档）——
+     加了 2048 档之后，「按需求选档」本身就是产品行为，两条互为反向：
+     一条证明高分屏不再欠采样，一条证明没有退化成「永远取最大档」。
+     样本座位号从清单现算（横图 + 确有 -2048 档），不写死下标。 */
+
+  /** 打开清单里第一个「有 -2048 档」的作品，返回灯箱实际加载的 URL */
+  async function openLargeTierSample(page, request, want) {
+    const res = await request.get("/photos/manifest.json");
+    const list = (await res.json()).photos;
+    const idx = list.findIndex(
+      (p) => (p.mediumSrcset || "").includes("-2048.") && (p.width > p.height) === want
+    );
+    expect(idx, "清单里得有带 -2048 档的样本，否则这条测不到 P-2").toBeGreaterThanOrEqual(0);
+
+    await page.goto("/");
+    const cards = page.locator(".card");
+    await expect(cards).toHaveCount(18);
+    await cards.nth(idx).scrollIntoViewIfNeeded();
+    await cards.nth(idx).click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.waitForFunction(() => document.getElementById("lbImg")?.currentSrc, null, {
+      timeout: 10_000,
+    });
+    return page.locator("#lbImg").evaluate((img) => img.currentSrc);
+  }
+
+  test.describe("高清档 · 桌面 DPR2", () => {
+    test.use({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+
+    test("桌面 DPR2 打开横图 → 灯箱取 -2048 档（P-2 主判据：修好欠采样）", async ({
+      page,
+      request,
+    }) => {
+      // 1280×900 DPR2 下 2560×1920 的需求宽是 1675，1280 档不够 → 必须落到 2048
+      const src = await openLargeTierSample(page, request, true);
+      expect(src).toContain("-2048");
+      const srcset = await page
+        .locator("#lbSource")
+        .evaluate((s) => s.getAttribute("srcset") || "");
+      expect(srcset, "预载/选择必须与 <picture> 同源").toContain("-2048");
+    });
+  });
+
+  test.describe("高清档 · 移动 DPR3", () => {
+    test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
+
+    test("移动 DPR3 打开同一张 → 取 1200 缩略档而非 2048（反退化：不是永远取最大档）", async ({
+      page,
+      request,
+    }) => {
+      const src = await openLargeTierSample(page, request, true);
+      // 需求宽 1052 → 最小够用的是 1200 缩略档（无 -400 / -800 后缀的那个）
+      expect(src).toMatch(/\/photos\/thumbs\/[^/]+\.(?:avif|webp)$/);
+      expect(src, "移动端不该下 2048 档（弱网白付 2 倍字节）").not.toContain("-2048");
+      expect(src).not.toContain("/medium/");
+    });
+  });
+
   test("观画室策展说明：有则显示原文、无则隐藏，且题名区高度恒定", async ({
     page,
     request,

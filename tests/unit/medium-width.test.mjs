@@ -32,6 +32,13 @@ function pythonMediumMaxEdge() {
   return Number(m[1]);
 }
 
+function pythonMediumLargeMaxEdge() {
+  const src = fs.readFileSync(PHOTOS_LIB, "utf8");
+  const m = src.match(/^\s*MEDIUM_LARGE_MAX_EDGE\s*=\s*(\d+)/m);
+  assert.ok(m, "photos_lib.py 里找不到 MEDIUM_LARGE_MAX_EDGE = <整数>");
+  return Number(m[1]);
+}
+
 test("mediumWidth：与 photos_lib.py 的 MEDIUM_MAX_EDGE 同步", () => {
   const edge = pythonMediumMaxEdge();
   // 超限图（才会生成 medium）：按 edge 反推缩放后的实际宽
@@ -106,4 +113,35 @@ test("HERO_SIZES：与 styles.css 的 .hero-art img max-width 同值", () => {
   const css = fs.readFileSync(path.join(ROOT, "styles.css"), "utf8");
   assert.equal(HERO_SIZES, "min(86vw, 880px)");
   assert.match(css, /max-width:\s*min\(86vw,\s*880px\)/);
+});
+
+/* ───────── 高清档（P-2）：photos_lib.py 的上限 ↔ 真清单的 -2048 档 ─────────
+   与上面 1280 档同一条思路，只是契约换成「出档谓词」：产物名带 -2048、描述符按
+   长边 2048 反推，两者都由 MEDIUM_LARGE_MAX_EDGE 决定。改上限忘改谓词/命名，
+   或反过来，这里立刻红 —— 而线上表现只是「高分屏少一档」或「多出一档杂音」，
+   页面完全正常，靠 e2e 几乎撞不到。 */
+
+test("高清档：MEDIUM_LARGE_MAX_EDGE 与真清单的出档集合、命名、描述符自洽", () => {
+  const edge = pythonMediumLargeMaxEdge();
+  assert.equal(edge, 2048, "档位上限与产物命名（-2048）必须同值，改一处要同步改命名与断言");
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "photos", "manifest.json"), "utf8"));
+  const photos = manifest.photos;
+  const large = photos.filter((p) => (p.mediumSrcset || "").includes("-2048."));
+
+  // 出档谓词：**严格大于**上限才出档（与 ensure_medium 同形）
+  assert.deepEqual(
+    large.map((p) => p.file).sort(),
+    photos
+      .filter((p) => p.width > 0 && p.height > 0 && Math.max(p.width, p.height) > edge)
+      .map((p) => p.file)
+      .sort(),
+    "出档集合必须恰为长边 > MEDIUM_LARGE_MAX_EDGE 的那些（不得多出 -1706 之类别名）"
+  );
+  // 反证：样本里得有长边**恰好等于**上限的条目，否则「严格大于」与「大于等于」
+  // 这两条谓词在真数据上毫无差别，断言是空架子
+  assert.ok(
+    photos.some((p) => Math.max(p.width, p.height) === edge),
+    "样本里得有长边恰等于上限的条目，守卫的边界才被覆盖"
+  );
 });

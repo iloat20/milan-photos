@@ -13,7 +13,17 @@
  * **依赖方向**：`lightbox.js` → `util.js`（纯函数叶子）；不反向 import `app.js`，无环。
  * 跨域能力一律走端口注入，见 `createLightbox` 的 JSDoc。
  */
-import { captionText, displayTitle, lightboxSrc, lightboxAvifOrFallback } from "./util.js";
+import {
+  captionText,
+  displayTitle,
+  lightboxSrc,
+  lightboxAvifOrFallback,
+  frameCaps,
+  lightboxNeed,
+  lightboxTiers,
+  lightboxAvifTiers,
+  pickTier,
+} from "./util.js";
 
 /* ────────────────────────── 纯数学（可被单测直接覆盖） ──────────────────────────
    刻意导出：这四段是本域唯一有真实边界条件（缩放钳制 1–4、平移钳到溢出半幅、
@@ -117,7 +127,9 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  * @param {() => string} ports.filterHash                          当前筛选对应的 `#f` 值
  * @param {() => boolean} ports.prefersVT
  * @param {(update:()=>void) => object} ports.startVT
- * @returns {{open:(index:number, invoker?:Element|null, list?:object[]|null, source?:((photoId:string|null)=>Element|null)|null)=>void, isOpen:()=>boolean}}
+ * @returns {{open:(index:number, invoker?:Element|null, list?:object[]|null, source?:((photoId:string|null)=>Element|null)|null)=>void, isOpen:()=>boolean, prefetchUrl:(photo:object)=>string}}
+ *          `prefetchUrl` 给宿主在灯箱未开时预热「本图真正会用到的那一档」，
+ *          与 `<picture>` 同源（都过 `selectSrcs`）。
  *          `open` 的第 4 参数是**本会话的显式过渡源提供者**：宿主回答「这张画此刻
  *          是否正由某个可见元素承载」。序厅（hero 轮播）点击时传它，从而以用户点中
  *          的那幅画面作配对源，而不是展厅里那张可能在屏外的卡片。
@@ -369,13 +381,36 @@ export function createLightbox({
 
   /* ────────────────────────── 换图 ────────────────────────── */
 
+  /** 本图在**当前画框**下真正要用的两档（AVIF / WebP），合成的是**单档 URL**。
+   *
+   *  四处取图（`<picture>` 的 AVIF source、`<img>`、hover 预载、邻居预载）必须
+   *  共用这一个函数 —— P-3 的教训是「预载 A、渲染 B」会让同一张图下两次。
+   *
+   *  刻意**不把多候选 srcset 交给 `<source>`**：`<source>` 没有 `sizes` 时默认
+   *  100vw，浏览器会按「视口宽 × DPR」自行协商，我们按画框上限算的选择就被架空了
+   *  （画框受**高度**双约束，比 100vw 窄得多，横屏大图会选大两档）。所以选完只
+   *  给一个不带描述符的 URL，协商权完全在本函数。
+   *
+   *  读不到画框上限或原图 `width/height` 时 `need === 0`，回落 P-3 的
+   *  「最大可用档」，故兜底路径不会比现状更差。动图不进选档（走原文件保证能播）。
+   */
+  function selectSrcs(photo) {
+    if (photo?.animated) return { avif: "", still: lightboxSrc(photo) };
+    const need = lightboxNeed(photo, frameCaps(img), window.devicePixelRatio || 1);
+    if (!need) return { avif: lightboxAvifOrFallback(photo), still: lightboxSrc(photo) };
+    return {
+      avif: pickTier(lightboxAvifTiers(photo), need) || lightboxAvifOrFallback(photo),
+      still: pickTier(lightboxTiers(photo), need) || lightboxSrc(photo),
+    };
+  }
+
   function preloadNeighbor(delta) {
     const arr = photos();
     if (!arr.length) return;
     const next = arr[(pos + delta + arr.length) % arr.length];
     // 走 rel=preload：带 type=image/avif 时老浏览器免下无效图，与灯箱选中一致可复用。
     // 只预载**一个**方向（由 step() 记录的 preloadDir 决定），不再前后各一张。
-    preload(lightboxAvifOrFallback(next), "low");
+    preload(selectSrcs(next).avif, "low");
   }
 
   function sync() {
@@ -386,11 +421,11 @@ export function createLightbox({
     // 换图复位缩放/平移
     resetZoom(false);
     const titleText = displayTitle(photo, pos);
-    // AVIF source 必须与预载**同源**（都走 lightboxAvifOrFallback）：若这里只填
-    // mediumAvif，无中图的图 srcset 即为空 → 浏览器会跳过 source、回落 img.src 的
-    // WebP，而预载早已下过 AVIF —— 同一张图下两次。动图留空，走 img.src 原文件。
-    if (source) source.srcset = photo.animated ? "" : lightboxAvifOrFallback(photo);
-    img.src = lightboxSrc(photo);
+    // AVIF source 与 <img> 同出 selectSrcs：无中图的图不会只填 mediumAvif 而落到空
+    // srcset（那会让浏览器跳过 source、回落 img.src，而预载早已下过 AVIF —— 同一张下两次）。
+    const { avif, still } = selectSrcs(photo);
+    if (source) source.srcset = avif;
+    img.src = still;
     img.alt = titleText;
     // 观画室底部题名：与卡片墙签同一套 displayTitle 产出，切图时同步更新
     if (title) title.textContent = titleText;
@@ -641,5 +676,12 @@ export function createLightbox({
     if (e.key === "ArrowRight") step(1);
   });
 
-  return { open, isOpen: () => Boolean(lightbox && lightbox.open) };
+  // prefetchUrl：宿主（app.js 卡片 hover/聚焦）在灯箱未开时就预热「本图真正会用到的那一档」。
+  // 走同一个 selectSrcs，故与 `<picture>` 选中同源；`<dialog>` 关闭态下 frameCaps 仍能
+  // 读到画框上限（见 util.frameCaps），所以开图前的预载不会猜错档位。
+  return {
+    open,
+    isOpen: () => Boolean(lightbox && lightbox.open),
+    prefetchUrl: (photo) => selectSrcs(photo).avif,
+  };
 }

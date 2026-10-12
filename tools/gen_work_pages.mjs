@@ -174,9 +174,14 @@ export function pictureSrcsets(photo) {
   const webp = [];
   if (photo?.thumbAvifSrcset) avif.push(prefixSrcset(photo.thumbAvifSrcset));
   if (photo?.thumbSrcset) webp.push(prefixSrcset(photo.thumbSrcset));
+  // 中图档：清单带 `mediumSrcset`（1280 + 2048，P-2）时整体纳入，交给浏览器按
+  // WORK_SIZES × DPR 原生协商；老/降级清单只有标量 `medium` 时按反推宽度补一条。
   const medium = mediumSize(photo);
-  if (medium && photo?.mediumAvif) avif.push(`${workPath(photo.mediumAvif)} ${medium.width}w`);
-  if (medium && photo?.medium) webp.push(`${workPath(photo.medium)} ${medium.width}w`);
+  if (photo?.mediumAvifSrcset) avif.push(prefixSrcset(photo.mediumAvifSrcset));
+  else if (medium && photo?.mediumAvif)
+    avif.push(`${workPath(photo.mediumAvif)} ${medium.width}w`);
+  if (photo?.mediumSrcset) webp.push(prefixSrcset(photo.mediumSrcset));
+  else if (medium && photo?.medium) webp.push(`${workPath(photo.medium)} ${medium.width}w`);
   return { avif: avif.join(", "), webp: webp.join(", ") };
 }
 

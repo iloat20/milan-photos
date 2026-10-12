@@ -27,6 +27,7 @@ import {
   formatDateCN,
   mediumSize,
   normalizeSlug,
+  pictureSrcsets,
   plainTitle,
   prefixSrcset,
   renderSitemap,
@@ -137,6 +138,53 @@ test("mediumSize：有中图时按长边 1280 反推；无中图返回 null", ()
   assert.equal(mediumSize(small), null, "长边 ≤1280 的照片没有中图产物");
   // 与 util.mediumWidth 同源：无 medium 字段时它同样返回 0（"没有中图"的同一判据）
   assert.equal(mediumWidth(small), 0);
+});
+
+test("pictureSrcsets：优先用 mediumSrcset（含 2048 档），老清单才回落 medium 标量", () => {
+  // 有 mediumSrcset（P-2 后的清单）：整体纳入，最后一个候选是 -2048
+  const rich = pictureSrcsets({
+    width: 2560,
+    height: 1920,
+    thumbSrcset: "photos/thumbs/a-400.webp 400w, photos/thumbs/a.webp 1200w",
+    thumbAvifSrcset: "photos/thumbs/a-400.avif 400w, photos/thumbs/a.avif 1200w",
+    medium: "photos/medium/a.webp",
+    mediumAvif: "photos/medium/a.avif",
+    mediumSrcset: "photos/medium/a.webp 1280w, photos/medium/a-2048.webp 2048w",
+    mediumAvifSrcset: "photos/medium/a.avif 1280w, photos/medium/a-2048.avif 2048w",
+  });
+  assert.equal(
+    rich.webp,
+    "../../photos/thumbs/a-400.webp 400w, ../../photos/thumbs/a.webp 1200w, " +
+      "../../photos/medium/a.webp 1280w, ../../photos/medium/a-2048.webp 2048w"
+  );
+  assert.equal(
+    rich.avif,
+    "../../photos/thumbs/a-400.avif 400w, ../../photos/thumbs/a.avif 1200w, " +
+      "../../photos/medium/a.avif 1280w, ../../photos/medium/a-2048.avif 2048w"
+  );
+  // 标量与 mediumSrcset 同时在场时**不得**重复出候选（同一个 medium 只出现一次）
+  assert.equal((rich.webp.match(/medium\/a\.webp/g) || []).length, 1);
+  assert.equal((rich.avif.match(/medium\/a\.avif/g) || []).length, 1);
+
+  // 老/降级清单：只有标量 medium + 反推宽度，行为与 P-2 前一致（逐字节）
+  const legacy = pictureSrcsets({
+    width: 1536,
+    height: 2048,
+    thumbSrcset: "photos/thumbs/a-400.webp 300w",
+    medium: "photos/medium/a.webp",
+    mediumAvif: "photos/medium/a.avif",
+  });
+  assert.equal(
+    legacy.webp,
+    "../../photos/thumbs/a-400.webp 300w, ../../photos/medium/a.webp 960w"
+  );
+  assert.equal(legacy.avif, "../../photos/medium/a.avif 960w");
+
+  // 无中图的小图：只剩缩略图候选
+  assert.deepEqual(pictureSrcsets({ width: 1024, height: 901, thumbSrcset: "t.webp 400w" }), {
+    avif: "",
+    webp: "../../t.webp 400w",
+  });
 });
 
 test("prefixSrcset：逐候选加 ../../ 前缀并保留宽度描述符", () => {

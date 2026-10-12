@@ -1,7 +1,7 @@
 # P-2 设计稿：高清显示层（2048 档 + 观画室按需求选档）
 
 - 日期：2026-10-12
-- 状态：**设计定稿，守卫已确认（§0.1），待实施**
+- 状态：**已实施**（`1890928`，验收与偏差见 §8）
 - 前置：`2026-10-10-upgrade-opportunity-audit.md` §9 的 P-2；依赖 `2026-10-11-lightbox-tier-fallback-design.md`（P-3/P-4，已实施）
 - 对齐方式：逐项 brainstorming（范围 → 协商机制 → 档位上限与命名 → 边界用例 → 成本修正后重开守卫，五轮问答；决策见 §0）
 - 提交边界：单独一个 commit，`research/` 文档与实施代码分开提交
@@ -322,3 +322,83 @@ img.src = photo.animated ? lightboxSrc(photo) : (still || lightboxSrc(photo));
 6. `dist/` 里新增档文件与 manifest 描述符逐一对得上；**出档集合恰为那 5 张长边 > 2048 的**（不得多出 `-1706` 之类），`dist` 体积增量落在 +1.41 MB 的 ±5% 内
 7. 线上验收：桌面 DPR2 打开 2560×1920 → 取到 `-2048`；移动 DPR3 打开同一张 → 取到 1200 档；失败请求 0、页面错误 0
 8. 目视：无 medium 的 9 张与有 medium 的作品，在 1× 与 4× 缩放下观感无劣化
+
+---
+
+## 8. 实施记录（2026-10-12，提交 `1890928`）
+
+### 8.1 落地范围（与 §2 一致）
+
+生成侧 `tools/photos_lib.py`：`MEDIUM_LARGE_MAX_EDGE = 2048`、`ensure_medium_large()`、
+`_write_webp_variant(..., name_suffix="")`、`medium_width_at(item, max_edge)`（`medium_width`
+成为 `max_edge=1280` 的特例）、`photo_item()` 组 `mediumSrcset` / `mediumAvifSrcset`；
+顺带修掉 `medium_width()` docstring 里指向不存在文件的那处引用。
+
+消费侧 `src/util.js`：`frameCaps` / `lightboxNeed` / `lightboxTiers` / `lightboxAvifTiers` /
+`pickTier`（全纯函数）；`src/lightbox.js`：新增 `selectSrcs()`，`sync()` 与 `preloadNeighbor()`
+改走它，并作为 `prefetchUrl` 暴露给 `app.js` 的 hover 预载；`tools/gen_work_pages.mjs` 的
+`pictureSrcsets()` 纳入中图候选；`tests/e2e/global-setup.js` 加蕴含式自检。
+
+### 8.2 与设计稿的四处偏差（均为实测更正）
+
+| # | 设计稿 | 实测 | 影响 |
+|---|---|---|---|
+| 1 | §3 桌面 need = **1676** | **1675**（`ceil(2560·0.327083·2) = ceil(1674.67)`） | 纯算术偏差（设计用了先四舍五入的 838）。对选档无影响（两者都 > 1280），但单测断言必须写真值，否则用例自己红 |
+| 2 | §2.3 只列了 `lightbox.js` / `app.js:1292` 两处消费点 | **漏了 `app.js:986` 的清单白名单映射**：`folderPhotos` 是逐字段拷贝，不加 `mediumSrcset` / `mediumAvifSrcset` 则新字段根本到不了灯箱 | **这是必须的接线**。首次 e2e 桌面那条即红（收到 1280 档），靠这个红才发现 |
+| 3 | §3 红②：「从 `lightboxTiers` 去掉 `mediumSrcset` → 桌面红」 | **不成立**：`currentSrc` 解析到 `<picture>` 的 AVIF source，只删 WebP 侧候选时 AVIF 侧仍带 `-2048`，桌面那条依然绿 | 红②改为**撤掉 app.js 的中图候选接线**（真实回归路径），桌面收到 1280 档，与设计预期的症状一致 |
+| 4 | —— | 移动端那条 e2e 具有**欺骗性**：接线未生效时，`lightboxTiers` 的标量兜底（`medium` + 反推宽 1280）恰好也让它选到 1200 档，于是**假绿** | 接线补上后同一条断言才真正覆盖 `mediumSrcset` 候选。假绿的存在说明「反向用例」不能只靠一条：桌面那条才是主判据 |
+
+### 8.3 实测数据
+
+- **产物**：`dist/photos/medium/` 新增 10 个文件（5 张 × WebP+AVIF），合计
+  **1 481 471 B = +1.41 MB**；出档集合**恰为**长边 > 2048 的 5 张，无 `-1706` 之类杂音。
+- **manifest**：diff 为 **18 行纯插入**（9 张 × 2 字段），18 条顺序与 `date` 零漂移；
+  5 张的 `-2048` 档宽度描述符实测为 **2048（横图）/ 1536（竖图）**。
+- **e2e 实测选档**（`probe-hires.mjs`）：
+
+| 场景 | 画框上限 | DPR | need | 选中档 | 覆盖率 |
+|---|---|---|---|---|---|
+| 桌面 1280×900 | 920×628 | 2 | 1675 | `-2048`（natural 2048×1536） | 1.22 |
+| 移动 390×844 | 350.6×574.8 | 3 | 1052 | thumbs 1200（natural 1200×900） | 1.14 |
+| 桌面 1280×900（DPR1 泛化抽样） | 920×628 | 1 | 838 | thumbs 1200 | 1.43 |
+
+- **验收清单**：① lint 干净、单测 **70/70**（61 → 70，新增用例均先因实现缺失而红过）
+  ② e2e **45/45**（43 → 45）③ 红①（`pickTier` 恒取最大档）→ 移动红、收到
+  `-2048.avif`；红②（撤 app.js 接线）→ 桌面红、收到 `.../medium/<stem>.avif`
+  ④ manifest 逐字段 diff 只新增两个字段 ⑤ 出档集合与体积见上
+  ⑥ 目视见 8.4。
+
+### 8.4 目视巡检（`.workbuddy/scratch/shots/`，DPR2）
+
+有 2048 档的横图（`-2048` 档，1× 与 4×）、有 2048 档的竖图（960 档）、无中图的
+360×360（360 档）三组：1× 清晰无劣化；4× 放大后平滑无块状伪影（横图 4× 时
+2048 源对 4×837 CSS px 仍是欠采样，属源分辨率上限，与 P-2 前同）。
+
+### 8.5 目视期间发现的**既有缺陷（不在本批范围，未修）**
+
+**灯箱缩放在默认设置下视觉上完全无效。** 实测（`.workbuddy/scratch/probe-zoom.mjs`）：
+
+```
+默认（no-preference）：--lb-zoom=4，但 computed transform 恒为 matrix(1,0,0,1,0,0)，rect 837×628 不变
+prefers-reduced-motion: reduce：--lb-zoom=4 → transform=matrix(4,0,0,4,…)，rect 3349×2512 ✅
+```
+
+根因：`.lightbox-frame.is-lit .lightbox-img { animation: lb-enter … both }`
+（`styles.css:1346-1348`）的 `transform: scale(1)` 以 `fill: both` **永久**盖住
+`.lightbox-img` 的 `transform: translate(…) scale(var(--lb-zoom))`；只有
+`prefers-reduced-motion: reduce` 下 `.lightbox-frame.is-lit img { animation: none }`
+（`styles.css:1291`）胜出时缩放才可见。`sync()` 每次换图都会重挂 `is-lit`，故常驻。
+
+**与本次改动无关**：`git diff src/lightbox.js` 中不含任何 `zoom` / `is-lit` / `animation`
+字样，`styles.css` 未改动。现有 e2e 只断言 `--lb-zoom` 这个 CSS 变量（`zoomOf()`），
+因此整套绿——**变量绿 ≠ 视觉对**，这是本轮新暴露的护栏盲区。
+
+处置建议（待确认后再动）：把入场动画从 `transform` 挪到 `opacity` / 独立包装层，或在
+`.is-zoomed` 时禁用该动画；同时给 e2e 补一条**渲染矩形**断言（放大后
+`getBoundingClientRect()` 必须变大），而不是只看变量。
+
+### 8.6 遗留
+
+- §6 的全部「不在范围」项未动（P-1 / P-5 / 逐图页 CSP / D-1 / 素材补录 / 序厅与卡片墙档位）。
+- 本文 8.5 的灯箱缩放缺陷需单独排期（UI/交互改动，按项目纪律先 brainstorming）。
+

@@ -9,7 +9,6 @@
 //    绝对路径在子路径站点上会打头 404；相对路径同时兼容子路径部署与本地 preview。
 // 3. **photos/ 不进 public/**：它是 bot（sync-photos workflow）管理的大目录，且 sync 脚本
 //    按仓库根路径书写；移动它会连坐 tools 与 CI。代价只是构建结束时整棵拷进 dist（约 10MB）。
-const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -70,65 +69,58 @@ function workPagesPlugin() {
 }
 
 /**
- * 构建期为产物注入全指令集 CSP（只能用 <meta> 形式：GitHub Pages 不能下发响应头，
- * 故 frame-ancestors / report-uri / sandbox 与 Report-Only 一概不可用）。
+ * 构建收尾：两件事都必须**基于最终产物**、且彼此**有先后**，所以放在同一个插件里
+ * 串行执行 —— Rollup 的 closeBundle 是**并行**钩子（同钩子多插件同时跑），
+ * 拆成两个插件就失去了顺序保证。
  *
- * 四个必须守住的点，动之前先想清楚：
- * 1. **在 closeBundle 里读 dist/index.html**，不是读源码：内联脚本的 hash 必须覆盖
- *    浏览器**实际收到**的那份字节（Vite 与下游插件都可能改写 HTML）。
- * 2. **算 hash 前先把 CRLF 归一成 LF**：本仓工作区是 CRLF（git index 是 LF），而 HTML
- *    解析器在 tokenize 时把 CRLF 归一后再算 hash —— 不归一就会线上静默失配：
- *    内联脚本被 CSP 拦下、主题闪烁回归，且控制台只有一条 violation，页面照常可用。
- *    （脚本文本处于 HTML 的 "script data" 状态，不做字符引用解码，故无需处理实体。）
- * 3. **meta 必须插在 charset 之后**：meta CSP 只对其**后面**的内容生效。
- * 4. **不预置逃生阀**：不写 'unsafe-inline' / 'unsafe-eval'。本站无 markup 内联样式、
- *    无 <style> 注入（样式写入全走 CSSOM，不受 style-src 管控），故 style-src 也不必放开。
- *    唯一必须放行的跨源目标是 GitHub REST API（库房「同步馆藏数据到 GitHub」用）。
+ *   ① 给 `dist/index.html` 注入全指令集 CSP。
+ *      （逐图展签页自带 CSP —— 那个生成器也在 closeBundle 里跑，同样不能靠插件先后。）
+ *   ② SW 缓存版本号：读 ① 之后的四件套算内容指纹，写进 `dist/sw.js`。
+ *
+ * **顺序不可颠倒**：② 的指纹必须覆盖 ① 改过的 index.html 字节，否则同一份源码在
+ * 不同构建里可能得到不同指纹（取决于两个钩子谁先跑完）。
+ *
+ * 另外两点：CSP 只能用 `<meta>` 形式（GitHub Pages 不下发响应头，frame-ancestors /
+ * report-uri / sandbox 与 Report-Only 一概不可用）；hash 必须在**产物**上算，
+ * 而不是源码 —— 内联脚本的 hash 要覆盖浏览器实际收到的字节。细节见 tools/csp.mjs。
  */
-function cspPlugin() {
-  const INLINE_SCRIPT_RE = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
-  const CHARSET_RE = /<meta\s+charset=["']?[^>]*>/i;
-  return {
-    name: "csp-meta",
-    closeBundle() {
-      const file = path.join(ROOT, "dist", "index.html");
-      const html = fs.readFileSync(file, "utf8");
+function finalizePlugin() {
+  async function load(name) {
+    return import(pathToFileURL(path.join(ROOT, "tools", name)).href);
+  }
 
-      const hashes = [...html.matchAll(INLINE_SCRIPT_RE)].map(
-        (m) =>
-          "sha256-" +
-          crypto
-            .createHash("sha256")
-            .update(m[1].replace(/\r\n?/g, "\n"))
-            .digest("base64")
-      );
-      if (!hashes.length) {
+  return {
+    name: "build-finalize",
+    async closeBundle() {
+      // ── ① 主页 CSP ─────────────────────────────────────────────
+      const csp = await load("csp.mjs");
+      const htmlPath = path.join(ROOT, "dist", "index.html");
+      const html = fs.readFileSync(htmlPath, "utf8");
+      const count = csp.inlineScriptHashes(html).length;
+      if (!count) {
         throw new Error("csp-meta: dist/index.html 里找不到内联脚本，hash 无从计算");
       }
-      if (html.includes("Content-Security-Policy")) {
-        throw new Error("csp-meta: 产物已含 CSP，拒绝重复注入");
-      }
-      if (!CHARSET_RE.test(html)) {
-        throw new Error('csp-meta: dist/index.html 缺少 <meta charset>，无处安放 CSP');
-      }
+      fs.writeFileSync(htmlPath, csp.withCsp(html), "utf8");
+      console.log(`csp-meta: 注入 ${count} 个内联脚本 hash`);
 
-      const csp = [
-        "default-src 'self'",
-        ["script-src 'self'", ...hashes.map((h) => `'${h}'`)].join(" "),
-        "style-src 'self'",
-        // 站点无 data: / blob: 图片，也无外链字体（不写 font-src，由 default-src 兜住）
-        "img-src 'self'",
-        "connect-src 'self' https://api.github.com",
-        "worker-src 'self'", // sw.js
-        "manifest-src 'self'",
-        "object-src 'none'",
-        "base-uri 'none'",
-        "form-action 'none'", // 全站无 <form> 提交
-      ].join("; ");
-
-      const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}" />`;
-      fs.writeFileSync(file, html.replace(CHARSET_RE, (m) => `${m}\n  ${meta}`), "utf8");
-      console.log(`csp-meta: 注入 ${hashes.length} 个内联脚本 hash`);
+      // ── ② SW 缓存版本号 ────────────────────────────────────────
+      const swv = await load("sw-version.mjs");
+      const read = (rel) => fs.readFileSync(path.join(ROOT, "dist", rel), "utf8");
+      const buildId = swv.computeBuildId({
+        html: read("index.html"),
+        js: read("app.js"),
+        css: read("styles.css"),
+        // manifest 读**仓库源**而不是 dist：copyStaticPlugin 也挂在 closeBundle 上，
+        // 此刻拷没拷完不确定；而它是原样拷贝，两份内容必然相同。
+        manifest: fs.readFileSync(path.join(ROOT, "photos", "manifest.json"), "utf8"),
+      });
+      const swPath = path.join(ROOT, "dist", "sw.js");
+      fs.writeFileSync(
+        swPath,
+        swv.injectBuildId(fs.readFileSync(swPath, "utf8"), buildId),
+        "utf8"
+      );
+      console.log(`sw-version: 注入 ${buildId}`);
     },
   };
 }
@@ -141,7 +133,7 @@ module.exports = {
   // SPA 回退毫无用处；dev 下未知路径也直接 404，不误导。
   appType: "mpa",
   publicDir: "public", // sw.js / robots.txt / manifest.webmanifest：原样搬运、不做转换
-  plugins: [copyStaticPlugin(), cspPlugin(), workPagesPlugin()],
+  plugins: [copyStaticPlugin(), finalizePlugin(), workPagesPlugin()],
   build: {
     outDir: "dist",
     // 服务 worker 在 dev 下必须原样返回（Vite 会转换根目录 .js，会破坏它），

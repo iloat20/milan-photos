@@ -21,6 +21,10 @@
  *    styles.css 一份来源（本仓「颜色只声明一次」的硬约束），本生成器不写任何色值。
  * 6. **不改动 Vite 资源图**：生成器在 `closeBundle` 写的是**已写盘的最终产物**，
  *    页面里的 `../../assets/*` 与 `../../styles.css` 都按产物实际路径书写。
+ * 7. **CSP 自带，不等插件注入**：本生成器与 `build-finalize` 插件都挂在 closeBundle，
+ *    而 Rollup 的 closeBundle 是**并行**钩子（顺序无保证）—— 等插件来覆盖 `dist/p/**`
+ *    是撞运气。指令集合与 hash 规则取自 `tools/csp.mjs`（与主页同一份，不在此重写）；
+ *    本页的内联脚本（主题初值）与 JSON-LD 数据块都会进 script-src 的 hash 名单。
  *
  * 为什么单独成文件而不塞进 vite.config.js：本节所有规则都要能被 `node --test`
  * 直接覆盖（slug / 转义 / 版式 / sitemap），塞进配置里就只能靠 e2e 端到端撞。
@@ -28,6 +32,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+// CSP 与主页共用一份指令集合与 hash 规则（见 tools/csp.mjs 的说明）
+import { withCsp } from "./csp.mjs";
 
 // 与 src/util.js 同源：标题降级（《无题 · NN》）、墙号、中图宽度反推都只有一份实现，
 // 生成器**不重写一遍**——漂移会让展签页与观画室显示不同的标题。
@@ -289,7 +296,7 @@ export function renderWorkPage({
     ? `<a href="../${escapeHtml(nextSlug)}/" rel="next">下一件 →</a>`
     : '<span class="work-pager-link is-disabled">下一件 →</span>';
 
-  return `<!DOCTYPE html>
+  return withCsp(`<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -383,7 +390,7 @@ ${renderJsonLd({ photo, index, slug, siteUrl })}
   </footer>
 </body>
 </html>
-`;
+`);
 }
 
 /* ────────────────────────── sitemap ────────────────────────── */

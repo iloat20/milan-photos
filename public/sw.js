@@ -1,9 +1,17 @@
 /* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
-const VERSION = "milan-v49";
+/* 缓存版本号由**构建期**按内容指纹注入（tools/sw-version.mjs + vite.config.js 的
+   sw-version 插件），不再手工递增。手工的代价不只是「忘了改」：sw.js 字节不变时
+   浏览器**不会重新 install**，壳层缓存只能靠 SWR 逐条兜，而 `photos/medium/*`
+   走 cacheFirst（命中即返回、永不回源），换缓存名是它唯一的失效手段。
+   dev 下本文件原样服、且 dev 不注册 SW，占位符不会被替换，无副作用。 */
+const VERSION = "__MILAN_BUILD_ID__";
 const CACHE_SHELL = `${VERSION}-shell`;
 const CACHE_MEDIA = `${VERSION}-media`;
 const MEDIA_MAX_ENTRIES = 100;
-const OWNED_CACHE_RE = /^milan-v\d+-(?:shell|media)$/;
+/* 两代形状都要认，否则抬版本后旧缓存永远清不掉：
+   `milan-v<数字>` 是历史遗留（e2e 会造一个 `milan-v0-shell` 验证 activate 清理），
+   `milan-<8 位 hex>` 是 2026-10-13 起的构建期指纹。 */
+const OWNED_CACHE_RE = /^milan-(?:v\d+|[0-9a-f]{8})-(?:shell|media)$/;
 
 // Vite 起：src/*.js 被打进 app.js 单文件，清单只需「构建产物的壳层」。
 // 曾经的坑（清单漏列 src 模块 → 首访后立刻离线停在骨架屏）随打包消失；

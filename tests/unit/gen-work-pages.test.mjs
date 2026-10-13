@@ -36,6 +36,7 @@ import {
 } from "../../tools/gen_work_pages.mjs";
 
 import { mediumWidth } from "../../src/util.js";
+import { inlineScriptHashes } from "../../tools/csp.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MANIFEST = JSON.parse(
@@ -357,5 +358,41 @@ test("真 meta.json：18 件都定了标题，地址里不再有数码导出名"
     if (info.slug) {
       assert.ok(slugs.includes(info.slug), `${file} 的 slug "${info.slug}" 没被采用`);
     }
+  }
+});
+
+/* ────────────────────────── CSP（页面自带，不等插件） ────────────────────────── */
+
+test("展签页自带 CSP：指令齐备，且声明的 hash 与页内脚本自洽", () => {
+  /* 为什么不靠插件注入：workPagesPlugin 与 build-finalize 都挂在 `closeBundle`，
+     而 Rollup 语义下同钩子是**并行**的（顺序无保证）—— 靠先后去覆盖 dist/p/**
+     是撞运气。所以生成器必须自己带上，这条断言就是那份契约。 */
+  const { pages } = buildWorkPages({ manifest: MANIFEST, meta: META });
+  const html = pages[0].html;
+  const meta = /<meta http-equiv="Content-Security-Policy" content="([^"]*)"/.exec(html);
+  assert.ok(meta, "展签页必须自带 CSP meta");
+  const csp = meta[1];
+  assert.ok(csp.includes("script-src 'self' 'sha256-"), "script-src 必须列内联脚本 hash");
+  assert.ok(csp.includes("default-src 'self'"));
+  assert.ok(!csp.includes("unsafe-inline"));
+  assert.ok(!csp.includes("unsafe-eval"));
+
+  // 自洽：声明的 hash 集合必须**恰好等于**页内实际算出的集合（漏一个该页就坏）
+  const declared = (csp.match(/'(sha256-[^']+)'/g) || [])
+    .map((s) => s.slice(1, -1))
+    .sort();
+  const actual = inlineScriptHashes(html)
+    .map((s) => s.hash)
+    .sort();
+  assert.deepEqual(declared, actual);
+  // 反向自证：本页确有 2 个内联脚本（主题初值 + JSON-LD），不是「空集相等」
+  assert.equal(actual.length, 2);
+
+  // 每一页都要带（只查第一页会漏掉「循环里只给首行注入」这种错法）
+  for (const page of pages) {
+    assert.ok(
+      page.html.includes("Content-Security-Policy"),
+      `slug=${page.slug} 的展签页没带 CSP`
+    );
   }
 });

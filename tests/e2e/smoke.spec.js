@@ -1499,6 +1499,38 @@ test.describe("画廊冒烟", () => {
     expect(declared).toEqual(actual);
   });
 
+  test("SW 缓存版本 = 构建期内容指纹，与四件套独立重算一致", async ({ request }) => {
+    /* 被测对象是**产物**里的 sw.js。重算刻意在测试里独立写一遍（含 manifest 这一份
+       输入），而不是去 import tools/sw-version.mjs —— 那样两边共享同一份实现，
+       实现漏掉某份输入时两边会一起通过。这里独立重算，实现若少算一份就对不上。 */
+    const res = await request.get("/sw.js");
+    expect(res.status()).toBe(200);
+    const sw = await res.text();
+
+    expect(sw, "构建期没注入版本，占位符还留在产物里").not.toContain("__MILAN_BUILD_ID__");
+    const m = /const VERSION = "([^"]+)"/.exec(sw);
+    expect(m, "sw.js 里解析不出 VERSION").not.toBeNull();
+    const version = m[1];
+    // 形状变了会让 public/sw.js 的 OWNED_CACHE_RE 不再认自己 —— 旧缓存永远清不掉
+    expect(version, "版本号形状不对").toMatch(/^milan-[0-9a-f]{8}$/);
+
+    const dist = path.resolve(__dirname, "..", "..", "dist");
+    const read = (rel) => fs.readFileSync(path.join(dist, rel), "utf8");
+    const hash = createHash("sha256");
+    for (const part of [
+      read("index.html"),
+      read("app.js"),
+      read("styles.css"),
+      read("photos/manifest.json"),
+    ]) {
+      hash.update(part);
+      hash.update("\0"); // 段间必须分隔，否则 ("ab","c") 与 ("a","bc") 撞成同一个指纹
+    }
+    expect(version, "版本号与四件套重算不符（漏了某份输入，或注入的不是算出来的值）").toBe(
+      `milan-${hash.digest("hex").slice(0, 8)}`
+    );
+  });
+
   test("CSP 运行时零违规（走过主题切换 / 灯箱 / 库房面板全交互）", async ({ page }) => {
     await page.addInitScript(() => {
       window.__cspViolations = [];
@@ -1600,6 +1632,80 @@ test.describe("逐图展签页", () => {
         html: fs.readFileSync(path.join(WORK_DIR, slug, "index.html"), "utf8"),
       }));
   }
+
+  test("每页自带全指令集 CSP，且声明的 hash 与页内脚本自洽", () => {
+    /* 为什么不靠插件注入：生成器与 build-finalize 都挂在 closeBundle，而 Rollup
+       语义下同钩子是**并行**的（顺序无保证）—— 靠先后去覆盖 dist/p/** 是撞运气。
+       这条钉的就是「生成器自带」这份契约。 */
+    const pages = readPages();
+    expect(pages.length, "dist/p/ 下应有 18 页").toBe(18);
+
+    for (const { slug, html } of pages) {
+      const meta = html.match(
+        /<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]+)"/i
+      );
+      expect(meta, `slug=${slug} 的展签页没带 CSP`).not.toBeNull();
+      const csp = meta[1];
+      for (const directive of [
+        "default-src 'self'",
+        "script-src 'self' 'sha256-",
+        "style-src 'self'",
+        "img-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+      ]) {
+        expect(csp, `slug=${slug} 的 CSP 缺少：${directive}`).toContain(directive);
+      }
+      expect(csp).not.toContain("unsafe-inline");
+      expect(csp).not.toContain("unsafe-eval");
+
+      const declared = (csp.match(/'(sha256-[A-Za-z0-9+/=]+)'/g) || [])
+        .map((s) => s.slice(1, -1))
+        .sort();
+      const actual = [
+        ...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi),
+      ]
+        .map(
+          (m) =>
+            "sha256-" +
+            createHash("sha256").update(m[1].replace(/\r\n?/g, "\n")).digest("base64")
+        )
+        .sort();
+      // 主题初值 + JSON-LD 数据块两段；段数变了说明页面结构漂了（hash 会跟着漏算）
+      expect(actual, `slug=${slug} 的内联脚本段数不是 2`).toHaveLength(2);
+      expect(declared, `slug=${slug} 声明的 hash 与页内脚本不符`).toEqual(actual);
+    }
+  });
+
+  test("展签页 CSP 的地面真值：主题初值脚本真的执行了，且运行时零违规", async ({ page }) => {
+    /* 上面那条只证明「声明与页面自洽」—— 它与构建期用的是同一条归一规则，两边一起错
+       就一起通过。真正的地面真值是浏览器**是否接受这些 hash**。
+       做法：把手动主题预置成 light、把系统偏好设成 dark。内联脚本一旦被 CSP 拦下，
+       根元素就落不到 data-theme="light"（主题闪烁回归）—— 症状唯一、不可冒充。 */
+    await page.addInitScript(() => {
+      window.__cspViolations = [];
+      document.addEventListener("securitypolicyviolation", (e) => {
+        window.__cspViolations.push({
+          directive: e.violatedDirective,
+          blockedURI: e.blockedURI,
+        });
+      });
+      try {
+        localStorage.setItem("milan-theme", "light");
+      } catch {
+        /* 初始 about:blank 是不透明来源，写不了；忽略即可 */
+      }
+    });
+    await page.emulateMedia({ colorScheme: "dark" });
+
+    const slug = readPages()[0].slug;
+    await page.goto(`/p/${slug}/`);
+    await expect(page.locator(".work-title")).toBeVisible();
+    // 非空断言：脚本没跑或没被接受，这个属性就不存在
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
+  });
 
   test("sitemap 声明的逐图页全部可达，且条数与馆藏一致", async ({ request }) => {
     const manifest = await (await request.get("/photos/manifest.json")).json();

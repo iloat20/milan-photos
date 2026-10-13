@@ -1347,15 +1347,22 @@
       animation: lb-enter 0.45s var(--ease) both;
     }
 
+    /* 缩放刻意用**独立属性** scale，不用 transform：
+       @keyframes 里的 transform 在层叠中**高于**普通声明，配上 fill: both 会让
+       `scale(1)` 永久定格，把 .lightbox-img 的 `scale(var(--lb-zoom))` 整个架空
+       —— 灯箱缩放在默认设置下视觉上完全无效（只在 prefers-reduced-motion: reduce
+       下因为本媒体查询不成立才碰巧可见）。独立属性与 transform 是两个属性、物理隔离，
+       合成顺序是 translate → rotate → scale → transform；入场期间 zoom=1 且 tx=ty=0，
+       故两者互不干扰。改回 transform 会让缩放再次静默失效。 */
     @keyframes lb-enter {
       from {
         opacity: 0;
-        transform: scale(0.96);
+        scale: 0.96;
       }
 
       to {
         opacity: 1;
-        transform: scale(1);
+        scale: 1;
       }
     }
   }

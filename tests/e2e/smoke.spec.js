@@ -1071,6 +1071,27 @@ test.describe("画廊冒烟", () => {
       )
     );
 
+  /** 渲染矩形宽度（CSS 像素）——缩放是否**视觉上**生效的唯一判据。
+     只断言 --lb-zoom 这个自定义属性会漏掉整类缺陷：2026-10-12 实测
+     `--lb-zoom=4` 而 computed transform 恒为 matrix(1,0,0,1,0,0)、rect 不变
+     （入场动画 `lb-enter` 的 fill: both 把 transform 整个架空）。变量绿 ≠ 视觉对。 */
+  const renderedWidthOf = (page) =>
+    page.evaluate(() =>
+      Math.round(document.getElementById("lbImg").getBoundingClientRect().width)
+    );
+
+  /** 等元素上的动画跑完。`getAnimations()` 对 fill: both 已结束的动画同样返回，
+     且 `finished` 已是 resolved promise —— 判定不依赖时间，避免固定 sleep
+     与「动画中途量到偏小的 rect」（lb-enter 从 scale 0.96 起跳，中途偏小约 4%）。 */
+  const settleAnimations = (page) =>
+    page.evaluate(() =>
+      Promise.all(
+        Array.from(document.getElementById("lbImg").getAnimations(), (a) =>
+          a.finished.catch(() => undefined)
+        )
+      ).then(() => true)
+    );
+
   async function openLightboxReady(page, size = { width: 1280, height: 900 }) {
     await page.setViewportSize(size);
     await page.goto("/");
@@ -1107,6 +1128,31 @@ test.describe("画廊冒烟", () => {
     for (let i = 0; i < notches; i += 1) await page.mouse.wheel(0, -100);
     await expect.poll(() => zoomOf(page), { timeout: 3_000 }).toBeGreaterThan(1);
   };
+
+  /* 上面那组用例断言的是**状态机**（--lb-zoom），这条断言的是**渲染结果**。
+     两者必须都有：状态机绿而渲染错的组合真实发生过（styles.css 的 lb-enter 用
+     transform + fill: both，把 .lightbox-img 的 scale(var(--lb-zoom)) 永久盖住，
+     整套 e2e 依旧全绿 —— 因为没人看过 rect）。 */
+  test("缩放必须落到渲染层：渲染矩形按 --lb-zoom 的同一倍数变大", async ({ page }) => {
+    await openLightboxReady(page);
+    await settleAnimations(page);
+    const { cx, cy } = await frameCentre(page);
+    const before = await renderedWidthOf(page);
+
+    // 9 次必达 MAX_ZOOM 上限，缩放幅度足够做「倍数一致」判定
+    await zoomByWheel(page, cx, cy, 9);
+
+    const zoom = await zoomOf(page);
+    expect(zoom).toBeGreaterThan(2);
+
+    await expect
+      .poll(async () => (await renderedWidthOf(page)) / before, {
+        timeout: 3_000,
+        message:
+          "放大后渲染矩形没变大 —— transform 被入场动画（fill: both）或层叠架空了",
+      })
+      .toBeCloseTo(zoom, 1);
+  });
 
   test("放大态单击缩回 1×，且不切图", async ({ page }) => {
     await openLightboxReady(page);

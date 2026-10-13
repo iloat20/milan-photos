@@ -23,10 +23,15 @@
 //         Vite 资源图（绝对 URL 或 public 内引用），漏拷即线上必 404；而 vite preview
 //         的 SPA 兜底会把 404 变成 200 text/html，本地永远看不出来（GitHub Pages
 //         没有兜底）——2026-09-30 审查抓到的 S1 就是这么漏上线的。
+//   对策 6（photos 产物清单，P-1）：manifest 里**会被请求**的每个路径都要在 dist
+//         真实存在；反过来，dist 里的母版必须**恰好**是「按需保留」选出的那批。
+//         正向漏拷 = 访客 404；反向多拷 = P-1 被静默回退成「整棵拷贝」（浪费 5.4 MB，
+//         而这正是本对策存在的原因：没有任何用例会因为「多拷」而变红）。
 
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { pathToFileURL } = require("node:url");
 const { execSync } = require("node:child_process");
 
 const ROOT = path.resolve(__dirname, "..", "..");
@@ -37,8 +42,10 @@ const SHELL_FILES = ["index.html", "app.js", "styles.css", "sw.js"];
 
 // 判定 dist 新鲜度的源码面：任一比 dist/index.html 新就重建。
 // photos/ 整棵进列表——thumbs/medium 变了而 manifest 没变时同样要重拷进 dist。
-// sitemap.xml 已不在列表：它不再是仓库里的源文件，而是 tools/gen_work_pages.mjs 的产物；
-// 该生成器必须在列表里，否则改它不会触发重建，跑的就是旧展签页。
+// tools/ 整棵进列表（不再是单个 gen_work_pages.mjs）：构建期真正跑的是 tools/ 下的
+// 模块（photo-assets / csp / sw-version 都被 vite.config.js 动态 import），只列生成器
+// 会让「改了别的构建模块却不重建」——跑的就是旧规则，而症状是「改动没生效」。
+// sitemap.xml 已不在列表：它不再是仓库里的源文件，而是 tools/gen_work_pages.mjs 的产物。
 const SOURCES = [
   "index.html",
   "app.js",
@@ -46,7 +53,7 @@ const SOURCES = [
   "vite.config.js",
   "public",
   "src",
-  "tools/gen_work_pages.mjs",
+  "tools",
   "package.json",
   "package-lock.json",
   "photos",
@@ -174,6 +181,53 @@ module.exports = async function globalSetup(config) {
     }
   } catch (err) {
     problems.push(`引用完整性检查失败（${(err && err.message) || err}）`);
+  }
+
+  // ── 对策 6：photos 产物清单（P-1：母版移出产物） ──
+  try {
+    const { referencedPhotoPaths } = await import(
+      pathToFileURL(path.join(ROOT, "tools", "photo-assets.mjs")).href
+    );
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(DIST, "photos", "manifest.json"), "utf8")
+    );
+    const photos = manifest.photos || [];
+    const IMG_RE = /\.(?:jpe?g|png|gif|webp|avif)$/i;
+
+    // 正向：会被请求的每个路径都必须在 dist（漏拷即访客与爬虫 404）
+    const refs = referencedPhotoPaths(photos);
+    if (refs.length === 0) {
+      problems.push("manifest 解析不出任何 photos/ 引用 —— 对策 6 会变成空架子");
+    }
+    for (const rel of refs) {
+      if (!fs.existsSync(path.join(DIST, rel))) {
+        problems.push(`manifest 引用的 ${rel} 不在 dist —— 访客与爬虫都会拿到 404`);
+      }
+    }
+
+    // 反向：dist 里的母版必须**确实会被请求**（出现在引用集合里）。
+    // 刻意**不用**构建期决定拷什么的那份判断（masterSourcesToKeep）来校验 ——
+    // 拿它校验自己就是同义反复：红态实证过，让它无条件保留全部 src 时，用 kept
+    // 校验是一路绿（dist 里 18 个母版，kept 里也是 18 个，恰好一一对应）。
+    const referenced = new Set(refs);
+    for (const name of fs.readdirSync(path.join(DIST, "photos"))) {
+      if (!IMG_RE.test(name)) continue;
+      if (!referenced.has(`photos/${name}`)) {
+        problems.push(
+          `母版 photos/${name} 仍在 dist，但它不在「会被请求」之列 —— P-1 已把它移出产物`
+        );
+      }
+    }
+
+    // 反向自证：源目录确实有母版，否则上面那条反向检查是空架子
+    const sources = fs
+      .readdirSync(path.join(ROOT, "photos"))
+      .filter((n) => IMG_RE.test(n));
+    if (sources.length === 0) {
+      problems.push("photos/ 源目录里没有任何母版 —— 对策 6 的反向检查成了空架子");
+    }
+  } catch (err) {
+    problems.push(`photos 产物清单检查失败（${(err && err.message) || err}）`);
   }
 
   if (problems.length > 0) {

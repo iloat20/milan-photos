@@ -31,9 +31,13 @@ import {
   plainTitle,
   prefixSrcset,
   renderSitemap,
+  shareImage,
+  shareImageInfo,
   resolveSlugs,
   slugSource,
 } from "../../tools/gen_work_pages.mjs";
+
+import { referencedPhotoPaths } from "../../tools/photo-assets.mjs";
 
 import { mediumWidth } from "../../src/util.js";
 import { inlineScriptHashes } from "../../tools/csp.mjs";
@@ -359,6 +363,89 @@ test("真 meta.json：18 件都定了标题，地址里不再有数码导出名"
       assert.ok(slugs.includes(info.slug), `${file} 的 slug "${info.slug}" 没被采用`);
     }
   }
+});
+
+/* ───────────────────── 分享图与产物清单（P-1） ───────────────────── */
+
+test("shareImageInfo：取现存最大的派生图，尺寸跟着选中那一档走", () => {
+  const base = { width: 2560, height: 1920, src: "photos/a.jpg" };
+
+  // mediumSrcset 最大档优先（-2048）
+  assert.deepEqual(
+    shareImageInfo({
+      ...base,
+      medium: "photos/medium/a.webp",
+      mediumSrcset: "photos/medium/a.webp 1280w, photos/medium/a-2048.webp 2048w",
+      thumbSrcset: "photos/thumbs/a.webp 1920w",
+    }),
+    { url: "photos/medium/a-2048.webp", width: 2048, height: 1536 }
+  );
+
+  // 无 -2048 档 → medium 标量（1280），不是 thumb
+  assert.deepEqual(
+    shareImageInfo({
+      ...base,
+      medium: "photos/medium/a.webp",
+      mediumSrcset: "photos/medium/a.webp 1280w",
+      thumbSrcset: "photos/thumbs/a.webp 1920w",
+    }),
+    { url: "photos/medium/a.webp", width: 1280, height: 960 }
+  );
+
+  // 无中图 → thumb 最大档
+  assert.equal(
+    shareImage({
+      width: 1024,
+      height: 901,
+      src: "photos/a.jpg",
+      thumbSrcset: "photos/thumbs/a-400.webp 400w, photos/thumbs/a.webp 1024w",
+    }),
+    "photos/thumbs/a.webp"
+  );
+
+  // 竖图的 -2048 档实际像素宽是 1536（按长边反推），不能虚报 2048
+  assert.deepEqual(
+    shareImageInfo({
+      width: 1920,
+      height: 2560,
+      src: "photos/a.jpg",
+      mediumSrcset: "photos/medium/a.webp 960w, photos/medium/a-2048.webp 1536w",
+    }),
+    { url: "photos/medium/a-2048.webp", width: 1536, height: 2048 }
+  );
+});
+
+test("shareImage：绝不回落母版 —— 无任何派生图时才用 src", () => {
+  // 「无 thumb」正是 needsMasterSource() 判真的条件，那张母版会被保留在产物里，
+  // 所以这条兜底与 P-1 的保留规则自洽（不是「指向不存在的文件」）
+  assert.equal(shareImage({ src: "photos/a.jpg", width: 800, height: 600 }), "photos/a.jpg");
+});
+
+test("真清单契约：逐图页引用的每个 photos/ 路径都在产物清单里", () => {
+  /* 爬虫与 IM 抓图器只看 HTML、不执行 JS —— 逐图页里任何指向 photos/ 的 URL
+     都必须是站上真实存在的文件。母版已移出产物（P-1），而这三处此前**全部**
+     指向母版：og:image、JSON-LD 的 image、<picture> 的兜底 <img src>
+     （前者由 shareImage 决定，后者此前写死 photo.src）。 */
+  const { pages } = buildWorkPages({ manifest: MANIFEST, meta: META });
+  const available = new Set(referencedPhotoPaths(MANIFEST.photos));
+  // 相对引用（<img src> / srcset）与绝对 URL（og:image / JSON-LD）两种形状都要抓
+  const REF_RE = /(?:\.\.\/\.\.\/|milan-photos\/)(photos\/[A-Za-z0-9._/-]+)/g;
+
+  let total = 0;
+  for (const page of pages) {
+    const refs = [...page.html.matchAll(REF_RE)].map((m) => m[1]);
+    assert.ok(refs.length > 0, `slug=${page.slug} 的页面里一个 photos/ 引用都没有`);
+    for (const rel of refs) {
+      total += 1;
+      assert.ok(available.has(rel), `${page.slug} 引用了产物里没有的 ${rel}`);
+      assert.doesNotMatch(
+        rel,
+        /\.(?:jpe?g|png)$/i,
+        `${page.slug} 仍在引用母版 ${rel} —— 它不在产物里（P-1）`
+      );
+    }
+  }
+  assert.ok(total >= pages.length, `引用总数 ${total} 少于页数 —— 抽取逻辑可能失效`);
 });
 
 /* ────────────────────────── CSP（页面自带，不等插件） ────────────────────────── */

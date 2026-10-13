@@ -1795,6 +1795,50 @@ test.describe("逐图展签页", () => {
     expect(duplicated, `标题重复：${JSON.stringify(duplicated)}`).toEqual([]);
   });
 
+  test("逐图页的分享图 HTTP 可达，且不再指向母版（爬虫视角）", async ({ request }) => {
+    /* 上一条查的是**磁盘**存在性，而这三个 URL 的唯一消费者是爬虫与 IM 抓图器 ——
+       它们走 HTTP、不执行 JS，所以判据必须是 HTTP（磁盘有文件 ≠ 线上可达）。
+       此前三处全部指向母版（og:image / JSON-LD 的 image 与 contentUrl），母版移出
+       产物后即 404，而页面渲染完全正常：没有任何用户可见的症状，只有爬虫默默记一笔。 */
+    const pages = readPages();
+    const urls = new Map(); // url → 首个引用它的 slug（失败时能定位到页）
+    for (const { slug, html } of pages) {
+      const og = /<meta property="og:image" content="([^"]+)"/.exec(html);
+      expect(og, `${slug} 缺 og:image`).not.toBeNull();
+      const data = JSON.parse(
+        /<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)[1]
+      );
+      for (const url of [og[1], data.image, data.contentUrl]) {
+        expect(url, `${slug} 的分享图必须是绝对 URL`).toMatch(/^https:\/\//);
+        if (!urls.has(url)) urls.set(url, slug);
+      }
+    }
+
+    // 非空自证：18 页应覆盖到「有 -2048 档」与「只有缩略图」两端，否则下面查的是空集
+    expect(urls.size, "分享图去重后数量异常，抽取逻辑可能失效").toBeGreaterThanOrEqual(
+      pages.length
+    );
+    const keys = [...urls.keys()];
+    expect(keys.some((u) => u.includes("-2048.")), "没有样本走 2048 档").toBe(true);
+    expect(
+      keys.some((u) => u.includes("/photos/thumbs/")),
+      "没有样本走缩略图档（无中图的 9 件应落在这里）"
+    ).toBe(true);
+
+    for (const [url, slug] of urls) {
+      const rel = url.slice(SITE.length);
+      expect(rel, `${slug} 的分享图仍是母版：${rel}（P-1 已把它移出产物）`).not.toMatch(
+        /^photos\/[^/]+\.(?:jpe?g|png)$/i
+      );
+      const res = await request.get(pagePath(url));
+      expect(res.status(), `${slug} 的分享图不可达：${url}`).toBe(200);
+      expect(
+        res.headers()["content-type"],
+        `${url} 不是图片（404 页或 SPA 兜底会以 text/html 混过 200）`
+      ).toMatch(/^image\//);
+    }
+  });
+
   test("prev/next 是一条有端点、无环、覆盖全部页的链", async () => {
     const pages = readPages();
     const bySlug = new Map(pages.map((p) => [p.slug, p.html]));

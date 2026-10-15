@@ -70,6 +70,12 @@ export function positionAnnouncement(index, total) {
   return `第 ${index + 1} 件，共 ${total} 件`;
 }
 
+/** 灯箱手势提示文案（U-3）。fine = 精确指针（鼠标/触控板/键盘），coarse = 触屏：
+ *  触屏没有方向键、桌面不谈双指。只列审计点名的三个手势里各自成立的那些。 */
+export function lightboxHintText(coarse) {
+  return coarse ? "双击放大 · 双指缩放" : "← → 翻页 · 双击放大";
+}
+
 /** 归一为**本地时区**的 YYYY-MM-DD；非法输入返回空串（调用方据此跳过该条） */
 export function toLocalDate(msOrDate) {
   const d = msOrDate instanceof Date ? msOrDate : new Date(msOrDate);

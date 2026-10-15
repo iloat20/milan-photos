@@ -74,6 +74,23 @@ import { createInstallPrompt } from "./src/install.js";
     el.addEventListener(type, handler, opts);
   };
 
+  /* —— 灯箱手势提示的「每设备一次」记档（U-3）——
+     localStorage 的读写归宿主（与 GH_KEY / THEME_KEY 同分工，lightbox.js 一概不碰）。
+     不可用时（隐私模式）降级为**本页内存**：每次加载至多一次，而不是每次开图都弹。 */
+  const LB_HINT_KEY = "milan-lb-hint";
+  let hintShownMemory = false;
+  function claimHintOnce() {
+    try {
+      if (localStorage.getItem(LB_HINT_KEY)) return false;
+      localStorage.setItem(LB_HINT_KEY, "1");
+      return true;
+    } catch {
+      if (hintShownMemory) return false;
+      hintShownMemory = true;
+      return true;
+    }
+  }
+
   /* —— 观画室域装配（P2-2 第二步）——
      src/lightbox.js 自带状态机、缩放平移、指针手势与全部灯箱事件监听；
      这里只把 DOM 引用和六类跨域能力按端口注入。装配点必须留在文件顶部：
@@ -89,6 +106,10 @@ import { createInstallPrompt } from "./src/install.js";
     // F-5 位置指示：视觉计数 + sr-only 播报节点，序号走全量馆藏（photos）
     countEl: document.getElementById("lbCount"),
     countLive: document.getElementById("lbCountLive"),
+    // U-3 手势提示：元素引用 + 指针精度能力（文案合成在 util/lightbox 域内）
+    hintEl: document.getElementById("lbHint"),
+    coarsePointer: () => window.matchMedia("(pointer: coarse)").matches,
+    claimHint: claimHintOnce,
     catalogIndex: (p) => photos.findIndex((q) => q.id === p.id),
     catalogTotal: () => photos.length,
     prevBtn: document.getElementById("prev"),

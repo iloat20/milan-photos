@@ -25,6 +25,7 @@ import {
   pickTier,
   positionLabel,
   positionAnnouncement,
+  lightboxHintText,
 } from "./util.js";
 
 /* ────────────────────────── 纯数学（可被单测直接覆盖） ──────────────────────────
@@ -113,6 +114,10 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  *        `min-height` + `visibility: hidden` 保证（见 styles.css 的 .lb-caption）。
  * @param {HTMLElement|null} ports.countEl    `#lbCount`（chrome 行左端「3 / 18」，aria-hidden）
  * @param {HTMLElement|null} ports.countLive  `#lbCountLive`（sr-only live region，播报用）
+ * @param {HTMLElement|null} ports.hintEl     `#lbHint`（首次打开的一次性手势提示，chrome 行中间）
+ * @param {() => boolean} ports.coarsePointer 粗指针（触屏）判定；提示文案由此二分（U-3）
+ * @param {() => boolean} ports.claimHint     「本次是否应显示提示」——同一设备至多返回一次 true；
+ *        跨会话记忆归宿主（storage 与 matchMedia 同属 app.js 的既有分工，本模块一概不碰）
  * @param {(photo:object) => number} ports.catalogIndex
  *        该画在**全量馆藏**中的序号（0 起）；不在时返回 -1。序号语义必须与墙号
  *        `MIL · 003` / 逐图页 pager 一致（全量），不能传当前筛选序列的序号 ——
@@ -160,6 +165,9 @@ export function createLightbox({
   caption,
   countEl,
   countLive,
+  hintEl,
+  coarsePointer,
+  claimHint,
   catalogIndex,
   catalogTotal,
   prevBtn,
@@ -285,6 +293,32 @@ export function createLightbox({
     zoomAt(2.5, rel.x, rel.y);
   }
 
+  /* ────────────────────────── 手势提示（U-3） ──────────────────────────
+     仅视觉的一次性引导：首次打开出现、约 4s 或首个交互后隐去。「是否第一次」由宿主经
+     claimHint 判定（storage 不进本模块）；文案按指针精度二分（util 的纯函数）。 */
+
+  /** 提示停留时长：够读一行字；任何交互都提前收。 */
+  const HINT_MS = 4000;
+  let hintTimer = 0;
+
+  function hideHint() {
+    if (!hintEl) return;
+    clearTimeout(hintTimer);
+    hintTimer = 0;
+    hintEl.classList.remove("is-on");
+  }
+
+  function showHint() {
+    if (!hintEl) return;
+    hintEl.textContent = lightboxHintText(Boolean(coarsePointer && coarsePointer()));
+    // 卸类 → 强制重排 → 加类：让 opacity 过渡每次都从头播（与 sync() 重启 .is-lit 同法；
+    // prefers-reduced-motion 下过渡已被清掉，重排无副作用）。
+    hintEl.classList.remove("is-on");
+    void hintEl.offsetWidth;
+    hintEl.classList.add("is-on");
+    hintTimer = setTimeout(hideHint, HINT_MS);
+  }
+
   /* ────────────────────────── 开 / 关 ────────────────────────── */
 
   function open(index, invoker, nextList, source) {
@@ -319,6 +353,9 @@ export function createLightbox({
       if (!lightbox.open) lightbox.showModal();
       document.body.classList.add("lb-open");
       if (closeBtn) closeBtn.focus();
+      // U-3：一次性手势提示（claimHint 至多返回一次 true）。时机在模态展开之后：
+      // 提示的计时与可见性都从「灯箱真的开着」开始算。
+      if (hintEl && typeof claimHint === "function" && claimHint()) showHint();
     };
 
     if (prefersVT()) {
@@ -340,6 +377,8 @@ export function createLightbox({
 
   function close() {
     if (!lightbox) return;
+    // 提示不跨会话：计时器与可见态都收回（重开是否再出由 claimHint 决定）
+    hideHint();
     // 连击组不跨会话：否则重开灯箱后的一次 dblclick 会把画面倒回上一轮的位置
     resetGroup();
     // 瞬时复位缩放：VT 的 old 快照要以完整画面回卡片
@@ -500,6 +539,8 @@ export function createLightbox({
    *  否则挂在旧起点上的 dblclick 会把画面一次性倒回好几张。 */
   function step(delta) {
     resetGroup();
+    // 交互即收起提示（U-3）：键盘/箭头按钮/横滑翻页都走这里
+    hideHint();
     moveBy(delta);
   }
 
@@ -529,6 +570,8 @@ export function createLightbox({
 
   on(stage, "pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    // 任一指针起手（点击/横滑/捏合/拖拽）即视为「已在用」：提示使命完成（U-3）
+    hideHint();
     if (e.target.closest?.(".lb-arrow")) return;
     stage.setPointerCapture?.(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -678,6 +721,7 @@ export function createLightbox({
     "wheel",
     (e) => {
       if (!e.target.closest?.(".lightbox-frame")) return;
+      hideHint(); // 滚轮缩放同样算「已在用」（U-3）
       e.preventDefault();
       if (zoom === 1 && e.deltaY > 0) return;
       const rel = relTo(e.clientX, e.clientY);

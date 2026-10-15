@@ -200,6 +200,39 @@
 }
 
 @layer components {
+  /* —— 跳转链（U-4）：body 首个可聚焦元素，默认藏出视口上缘 ——
+     键盘 Tab 到它时滑入（只动 transform，不用独立 translate 属性——构建器会吞，见 AGENTS.md）。
+     z-index 60 压过顶栏（50）：它出现的位置正好叠在顶栏上方。 */
+  .skip-link {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    left: 50%;
+    z-index: 60;
+    padding: 9px 18px;
+    border-radius: var(--r-pill);
+    background: var(--fill-strong);
+    color: var(--text);
+    font-size: 0.8125rem;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    white-space: nowrap;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-1);
+    transform: translate(-50%, calc(-100% - 20px));
+    transition: transform 0.25s var(--ease);
+  }
+
+  .skip-link:focus {
+    transform: translate(-50%, 0);
+  }
+
+  /* skip-link 落点（#gallery 的 tabindex="-1"）：全宽、约三屏高的 section，
+     默认聚焦轮廓会是围住整段展厅的巨型方框——位置反馈由「页面已滚到展厅」承担。 */
+  #gallery:focus {
+    outline: none;
+  }
+
   /* —— 顶栏：毛玻璃 chrome —— */
   .site-nav {
     position: fixed;
@@ -1291,6 +1324,33 @@
     -webkit-user-select: none;
   }
 
+  /* 手势提示（U-3）：chrome 行中间的临时引导（计数与关闭之间）。默认 opacity:0 但
+     **保留占位**——chrome 行高由 36px 关闭钮钉死，提示（~34px）出现/消失不动行几何。
+     文本由 lightbox.js 写入；展示的过渡重启靠「卸类→重排→加类」（与 .is-lit 同法）。
+     pointer-events:none：提示绝不吞手势；省略号兜底极窄屏（320px 级）。 */
+  .lb-hint {
+    min-width: 0;
+    margin: 0;
+    padding: 7px 14px;
+    border-radius: var(--r-pill);
+    background: var(--fill);
+    color: var(--text-2);
+    font-size: 0.8125rem;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.5s var(--ease);
+  }
+
+  .lb-hint.is-on {
+    opacity: 1;
+  }
+
   .lb-close {
     appearance: none;
     border: 0;
@@ -2011,6 +2071,7 @@
     }
 
     .site-nav-logo,
+    .skip-link,
     .hero-carousel-slide,
     .hero-carousel-slide img,
     .hero-art img,
@@ -2018,6 +2079,7 @@
     .card-media::before,
     .card-media img,
     .card-anno,
+    .lb-hint,
     .lightbox-img,
     .gh-panel {
       animation: none !important;

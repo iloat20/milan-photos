@@ -177,6 +177,46 @@ test.describe("画廊冒烟", () => {
     expect(style.clipPath).toContain("inset");
   });
 
+  /* —— U-3：灯箱手势提示（一次性引导）——
+     提示是「无字陈列」里唯一被允许的临时文字：首次打开出现、约 4s 自动隐去、交互立即收起、
+     每设备只来一次。判据全部落在类名状态（.is-on）上，不看动画中间帧。 */
+  test("灯箱手势提示：首次出现 → 约 4s 自动隐去 → 重开不再出现（U-3）", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+
+    const hint = page.locator("#lbHint");
+    await expect(hint).toHaveClass(/is-on/);
+    expect((await hint.textContent()).trim().length).toBeGreaterThan(0);
+    // 纯视觉提示：绝不吞手势（指针事件穿透）
+    expect(await hint.evaluate((el) => getComputedStyle(el).pointerEvents)).toBe("none");
+
+    // 无交互：自行隐去（4s 计时 + 0.5s 过渡的余量）
+    await expect(hint).not.toHaveClass(/is-on/, { timeout: 8_000 });
+
+    await page.locator("#close").click();
+    await expect(page.locator("#lightbox")).toBeHidden();
+    // 重开：不再出现。先给潜在的错误实现（每次开图都加类）一个落地的时机，再断言——
+    // 否则「重开瞬间先过断言、随后才加类」会被时序误判成绿。
+    await page.locator(".card").nth(1).click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(hint).not.toHaveClass(/is-on/);
+  });
+
+  test("灯箱手势提示：任一翻页交互立即收起（U-3）", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    const hint = page.locator("#lbHint");
+    await expect(hint).toHaveClass(/is-on/);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(hint).not.toHaveClass(/is-on/);
+  });
+
   test("灯箱档位回退：无中图作品也走派生图，不再回落 jpg 原图（P-3 回归锁）", async ({
     page,
     request,
@@ -1106,6 +1146,35 @@ test.describe("画廊冒烟", () => {
       () => document.activeElement?.classList?.contains("hero-art") ?? false
     );
     expect(landedOnArt).toBe(false);
+  });
+
+  test("skip-link：首 Tab 即跳转链，激活后焦点与视口一起落到展厅（U-4）", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    const skip = page.locator(".skip-link");
+    // 默认藏出视口上缘（不可见，但保留在 Tab 序列——这是 skip-link 的标准形态）
+    expect(await skip.evaluate((el) => el.getBoundingClientRect().bottom)).toBeLessThanOrEqual(0);
+
+    // 首 Tab 必须落到 skip-link，而不是顶栏馆名（红态实测：落 site-nav-logo）
+    await page.keyboard.press("Tab");
+    const first = await page.evaluate(() => {
+      const el = document.activeElement;
+      return {
+        isSkip: Boolean(el && el.classList.contains("skip-link")),
+        text: (el && el.textContent) || "",
+      };
+    });
+    expect(first.isSkip, `首个 Tab 焦点是「${first.text}」，不是 skip-link`).toBe(true);
+    await expect(skip).toBeInViewport();
+
+    // Enter 激活：焦点落到展厅落点（#gallery 带 tabindex="-1"，浏览器原生聚焦）
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#gallery")).toBeFocused();
+    // 且页面滚到展厅（平滑滚动，poll 等收敛；hero 近一屏高，>200 已越过它）
+    await expect
+      .poll(() => page.evaluate(() => Math.round(window.scrollY)), { timeout: 5_000 })
+      .toBeGreaterThan(200);
   });
 
   test("筛选栏语义为 group，chip 仍是 aria-pressed 切换按钮", async ({ page }) => {

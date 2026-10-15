@@ -116,6 +116,12 @@
   <script type="module" src="app.js"></script>
 </head>
 <body>
+  <!-- 跳转链（U-4）：body 首个可聚焦元素。默认由 .skip-link 的 transform 藏出视口上缘，
+       Tab 聚焦时滑入；落点 #gallery 带 tabindex="-1"，Enter 后焦点随滚动一起落到展厅。
+       刻意用原生锚点、不写 JS：app.js 的 hashchange 已声明「纯锚点不干预」，
+       scroll-padding-top 也已给固定顶栏留出遮挡量——两条地基都已存在。
+       e2e 钉住：首 Tab 焦点 = 本元素、Enter 后 activeElement = #gallery。 -->
+  <a class="skip-link" href="#gallery">跳到展厅</a>
   <header class="site-nav" id="siteNav">
     <div class="site-nav-inner">
       <a class="site-nav-logo" href="#">米兰美术馆</a>
@@ -178,7 +184,9 @@
   </section>
 
   <main>
-    <section class="gallery-section chapter-room" id="gallery">
+    <!-- tabindex="-1" 是 skip-link（见 body 首元素）的落点契约：可编程聚焦、
+          自身不入 Tab 序列；聚焦轮廓由 styles.css 的 #gallery:focus 关闭。 -->
+    <section class="gallery-section chapter-room" id="gallery" tabindex="-1">
       <div class="chapter-head">
         <h2 class="chapter-title">展厅</h2>
       </div>
@@ -270,6 +278,10 @@
            视觉计数对读屏隐藏（aria-hidden），播报由下方 #lbCountLive 承担 ——
            直接念「3 / 18」会被拆成「3 斜杠 18」。文本由 lightbox.js 的 sync() 写入。 -->
       <span class="lb-count" id="lbCount" aria-hidden="true"></span>
+      <!-- 手势提示（U-3）：首次打开出现、约 4s 或首个交互后隐去；文本由 lightbox.js
+           写入（HTML 留空，避免第二份文案常量）。aria-hidden：它是会消失的临时视觉
+           引导，读屏不听它（方向键翻页对读屏用户属既有模态契约）。 -->
+      <p class="lb-hint" id="lbHint" aria-hidden="true"></p>
       <button class="lb-close" id="close" type="button" aria-label="关闭观画室">
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
           <path d="M1 1l12 12M13 1L1 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>

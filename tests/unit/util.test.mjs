@@ -29,6 +29,7 @@ import {
   wallNumber,
   positionLabel,
   positionAnnouncement,
+  lightboxHintText,
   toLocalDate,
   ymKey,
   ymLabel,
@@ -501,4 +502,17 @@ test("positionAnnouncement：播报是完整中文句，不是「3 / 18」的碎
   // 两者职责不同：视觉串不含「件」，播报句不含斜杠 —— 读屏念斜杠是已知劣化
   assert.ok(!positionLabel(2, 18).includes("件"));
   assert.ok(!positionAnnouncement(2, 18).includes("/"));
+});
+
+/* ───────────── U-3 灯箱手势提示 ───────────── */
+
+test("lightboxHintText：按指针精度二分文案，两份互不串味", () => {
+  const fine = lightboxHintText(false);
+  const coarse = lightboxHintText(true);
+  // 桌面谈方向键/双击；触屏谈双击/双指 —— 各说各的，不互相混入
+  assert.ok(fine.includes("← →") && fine.includes("双击放大"));
+  assert.ok(!fine.includes("双指"));
+  assert.ok(coarse.includes("双击放大") && coarse.includes("双指缩放"));
+  assert.ok(!coarse.includes("← →"));
+  assert.notEqual(fine, coarse);
 });

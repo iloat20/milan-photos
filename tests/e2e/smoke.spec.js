@@ -1417,6 +1417,82 @@ test.describe("画廊冒烟", () => {
     await ctx.close();
   });
 
+  test("空状态：清单失败给重试入口，重试后展厅与序厅真的回来（F-9）", async ({ browser }) => {
+    // 用 serviceWorkers:"block"：清单归 SW 的 isManifest 分支接管，page.route 在 SW
+    // 之外拦不到。配方与上一条同源。
+    // 红态判据：**假重试**（只收起提示、不重取数据）→ 卡片数 0 必红；**复用解析期那条
+    // 已 reject 的 Promise** → 卡片数 0 必红。所以「卡片回到 18」这一条就同时钉住了
+    // 「重试真的重新发请求」和「清空了 __milanManifest」。
+    const ctx = await browser.newContext({
+      serviceWorkers: "block",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await ctx.newPage();
+    let blocked = true;
+    await page.route("**/photos/manifest.json", (route) =>
+      blocked ? route.abort() : route.continue()
+    );
+
+    await page.goto("/");
+    const empty = page.locator("#empty");
+    const retry = page.locator("#emptyRetry");
+    await expect(empty).toBeVisible();
+    await expect(page.locator("#emptyText")).toContainText("无法开放");
+    await expect(retry).toBeVisible();
+    await expect(retry).toBeEnabled();
+    await expect(page.locator(".card")).toHaveCount(0);
+
+    // 放行后点重试 —— 这一击必须真的重取清单
+    blocked = false;
+    await retry.click();
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect(empty).toBeHidden();
+    // 序厅也一并恢复：rebuildPhotos → renderHeroCarousel 必须摘掉 is-empty
+    await expect(page.locator("#heroCarousel")).not.toHaveClass(/is-empty/);
+    await ctx.close();
+  });
+
+  test("空状态：空馆藏只给文案，不给重试入口（二分模型的反向）", async ({ browser }) => {
+    // 清单**合法但为空**：这不是失败，重试只会得到同样的空结果 —— 给了按钮就是误导。
+    // 与上一条互为反向：把「失败」与「空馆藏」混作一谈的实现必红（要么这里多出按钮，
+    // 要么上一条少出按钮），因此这不是同义反复。
+    const ctx = await browser.newContext({
+      serviceWorkers: "block",
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await ctx.newPage();
+    await page.route("**/photos/manifest.json", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+    );
+    await page.goto("/");
+    await expect(page.locator("#empty")).toBeVisible();
+    await expect(page.locator("#emptyText")).toContainText("暂无展出");
+    await expect(page.locator("#emptyRetry")).toBeHidden();
+    await ctx.close();
+  });
+
+  test("正常页面下空状态必须仍为 display:none（挡 hidden 被作者 display 架空）", async ({
+    page,
+  }) => {
+    // 两层判据，各挡一件事：
+    //   ① 可见性 —— 挡 JS 判据写反（正常页面把空状态打开了）；
+    //   ② **计算后的 display** —— 挡 CSS 覆盖：`hidden` 靠 UA 样式表的
+    //      [hidden]{display:none} 生效，而作者样式里的 display 会无条件压过它。
+    //   ② 无法由 ① 代替：此刻空状态的内容是空的（正文由 JS 在显示前写入、按钮也 hidden），
+    //   空内容 + 0 高度会被 toBeHidden() 判成「不可见」—— **实测**：给 .empty 写
+    //   display: flow-root 时 ① 依然全绿，破坏隐身通过。故必须直接量计算值。
+    //   （代价：若将来改用 class 切换而非 hidden 属性，本用例会红 —— 那正是契约变更的信号。）
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await expect(page.locator("#empty")).toBeHidden();
+    await expect(page.locator("#emptyRetry")).toBeHidden();
+    const displays = await page.evaluate(() => ({
+      empty: getComputedStyle(document.getElementById("empty")).display,
+      retry: getComputedStyle(document.getElementById("emptyRetry")).display,
+    }));
+    expect(displays).toEqual({ empty: "none", retry: "none" });
+  });
+
   test("图片预载必须带 type 提示（imagesrcset 按首个候选扩展名判定）", async ({ page }) => {
     // preloadImage 用 /\.avif$/i.test(整条 srcset) 判格式，而候选串以 "900w" 这样的
     // 宽度描述符结尾，$ 锚点永远不命中 → type 从未写上，注释里「不支持该格式的浏览器

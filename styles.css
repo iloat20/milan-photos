@@ -789,13 +789,56 @@
     font-weight: 600;
   }
 
-  /* —— 空状态 —— */
+  /* —— 空状态（F-9：失败可自愈）——
+     ⚠️ .empty / .empty-text / .empty-retry **一律不得声明 `display`**：`hidden` 属性靠
+     UA 样式表里的 `[hidden] { display: none }` 生效，而作者样式里的 display 会无条件
+     压过它，于是 `hidden` 形同虚设。**两处后果不同（均为实测）**：
+       · .empty 被写上 display → 正常页面里容器仍在文档流，但内容为空（正文由 JS 在
+         显示前才写入、按钮也 hidden）⇒ 高度 0，而 0 高度会被 Playwright 的
+         toBeHidden() 判成「不可见」，逐层可见性断言的护栏会**静默失效**——必须直接
+         量计算值（见 smoke.spec.js 的计算 display 用例）；
+       · .empty-retry 被写上 display → 空馆藏态里本该隐藏的按钮会真的显形（行为断言可抓）。
+     想居中就用父级的 text-align（button 默认 inline-block，会被它居中），别改成 grid/flex。 */
   .empty {
     max-width: var(--max);
     margin: 40px auto 0;
     padding: 0 28px;
     text-align: center;
     color: var(--text-2);
+  }
+
+  /* 失败/空馆藏文案用主文本色：它是访客此刻唯一需要读的一句话，
+     不该和 .empty 容器一起退到次级灰。 */
+  .empty-text {
+    color: var(--text);
+  }
+
+  .empty-retry {
+    appearance: none;
+    margin: 18px 0 0;
+    border: 0;
+    border-radius: var(--r-pill);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 10px 22px;
+    min-height: 40px;
+    cursor: pointer;
+    transition: color 0.25s var(--ease), background 0.25s var(--ease);
+  }
+
+  .empty-retry:hover {
+    background: var(--surface-2);
+  }
+
+  /* 重试进行中：只有 disabled（配 app.js 的 retryInFlight 守卫），
+     不做转圈动画 —— 一次网络抖动的时长不值得再引入一个动画契约。 */
+  .empty-retry:disabled {
+    color: var(--text-2);
+    cursor: default;
   }
 
   /* —— 首屏骨架：盒模型/列定义/gap 与 .gallery 同组（见 sections 层），

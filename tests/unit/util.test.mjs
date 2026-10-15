@@ -45,6 +45,9 @@ import {
   lightboxTiers,
   lightboxAvifTiers,
   pickTier,
+  emptyState,
+  EMPTY_FAILURE_TEXT,
+  EMPTY_EMPTY_TEXT,
 } from "../../src/util.js";
 
 test("pad：个位补零，两位以上原样", () => {
@@ -443,4 +446,39 @@ test("真清单契约：-2048 档的宽度描述符 = 按长边 2048 反推的�
   // 竖图与横图都得有样本，否则「按长边反推」只测了一半
   assert.ok(large.some((p) => p.height > p.width), "样本里得有竖图");
   assert.ok(large.some((p) => p.width > p.height), "样本里得有横图");
+});
+
+/* —— 空状态判据（F-9）——
+   二分模型的真值全表：只有「就绪 + 0 件 + 取清单失败」才给重试入口。
+   文案的差异也一并钉住（D-5）：两句必须互不相同，且都不含面向站主的实现细节
+   （`photos/` 路径、「库房」面板）—— 文案写回站主视角时本用例即红。 */
+test("emptyState：未就绪 / 有可见作品 一律不显示空状态", () => {
+  assert.equal(emptyState({ ready: false, visibleCount: 0, failed: true }), null);
+  assert.equal(emptyState({ ready: false, visibleCount: 0, failed: false }), null);
+  assert.equal(emptyState({ ready: true, visibleCount: 18, failed: false }), null);
+  // 失败但已有可见作品：不得盖一层错误提示（局部失败不该伪装成全站故障）
+  assert.equal(emptyState({ ready: true, visibleCount: 3, failed: true }), null);
+  // 缺参兜底：不得被判成「该显示」
+  assert.equal(emptyState(), null);
+});
+
+test("emptyState：失败态给重试入口，空馆藏态不给", () => {
+  assert.deepEqual(emptyState({ ready: true, visibleCount: 0, failed: true }), {
+    text: EMPTY_FAILURE_TEXT,
+    retry: true,
+  });
+  assert.deepEqual(emptyState({ ready: true, visibleCount: 0, failed: false }), {
+    text: EMPTY_EMPTY_TEXT,
+    retry: false,
+  });
+});
+
+test("空状态文案：两句互不相同，且都不含站主指引（D-5）", () => {
+  assert.notEqual(EMPTY_FAILURE_TEXT, EMPTY_EMPTY_TEXT);
+  for (const s of [EMPTY_FAILURE_TEXT, EMPTY_EMPTY_TEXT]) {
+    assert.ok(s.length > 0);
+    for (const leak of ["photos/", "库房", "刷新", "入藏"]) {
+      assert.ok(!s.includes(leak), `空状态文案仍面向站主（含「${leak}」）：${s}`);
+    }
+  }
 });

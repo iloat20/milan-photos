@@ -325,3 +325,34 @@ export function pickTier(tiers, need) {
   }
   return best;
 }
+
+/* —— 空状态判据（F-9 二分模型）——
+   「加载失败」与「空馆藏」在 UI 上曾经不可分：app.js 的外层 catch 把任何失败都写成
+   `folderPhotos = []`，判据只剩 visibleCount —— 访客看到的是一句**面向站主**的静态文案，
+   且没有任何出路（P0 那次全站白屏的落地页正是它）。这里把判据收敛成一个纯函数，
+   让「哪些情形给重试入口」可被单测直接钉住。
+
+   站主操作指引不留在访客界面：原句「将图片放入 photos/ 后刷新，或到库房登记入藏」
+   面向的是站主，而站主有库房面板、CI 的 sync-photos 也会回写清单，不需要从错误页取指引。
+
+   未启用：第三态「筛选无结果」（该提示「换个筛选」而不是「暂无作品」）。当前
+   collectFilters 的选项全部源自真实照片、非法/过期 #f 年月由 renderFilters 兜底退回 all
+   ⇒ 该分支无法自然触发，做出来只能靠人工改源码证明（空断言）。等 F-7（检索/标签）落地时
+   在此加一个分支即可。 */
+export const EMPTY_FAILURE_TEXT = "展厅暂时无法开放，请稍后重试。";
+export const EMPTY_EMPTY_TEXT = "本馆暂无展出作品，敬请期待。";
+
+/**
+ * 空状态判据：`null` 表示不该显示空状态。
+ * @param {{ready?:boolean, visibleCount?:number, failed?:boolean}} s
+ *   ready —— 清单已到达（未到达一律不显示，避免首屏闪现）
+ *   visibleCount —— 当前筛选下的可见作品数
+ *   failed —— 取清单是否失败（三条失败链都收敛到这一个状态位）
+ * @returns {{text:string, retry:boolean}|null}
+ */
+export function emptyState({ ready, visibleCount, failed } = {}) {
+  if (!ready || (visibleCount || 0) > 0) return null;
+  return failed
+    ? { text: EMPTY_FAILURE_TEXT, retry: true }
+    : { text: EMPTY_EMPTY_TEXT, retry: false };
+}

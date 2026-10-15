@@ -189,7 +189,15 @@
         <span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
       <div class="gallery" id="galleryGrid"></div>
-      <p class="empty" id="empty" hidden>展厅尚未布展。将图片放入 <code>photos/</code> 后刷新，或到库房登记入藏。</p>
+      <!-- 空状态（F-9）：#empty 默认 hidden，文案与重试入口的显隐全部由 app.js 的
+           updateEmptyState() 决定（唯一出口）；两句文案的**单一来源**是 src/util.js 的
+           EMPTY_FAILURE_TEXT / EMPTY_EMPTY_TEXT，因此这里两个子节点都留空，
+           由 JS 在显示前写入 —— 同一语义写两份必然漂移。
+           ⚠️ 不要给 .empty / .empty-retry 写 display（见 styles.css 同处注释）。 -->
+      <div class="empty" id="empty" hidden>
+        <p class="empty-text" id="emptyText"></p>
+        <button class="empty-retry" id="emptyRetry" type="button" hidden></button>
+      </div>
     </section>
 
     <section class="about chapter-room-deep" id="about">

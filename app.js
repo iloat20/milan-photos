@@ -14,6 +14,7 @@ import {
   heroSrcset,
   heroAvifSrcset,
   HERO_SIZES,
+  emptyState,
 } from "./src/util.js";
 import { createLightbox } from "./src/lightbox.js";
 import { createInstallPrompt } from "./src/install.js";
@@ -30,12 +31,26 @@ import { createInstallPrompt } from "./src/install.js";
   let activeFilter = "all";
   // manifest 到达前不展示空状态，避免首屏闪现「展厅尚未布展」
   let galleryReady = false;
+  // 取清单是否失败：三条失败链（`!res.ok` / fetch 抛错且 CacheStorage 落空 /
+  // 取清单之后的异常穿出）全部收敛到这一个状态位，供 emptyState() 做二分。
+  // 与 galleryReady 分开：失败也属「就绪」，只是没有内容可展。
+  let manifestError = false;
   let reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const gallery = document.getElementById("galleryGrid");
   const filterBar = document.getElementById("filterBar");
   const emptyEl = document.getElementById("empty");
+  const emptyTextEl = document.getElementById("emptyText");
+  const emptyRetryEl = document.getElementById("emptyRetry");
   const skeletonEl = document.getElementById("gallerySkeleton");
+
+  // 重试按钮的两态文案：描述的是**按钮自身**的进行态，不参与 emptyState() 的二分判据，
+  // 故留在宿主侧；空状态正文的两句在 src/util.js（单一来源，可被单测直接钉住）。
+  const RETRY_LABEL = "重试";
+  const RETRY_BUSY_LABEL = "重试中…";
+  // 重入守卫：连点不得并发两条 loadFolderPhotos —— 后到的那次会覆盖 photos / roomEpoch，
+  // 且两条 fetch 的到达顺序不确定（旧响应可能盖掉新响应）。
+  let retryInFlight = false;
   // 灯箱自身的 DOM 引用（画心/标题/箭头/关闭）不在此处持有 —— 它们全归 src/lightbox.js。
   // 这里只留 <dialog> 本体：墙色注入（applyRoomToLightbox）与 hashchange 需要读它。
   const lightbox = document.getElementById("lightbox");
@@ -949,13 +964,18 @@ import { createInstallPrompt } from "./src/install.js";
       (window.__lf || (window.__lf = [])).push(s);
     };
     mark("start");
+    // 每次尝试都从「未失败」开始：重试成功后若不复位，失败态会一直粘住。
+    manifestError = false;
     try {
       let data = null;
       try {
         // 清单请求已由 index.html 的内联脚本在解析期发起（window.__milanManifest），
-        // 这里复用同一 Promise——直连 fallback 只服务「内联脚本被拦截/未执行」的残障态
-        const res = await (window.__milanManifest ||
-          fetch("photos/manifest.json", { cache: "no-store" }));
+        // 这里复用同一 Promise——直连 fallback 只服务「内联脚本被拦截/未执行」的残障态。
+        // **只复用一次**：那条 Promise 一旦 reject 就永久 reject，重试若继续复用它，
+        // 就是一次注定同因失败的假重试。取走即清空，重试自然走真实的新请求。
+        const parsed = window.__milanManifest;
+        window.__milanManifest = null;
+        const res = await (parsed || fetch("photos/manifest.json", { cache: "no-store" }));
         if (!res.ok) throw new Error("manifest missing");
         data = await res.json();
         mark("fetch-ok");
@@ -1024,6 +1044,9 @@ import { createInstallPrompt } from "./src/install.js";
     } catch (e) {
       mark("outer-catch:" + (e && e.message));
       folderPhotos = [];
+      // 走到这里即「没有可用的清单」：`!res.ok`、fetch 抛错且 CacheStorage 也落空、
+      // 或数据形状异常 —— 统一算失败。只有失败才给访客重试入口（空馆藏不给）。
+      manifestError = true;
     }
     // 数据到达（无论成败）后才允许显示空状态
     galleryReady = true;
@@ -1164,15 +1187,36 @@ import { createInstallPrompt } from "./src/install.js";
   /* 观画室的开合 / 换图 / 预载 / 手势实现已整体迁往 src/lightbox.js（P2-2 第二步）。
      本文件只保留装配（顶部 createLightbox 调用）与调用点 lb.open(...)。 */
 
+  /**
+   * 空状态的**唯一出口**：判据与文案都来自 src/util.js 的 emptyState()（纯函数，
+   * 二分模型由单测直接钉住）。renderGallery / 重试 / 启动期兜底都只调这里，
+   * 不各自写 `emptyEl.hidden` —— 多处各写一份正是「失败态被显示成空馆藏态」
+   * 这类静默错位的来源（三种语义在 app.js 里本就已被压成同一个空结果）。
+   * 三个节点都做 null 守卫：与其余绑定一致，HTML 结构调整时静默降级而非中断渲染。
+   */
+  function updateEmptyState() {
+    if (!emptyEl) return;
+    const state = emptyState({
+      ready: galleryReady,
+      visibleCount: visible.length,
+      failed: manifestError,
+    });
+    emptyEl.hidden = !state;
+    if (!state) return;
+    if (emptyTextEl) emptyTextEl.textContent = state.text;
+    if (emptyRetryEl) {
+      emptyRetryEl.hidden = !state.retry;
+      emptyRetryEl.textContent = RETRY_LABEL;
+    }
+  }
+
   function renderGallery() {
     if (!gallery) return;
     gallery.innerHTML = "";
     // 旧卡片脱离文档：作废它们排队中的墙色采样
     roomEpoch += 1;
     roomJobs.length = 0;
-    // 空状态节点可能缺失（HTML 结构调整）：与其余绑定一样静默降级，
-    // 不因一处裸写中断整个渲染
-    if (emptyEl) emptyEl.hidden = !galleryReady || visible.length > 0;
+    updateEmptyState();
     const wallIndexes = new Map(photos.map((photo, index) => [photo, index]));
 
     visible.forEach((photo, i) => {
@@ -1752,11 +1796,50 @@ import { createInstallPrompt } from "./src/install.js";
   loadFolderPhotos().catch((err) => {
     (window.__lf || (window.__lf = [])).push("unhandled:" + (err && err.message));
     galleryReady = true;
+    manifestError = true;
     if (skeletonEl) skeletonEl.hidden = true;
-    if (emptyEl) emptyEl.hidden = false;
+    updateEmptyState();
   });
   loadCustomPhotos().catch((err) => {
     (window.__lf || (window.__lf = [])).push("custom-unhandled:" + (err && err.message));
+  });
+
+  /* —— 空状态重试（F-9）——
+     失败态的唯一出路。三点值得写下来：
+     1. 重入守卫：见文件顶部 retryInFlight 的说明；按钮同时 disabled（失败态由
+        updateEmptyState 重写文案，忙态文案不会与它打架 —— 重试期间 galleryReady 为
+        false，updateEmptyState 早退，不会把「重试中…」覆写回「重试」）。
+     2. 重新亮出骨架屏：与首访同一套反馈语言，避免「点了一下、页面毫无变化」。
+     3. **不自动聚焦按钮**：首访失败时抢焦点会打断键盘/读屏用户既有的阅读位置
+        （本仓已有「焦点不被重建劫持」的约定）。它是真实 <button>、在 Tab 序列内，
+        访客自行可达。 */
+  on(emptyRetryEl, "click", () => {
+    if (retryInFlight) return;
+    retryInFlight = true;
+    galleryReady = false;
+    manifestError = false;
+    updateEmptyState();
+    if (skeletonEl) skeletonEl.hidden = false;
+    if (emptyRetryEl) {
+      emptyRetryEl.disabled = true;
+      emptyRetryEl.textContent = RETRY_BUSY_LABEL;
+    }
+    loadFolderPhotos()
+      .catch((err) => {
+        // 与启动期同一条兜底：取清单之后的异常也要落到失败态，而不是停在骨架屏上
+        (window.__lf || (window.__lf = [])).push("retry-unhandled:" + (err && err.message));
+        galleryReady = true;
+        manifestError = true;
+        if (skeletonEl) skeletonEl.hidden = true;
+        updateEmptyState();
+      })
+      .finally(() => {
+        retryInFlight = false;
+        if (emptyRetryEl) {
+          emptyRetryEl.disabled = false;
+          emptyRetryEl.textContent = RETRY_LABEL;
+        }
+      });
   });
 
   // dev 形态（npm run dev）不注册 SW。Vite dev 对**同一 URL 按请求形态返回不同内容**：

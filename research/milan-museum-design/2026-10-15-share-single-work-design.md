@@ -294,5 +294,16 @@ not ok 8 - tests\unit\util.test.mjs
 
 ### 8.4 线上抽验（部署后）
 
-待部署完成后补录。
+`9a4463f` 推送后：Sync photo manifest（38748044527，**无回写**——CI 与本机逐字节同源）、
+CI（38748044563）、Deploy（38748044727，gate 复用全量）均 success。Pages 发布后活体探针：
+
+```text
+cards=18 | title=《柔光》
+hintText=「已复制链接」| live=「已复制链接」
+copied=https://iloat20.github.io/milan-photos/p/rou-guang/
+status=200 | canonical=同一 URL（生产前缀下严格自指）| 逐图页含该作题名
+```
+
+分享按钮在产物 + SW 的线上形态下：URL 走子路径站点的正确绝对化、逐图页可达、
+反馈双路成立。F-4 闭环。
 

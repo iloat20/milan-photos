@@ -283,6 +283,20 @@ canary-in-dom: false → 在线导航未用陈旧缓存
 故一并修正为：无人工版本动作；改四件套 → 换缓存名；只改 sw.js → 同名缓存被
 `addAll` 覆盖重建。
 
-### 8.7 遗留
+### 8.7 线上抽验（部署后）
+
+Deploy（run 38731886948，success）后对 `https://iloat20.github.io/milan-photos/` 抽验：
+
+| 判据 | 结果 |
+|---|---|
+| 线上 `sw.js` 含 `navigateNetworkFirst` | true（发布生效） |
+| 首次访问渲染 | 18 卡 |
+| SW 激活接管后受控 reload | 18 卡，`controller: true` |
+| 线上四件套独立重算 vs `sw.js` 的 `VERSION` | `milan-c99b7e36` 一致 ✅ |
+
+线上指纹与本地（`milan-e8dc5deb`）不同系 CRLF/LF 差异（本地工作区 CRLF、
+CI checkout LF），原因同 P-5 线上验收记录；指纹只用于命名缓存，不要求跨环境一致。
+
+### 8.8 遗留
 
 与 §7 相同（P-11 根治；离线混合世代不处理；更新检查节流未实测）。

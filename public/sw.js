@@ -1,4 +1,5 @@
-/* 米兰 Service Worker：壳层 SWR，缩略图/中图/原图带 LRU，清单 Network First */
+/* 米兰 Service Worker：导航 Network First，壳层子资源 SWR，
+   缩略图/中图/原图带 LRU，清单 Network First */
 /* 缓存版本号由**构建期**按内容指纹注入（tools/sw-version.mjs + vite.config.js 的
    sw-version 插件），不再手工递增。手工的代价不只是「忘了改」：sw.js 字节不变时
    浏览器**不会重新 install**，壳层缓存只能靠 SWR 逐条兜，而 `photos/medium/*`
@@ -174,6 +175,40 @@ async function networkFirst(request) {
   }
 }
 
+/* 导航请求网络优先（P-6）：壳层资产是固定文件名，HTML 与 app.js/styles.css 之间
+   没有版本互认手段；SWR 的「先回缓存」允许在线导航回放任意世代的缓存 HTML，
+   与已刷新的子资源拼接即「旧 HTML + 新 JS」错配。网络优先把在线导航钉死在新版
+   HTML 上；缓存只在网络失败/超时时兜底——此时已处于离线语境，可用性优先。
+   （实测：preview 下把 canary 版 HTML 写进 shell 缓存，在线 reload 后它出现在
+   DOM——「回放缓存」与缓存是否陈旧无关，是确定性行为。） */
+const NAV_TIMEOUT_MS = 3000;
+
+async function navigateNetworkFirst(request) {
+  try {
+    const response = await Promise.race([
+      fetch(request),
+      // 黑洞连接可能让 fetch 永久 pending：3s 兜底转缓存（同 manifest 的处置）
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("navigate fetch timeout")), NAV_TIMEOUT_MS)
+      ),
+    ]);
+    if (response && response.ok) {
+      // 覆写导航条目：离线兜底拿到「最后一次在线导航的版本」，而不是 install 快照
+      const cache = await caches.open(CACHE_SHELL);
+      await cache.put(request, response.clone());
+      return response;
+    }
+    // 非 2xx 也转缓存回落，不把错误页当文档交给访客
+    throw new Error("navigate fetch not ok");
+  } catch {
+    const cached = await caches.match(request, { ignoreSearch: true, ignoreVary: true });
+    if (cached) return cached;
+    const fallback = await caches.match("./index.html", { ignoreVary: true });
+    if (fallback) return fallback;
+    return Response.error();
+  }
+}
+
 /* SWR 拆成「应答」和「后台刷新」两个 Promise：
    刷新必须在 fetch 事件的同步阶段交给 event.waitUntil()，
    否则是浮动 Promise，SW 随时可能被回收，缓存更新半途而废。 */
@@ -202,11 +237,8 @@ function shellSwr(request) {
     if (cached) return cached;
     const response = await revalidate;
     if (response) return response;
-    // HTML 只兜导航：把 index.html 当 JS/CSS 喂只会把「缺缓存」变成难查的 MIME 报错
-    if (request.mode === "navigate") {
-      const fallback = await caches.match("./index.html", { ignoreVary: true });
-      if (fallback) return fallback;
-    }
+    // 导航已由 navigateNetworkFirst 分流（P-6）；此处只服务壳层子资源——
+    // 把 index.html 当 JS/CSS 喂只会把「缺缓存」变成难查的 MIME 报错
     return Response.error();
   });
 
@@ -259,7 +291,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (isShellRequest(url) || request.mode === "navigate") {
+  if (request.mode === "navigate") {
+    // 导航网络优先（P-6）：在线永远拿最新 HTML，缓存只作离线兜底
+    event.respondWith(navigateNetworkFirst(request));
+    return;
+  }
+
+  if (isShellRequest(url)) {
     const { serve, revalidate } = shellSwr(request);
     event.respondWith(serve);
     event.waitUntil(revalidate);

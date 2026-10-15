@@ -640,6 +640,74 @@ test.describe("画廊冒烟", () => {
     }
   });
 
+  test("在线导航不回放陈旧 HTML 缓存（P-6：导航网络优先）", async ({ page, request }) => {
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    // 等 SW 激活 + shell 缓存就位 + controller 接管。轮询用 expect.poll：
+    // waitForFunction 里包 async 回调有「假绿」前科（见 AGENTS.md 单测坑 3）。
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            const activated = regs.some((r) => r.active?.state === "activated");
+            const keys = await caches.keys();
+            return (
+              activated &&
+              !!navigator.serviceWorker.controller &&
+              keys.some((k) => k.endsWith("-shell"))
+            );
+          }),
+        { timeout: 20_000 }
+      )
+      .toBe(true);
+
+    // 伪造「缓存落后于网络」：把 canary 版 HTML 覆写进 shell 缓存的两个导航键。
+    // 原版走 request fixture（不经过 SW）；注入点存在性 + read-back 自证，
+    // 两道断言防止「前提没成立」导致的假绿。
+    const original = await (await request.get("/index.html")).text();
+    const canary = original.replace(
+      "</head>",
+      '<meta name="e2e-nav-canary" content="stale">\n</head>'
+    );
+    expect(canary).not.toBe(original);
+    const dirtied = await page.evaluate(async (canaryHtml) => {
+      const name = (await caches.keys()).find((k) => k.endsWith("-shell"));
+      const cache = await caches.open(name);
+      for (const key of ["./", "./index.html"]) {
+        await cache.put(
+          new Request(key),
+          new Response(canaryHtml, { headers: { "Content-Type": "text/html" } })
+        );
+      }
+      const back = await cache.match("./");
+      return (await back.text()).includes("e2e-nav-canary");
+    }, canary);
+    expect(dirtied).toBe(true);
+
+    // 在线 reload：导航网络优先 = 完全不读这份陈旧缓存（红/绿判据）。
+    // 现状 SWR 下必红：serve 命中缓存即回放，canary 出现在 DOM。
+    await page.reload();
+    await expect(page.locator(".card")).toHaveCount(18);
+    expect(
+      await page.evaluate(() => !!document.querySelector('meta[name="e2e-nav-canary"]'))
+    ).toBe(false);
+
+    // 副断言（回归护栏）：导航成功后网络版被覆写回缓存（离线兜底拿到的是
+    // 「最后一次在线导航的版本」）。现状 SWR 靠后台 revalidate 最终也会走到，
+    // 用宽超时 poll——它不承担红态区分。
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const entry = await caches.match("./", { ignoreVary: true });
+            return !entry || !(await entry.text()).includes("e2e-nav-canary");
+          }),
+        { timeout: 10_000 }
+      )
+      .toBe(true);
+  });
+
   test("控制台无错误", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (err) => errors.push(String(err)));

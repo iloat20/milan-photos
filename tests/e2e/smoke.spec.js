@@ -82,6 +82,101 @@ test.describe("画廊冒烟", () => {
     await expect(lightbox).toBeHidden();
   });
 
+  test("观画室位置指示 = 全量馆藏序号（筛选后打开仍是全量序号，F-5 决定性判据）", async ({
+    page,
+    request,
+  }) => {
+    /* 序号语义若走样成「当前浏览序列」，这条必红：筛选后首张卡的序列序号是 0，
+       而它的全量序号 ≥ 1 —— 两种实现只有一种能拿到期望值。 */
+    const res = await request.get("/photos/manifest.json");
+    const list = (await res.json()).photos;
+    // 找一个月份：它在 manifest 里的首件序号 ≥ 1（即该月不是馆藏开头）
+    let ym = null;
+    let globalIdx = -1;
+    const firstOfMonth = new Map();
+    list.forEach((p, i) => {
+      const key = String(p.date || "").slice(0, 7);
+      if (!firstOfMonth.has(key)) firstOfMonth.set(key, i);
+    });
+    for (const [key, firstIdx] of firstOfMonth) {
+      if (firstIdx >= 1 && firstIdx < list.length - 1) {
+        ym = key;
+        globalIdx = firstIdx;
+        break;
+      }
+    }
+    expect(ym, "清单里得有一个不以馆藏开头的月份，否则测不出两种序号语义的差别").toBeTruthy();
+
+    await page.goto(`/#f=${ym}`);
+    const cards = page.locator(".card");
+    // 该月首件即页面首卡，其全量序号是 globalIdx（≥ 1，样本挑选条件保证）
+    await expect(cards.first()).toBeVisible();
+    await cards.first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    await page.waitForFunction(() => {
+      const img = document.getElementById("lbImg");
+      return img && img.currentSrc;
+    }, null, { timeout: 10_000 });
+
+    await expect(page.locator("#lbCount")).toHaveText(
+      `${globalIdx + 1} / ${list.length}`
+    );
+    await expect(page.locator("#lbCountLive")).toHaveText(
+      `第 ${globalIdx + 1} 件，共 ${list.length} 件`
+    );
+  });
+
+  test("观画室位置指示：翻页递进 + 键盘回绕 + 播报同步（F-5）", async ({ page }) => {
+    await page.goto("/");
+    const cards = page.locator(".card");
+    await expect(cards).toHaveCount(18);
+    await cards.first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    const count = page.locator("#lbCount");
+    const live = page.locator("#lbCountLive");
+    await expect(count).toHaveText("1 / 18");
+    await expect(live).toHaveText("第 1 件，共 18 件");
+
+    await page.keyboard.press("ArrowRight");
+    await expect(count).toHaveText("2 / 18");
+    // 反向两步越过首件：pos 取模回绕到末件
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect(count).toHaveText("18 / 18");
+    await expect(live).toHaveText("第 18 件，共 18 件");
+  });
+
+  test("位置指示的 aria 契约：视觉计数对读屏隐藏，播报节点 sr-only（F-5）", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const cards = page.locator(".card");
+    await expect(cards).toHaveCount(18);
+    await cards.first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+
+    // 视觉计数：aria-hidden=true —— 否则读屏把「3 / 18」念成「3 斜杠 18」，
+    // 与 live region 的整句播报重复且劣化
+    await expect(page.locator("#lbCount")).toHaveAttribute("aria-hidden", "true");
+    // 播报节点必须视觉隐藏但不在 display:none（那会让 live region 失效）：
+    // 量计算值，钉住 .sr-only 的剪裁形态
+    const style = await page
+      .locator("#lbCountLive")
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          position: s.position,
+          width: s.width,
+          display: s.display,
+          clipPath: s.clipPath,
+        };
+      });
+    expect(style.display).not.toBe("none");
+    expect(style.position).toBe("absolute");
+    expect(parseFloat(style.width)).toBeLessThanOrEqual(1);
+    expect(style.clipPath).toContain("inset");
+  });
+
   test("灯箱档位回退：无中图作品也走派生图，不再回落 jpg 原图（P-3 回归锁）", async ({
     page,
     request,

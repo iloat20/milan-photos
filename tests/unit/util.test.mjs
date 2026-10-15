@@ -27,6 +27,8 @@ import {
   displayTitle,
   captionText,
   wallNumber,
+  positionLabel,
+  positionAnnouncement,
   toLocalDate,
   ymKey,
   ymLabel,
@@ -481,4 +483,22 @@ test("空状态文案：两句互不相同，且都不含站主指引（D-5）",
       assert.ok(!s.includes(leak), `空状态文案仍面向站主（含「${leak}」）：${s}`);
     }
   }
+});
+
+/* ───────────── F-5 观画室位置指示 ───────────── */
+
+test("positionLabel：与逐图页 pager-count 同格式，覆盖首件/末件/第 3 件", () => {
+  assert.equal(positionLabel(2, 18), "3 / 18");
+  assert.equal(positionLabel(0, 18), "1 / 18");
+  assert.equal(positionLabel(17, 18), "18 / 18");
+  // 单件序列（筛选只剩一张）不除零、不出错
+  assert.equal(positionLabel(0, 1), "1 / 1");
+});
+
+test("positionAnnouncement：播报是完整中文句，不是「3 / 18」的碎片", () => {
+  assert.equal(positionAnnouncement(2, 18), "第 3 件，共 18 件");
+  assert.equal(positionAnnouncement(0, 1), "第 1 件，共 1 件");
+  // 两者职责不同：视觉串不含「件」，播报句不含斜杠 —— 读屏念斜杠是已知劣化
+  assert.ok(!positionLabel(2, 18).includes("件"));
+  assert.ok(!positionAnnouncement(2, 18).includes("/"));
 });

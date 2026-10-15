@@ -181,6 +181,22 @@
     outline: 3px solid color-mix(in oklab, var(--accent) 60%, transparent);
     outline-offset: 3px;
   }
+
+  /* 视觉隐藏工具类（站内首个）：给读屏专用的 live region 用。
+     不能用 display:none —— 那会让 live region 整个失效；
+     也不能只靠 text-indent/color —— clip-path 剪裁出流才是读屏可及、
+     视觉不可见的标准做法（旧写法 clip: rect() 已废弃，stylelint 拦截）。 */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 @layer components {
@@ -1259,9 +1275,20 @@
 
   .lightbox-chrome {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     padding: 14px 18px 4px;
     flex-shrink: 0;
+  }
+
+  /* 位置指示（F-5）：视觉上低调，读屏不听它（aria-hidden），播报走 .sr-only 那份 */
+  .lb-count {
+    color: var(--text-2);
+    font-size: 0.8125rem;
+    letter-spacing: 0.08em;
+    font-variant-numeric: tabular-nums; /* 数字等宽：翻页时宽度不抖 */
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .lb-close {

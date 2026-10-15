@@ -58,6 +58,18 @@ export function wallNumber(index) {
   return `MIL · ${String(index + 1).padStart(3, "0")}`;
 }
 
+/** 观画室位置指示「3 / 18」：与逐图页 pager-count 同格式（不补零）。
+ *  序号语义由调用方决定 —— 约定传**全量馆藏序号**（与墙号一致），见 util 域注释。 */
+export function positionLabel(index, total) {
+  return `${index + 1} / ${total}`;
+}
+
+/** 位置指示的读屏播报文本。视觉计数走 aria-hidden，读屏只听这一句
+ *  （直接念「3 / 18」会被拆成「3 斜杠 18」，故两者分离）。 */
+export function positionAnnouncement(index, total) {
+  return `第 ${index + 1} 件，共 ${total} 件`;
+}
+
 /** 归一为**本地时区**的 YYYY-MM-DD；非法输入返回空串（调用方据此跳过该条） */
 export function toLocalDate(msOrDate) {
   const d = msOrDate instanceof Date ? msOrDate : new Date(msOrDate);

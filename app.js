@@ -86,6 +86,11 @@ import { createInstallPrompt } from "./src/install.js";
     source: document.getElementById("lbSource"),
     title: document.getElementById("lbTitle"),
     caption: document.getElementById("lbCaption"),
+    // F-5 位置指示：视觉计数 + sr-only 播报节点，序号走全量馆藏（photos）
+    countEl: document.getElementById("lbCount"),
+    countLive: document.getElementById("lbCountLive"),
+    catalogIndex: (p) => photos.findIndex((q) => q.id === p.id),
+    catalogTotal: () => photos.length,
     prevBtn: document.getElementById("prev"),
     nextBtn: document.getElementById("next"),
     closeBtn: document.getElementById("close"),

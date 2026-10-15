@@ -23,6 +23,8 @@ import {
   lightboxTiers,
   lightboxAvifTiers,
   pickTier,
+  positionLabel,
+  positionAnnouncement,
 } from "./util.js";
 
 /* ────────────────────────── 纯数学（可被单测直接覆盖） ──────────────────────────
@@ -109,6 +111,13 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  *        无说明的图**不是**把它藏掉就完事：`.lightbox-meta` 高度由内容撑开，
  *        少一行会让上方画框整块跳一下。故这里只切换 `.is-empty`，占位由 CSS 的
  *        `min-height` + `visibility: hidden` 保证（见 styles.css 的 .lb-caption）。
+ * @param {HTMLElement|null} ports.countEl    `#lbCount`（chrome 行左端「3 / 18」，aria-hidden）
+ * @param {HTMLElement|null} ports.countLive  `#lbCountLive`（sr-only live region，播报用）
+ * @param {(photo:object) => number} ports.catalogIndex
+ *        该画在**全量馆藏**中的序号（0 起）；不在时返回 -1。序号语义必须与墙号
+ *        `MIL · 003` / 逐图页 pager 一致（全量），不能传当前筛选序列的序号 ——
+ *        那会让同一幅画在站内出现两套互相矛盾的编号。
+ * @param {() => number} ports.catalogTotal   全量馆藏总数。
  * @param {HTMLElement|null} ports.prevBtn / nextBtn / closeBtn
  * @param {(el:any,type:string,fn:Function,opts?:any)=>void} ports.on
  *        绑定守卫：元素缺失时静默降级，而不是抛 TypeError 中断整个 IIFE。
@@ -149,6 +158,10 @@ export function createLightbox({
   source,
   title,
   caption,
+  countEl,
+  countLive,
+  catalogIndex,
+  catalogTotal,
   prevBtn,
   nextBtn,
   closeBtn,
@@ -436,6 +449,16 @@ export function createLightbox({
       const captionValue = captionText(photo);
       caption.textContent = captionValue;
       caption.classList.toggle("is-empty", !captionValue);
+    }
+    // 位置指示（F-5）：全量馆藏序号（与墙号/逐图页同一体系），随每次开图与切图更新。
+    // 视觉计数 aria-hidden，读屏只听 countLive 的整句播报；开图也经 sync()，
+    // live region 的首次播报无需另发。端口缺失按绑定守卫同款静默降级。
+    if (countEl || countLive) {
+      const total = (typeof catalogTotal === "function" ? catalogTotal() : 0) || arr.length;
+      let gIdx = typeof catalogIndex === "function" ? catalogIndex(photo) : -1;
+      if (gIdx < 0) gIdx = pos; // 不在全量（理论不可达）：回退当前序列序号
+      if (countEl) countEl.textContent = positionLabel(gIdx, total);
+      if (countLive) countLive.textContent = positionAnnouncement(gIdx, total);
     }
     const frame = lightbox.querySelector(".lightbox-frame");
     if (frame) {

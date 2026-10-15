@@ -266,6 +266,10 @@
 
   <dialog class="lightbox" id="lightbox" aria-label="观画室">
     <div class="lightbox-chrome">
+      <!-- F-5 位置指示：全量馆藏序号（与墙号 MIL · 003 / 逐图页 pager 同一体系）。
+           视觉计数对读屏隐藏（aria-hidden），播报由下方 #lbCountLive 承担 ——
+           直接念「3 / 18」会被拆成「3 斜杠 18」。文本由 lightbox.js 的 sync() 写入。 -->
+      <span class="lb-count" id="lbCount" aria-hidden="true"></span>
       <button class="lb-close" id="close" type="button" aria-label="关闭观画室">
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
           <path d="M1 1l12 12M13 1L1 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -294,6 +298,9 @@
       <h2 class="lb-title" id="lbTitle"></h2>
       <p class="lb-caption" id="lbCaption"></p>
     </div>
+    <!-- 位置播报（F-5）：静态空 live region —— 动态插入的 live region 首次变更
+         常不播报，故必须解析期就位；文本由 sync() 在开图与每次切图时更新。 -->
+    <span class="sr-only" id="lbCountLive" role="status" aria-live="polite"></span>
   </dialog>
 
   <!-- 入口脚本已移入 <head>（见其处注释）：模块默认 defer，头部与 body 尾执行时机一致，

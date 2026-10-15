@@ -30,7 +30,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | 路径 | 角色 |
 |------|------|
 | `photos/*.{jpg,png,webp,gif,avif}` | 原图（源）— **长边 ≤2560px、不含 GPS EXIF**（见下「必做」） |
-| `photos/meta.json` | **策展源**：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem。改了 `title`/`caption` 必须跑 `npm run sync` 才会落到 manifest（`slug` 不进 manifest，由生成器直接读本文件） |
+| `photos/meta.json` | **策展源**：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem。改了 `title`/`caption`/`slug` 必须跑 `npm run sync` 才会落到 manifest（`slug` 自 F-4 起**进 manifest**：`photo_item()` 归一写入，是逐图页生成器与分享按钮共用的唯一来源；两处归一实现的一致性由单测「真清单一致性」钉住） |
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成，灯箱改用最大缩略档 `thumbs/`） |
@@ -41,7 +41,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 - 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
 - 原图**从不被访客请求**：`src/util.js` 的 `heroSrc` / `lightboxSrc` 都取**最大可用档** —— WebP 侧 `medium || thumb || src`（`thumb` 是最大缩略档），AVIF 侧 `mediumAvif || thumbAvifSrcset` 顶层（`largestAvif`，无对应标量字段故现算）；**只有动图才回落原文件**。所以母版只是「生成派生图的源 + 留档」，其体积不进入访客的关键路径——这正是它该被限长的原因。灯箱的 `<picture>` AVIF `srcset` 由 `lightboxAvifOrFallback()` 填，**与预载同源**，勿改回只填 `mediumAvif`（否则无中图的图会「预载 AVIF、渲染 WebP」下两次）。
 - 上传页可把压缩图写进 IndexedDB 本机预览；GitHub Token 只存浏览器 `localStorage`，勿写入仓库。
-- **逐图展签页 `/p/<slug>/`**（`tools/gen_work_pages.mjs`，构建期生成）：每件作品一个静态 HTML——`<img>` + 标题 + 策展说明 + 日期 + prev/next。存在理由是 SEO：站内深链 `#p=<file>` 是**哈希，搜索引擎不索引**，图片搜索入口此前为 0；逐图页同时让社交分享拿到**逐图**卡片（`og:image` = 该作中图）。改版式时注意三点：① 页面在 `/p/<slug>/` 下，所有资源引用都要 `../../` 前缀（`<picture>` 的 404 会**静默回落**到 `<img src>` 原图，页面看不出坏）；② slug 冲突**报错退出**，不静默去重；③ prev/next 首尾**不绕环**（爬虫看到环即断链判据失效）。
+- **逐图展签页 `/p/<slug>/`**（`tools/gen_work_pages.mjs`，构建期生成）：每件作品一个静态 HTML——`<img>` + 标题 + 策展说明 + 日期 + prev/next。存在理由是 SEO：站内深链 `#p=<file>` 是**哈希，搜索引擎不索引**，图片搜索入口此前为 0；逐图页同时让社交分享拿到**逐图**卡片（`og:image` = 该作中图）。改版式时注意三点：① 页面在 `/p/<slug>/` 下，所有资源引用都要 `../../` 前缀（`<picture>` 的 404 会**静默回落**到 `<img src>` 原图，页面看不出坏）；② slug 冲突**报错退出**，不静默去重；③ prev/next 首尾**不绕环**（爬虫看到环即断链判据失效）。**F-4 的分享按钮目标就是这些页面**（逐图 og 卡才有传播力；`#p=` 哈希对抓取器不可见，只留给没有 slug 的自定义上传图）。
 
 ## 必做：母版的两条不变量（长边上限 + 无 GPS）
 
@@ -104,7 +104,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 
 ## 必做：manifest 新字段要接进白名单
 
-`loadFolderPhotos()` 把 manifest 条目**逐字段拷进新对象**，不在那段映射里的字段会被静默丢弃——不报错、不走兜底，只是功能安静失效。P1-6 的 `palette` 就被这样吞过一次：manifest 里 18/18 都有值，页面却照旧跑客户端采样。
+`loadFolderPhotos()` 把 manifest 条目**逐字段拷进新对象**，不在那段映射里的字段会被静默丢弃——不报错、不走兜底，只是功能安静失效。P1-6 的 `palette` 就被这样吞过一次：manifest 里 18/18 都有值，页面却照旧跑客户端采样。F-4 的 `slug` 按同一纪律显式接管（漏了它分享链接会静默退回 `#p=` 哈希）。
 
 新增 manifest 字段时，除 `photos_lib.photo_item()` 与 `app.js` 的消费点外，**必须**同步改这段白名单。验证也要针对性：断言「颜色不等于初始值」是测不出来的（采样兜底同样会给出非初始值），得断言取值等于 manifest 里的值。
 

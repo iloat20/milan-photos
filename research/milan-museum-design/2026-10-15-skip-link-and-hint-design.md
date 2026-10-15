@@ -246,3 +246,18 @@ ArrowRight 后 is-on = false | 重开 is-on = false
 
 - §7 的既有遗留不变。新增维护注记：「手慢双击」用例的并行脆弱性（见 §8.3 第二点），
   CI 若复现再单独加固（不属本批范围）。
+
+### 8.6 线上抽验（部署后）
+
+`9ed1a42` 推送后 CI（38741555481）与 Deploy（38741556040，gate 复用全量）均 success，
+Pages 发布完成后活体探针：
+
+```text
+线上馆藏卡片数 = 18
+首 Tab 落点 = A.skip-link
+Enter 后 activeElement = gallery | scrollY = 660
+线上首开 #lbHint = {"on":true,"text":"← → 翻页 · 双击放大"}
+```
+
+skip-link 的藏出 / 滑入、原生片段聚焦、提示的一次性出现与文案，在线上形态（产物 +
+SW）全部成立。

@@ -16,8 +16,9 @@
 //         漏一项（比如忘删的 ./src/…）install 时 cache.addAll 直接 reject，
 //         表现为全站悄悄失去 SW：页面照常跑，只是不再离线可服务，不炸不报错。
 //   对策 4（能力）：manifest 不得是降级版（缺 palette / thumbAvifSrcset 说明生成它的
-//         环境没装 Pillow）。该文件直接被站点发布，降级版会让访客与测试同时受害，
-//         且症状是「红点散落在互不相关的地方」——必须在开跑前拦住。
+//         环境没装 Pillow；缺 slug 说明清单还是 F-4 之前的老形态）。该文件直接被站点发布，
+//         降级版会让访客与测试同时受害，且症状是「红点散落在互不相关的地方」——
+//         必须在开跑前拦住。
 //   对策 5（引用完整性）：index.html / manifest.webmanifest / robots.txt 引用到的静态
 //         资源（og.jpg、512 图标、sitemap.xml…）必须真实进 dist。这类引用不经过
 //         Vite 资源图（绝对 URL 或 public 内引用），漏拷即线上必 404；而 vite preview
@@ -253,7 +254,9 @@ module.exports = async function globalSetup(config) {
   }
 
   // ── 对策 4：manifest 能力（服务可用 ≠ 服务是完整版） ──
-  const required = ["thumbAvifSrcset", "palette"];
+  // slug（F-4）：分享按钮靠它拼逐图展签页 URL，缺了会静默退回 #p= 深链 —— 与
+  // palette 同属「页面照常跑、能力悄悄降级」类，必须在开跑前拦住。
+  const required = ["thumbAvifSrcset", "palette", "slug"];
   try {
     const res = await fetch(`${baseURL}/photos/manifest.json`, { cache: "no-store" });
     const data = await res.json();
@@ -268,8 +271,9 @@ module.exports = async function globalSetup(config) {
           `  条目数 ${items.length}；样例字段 ${JSON.stringify(Object.keys(items[0] || {}))}`,
           "",
           "最可能的原因：photos/manifest.json 是在**没装 Pillow** 的环境里 sync 出来的降级版",
-          "（无缩略图字段 / 无 palette）。这个文件被站点直接发布，降级版会让访客和测试",
-          "同时受害——用例不是报错，而是被测对象悄悄换成了降级版，红点会散落在互不相关的地方。",
+          "（无缩略图字段 / 无 palette），或是 F-4 之前生成的老清单（无 slug）。这个文件被",
+          "站点直接发布，降级版会让访客和测试同时受害——用例不是报错，而是被测对象悄悄",
+          "换成了降级版，红点会散落在互不相关的地方。",
           "",
           "处置：",
           '  1) python -m pip install "Pillow>=11"',

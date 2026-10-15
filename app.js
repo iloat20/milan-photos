@@ -2,6 +2,7 @@ import {
   uid,
   safeDecode,
   displayTitle,
+  shareUrlFor,
   wallNumber,
   toLocalDate,
   ymKey,
@@ -20,7 +21,7 @@ import { createLightbox } from "./src/lightbox.js";
 import { createInstallPrompt } from "./src/install.js";
 
 (() => {
-  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,mediumSrcset?:string,mediumAvifSrcset?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,fileName?:string,custom?:boolean,width?:number,height?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
+  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,mediumSrcset?:string,mediumAvifSrcset?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,slug?:string,fileName?:string,custom?:boolean,width?:number,height?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -91,6 +92,29 @@ import { createInstallPrompt } from "./src/install.js";
     }
   }
 
+  /* —— 单件分享（F-4）——
+     Web Share 优先、剪贴板兜底；返回结果码，反馈文案与展示时长归 lightbox 域。
+     URL 构造收在 util.shareUrlFor（纯函数）：有 slug → 逐图展签页（社交卡片），
+     无 slug（浏览器内上传的自定义图）→ 站内 #p= 深链。 */
+  async function shareCurrentPhoto(photo, title) {
+    const url = shareUrlFor(photo, location.href);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, url });
+        return "shared";
+      } catch (err) {
+        // 用户取消（AbortError）静默返回；其余失败（NotAllowedError / TypeError…）回落复制
+        if (err && err.name === "AbortError") return "cancelled";
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      return "copied";
+    } catch {
+      return "failed";
+    }
+  }
+
   /* —— 观画室域装配（P2-2 第二步）——
      src/lightbox.js 自带状态机、缩放平移、指针手势与全部灯箱事件监听；
      这里只把 DOM 引用和六类跨域能力按端口注入。装配点必须留在文件顶部：
@@ -110,6 +134,9 @@ import { createInstallPrompt } from "./src/install.js";
     hintEl: document.getElementById("lbHint"),
     coarsePointer: () => window.matchMedia("(pointer: coarse)").matches,
     claimHint: claimHintOnce,
+    // F-4 单件分享：按钮 + 分享能力（URL 构造 / Web Share / 剪贴板都留在宿主）
+    shareEl: document.getElementById("lbShare"),
+    share: shareCurrentPhoto,
     catalogIndex: (p) => photos.findIndex((q) => q.id === p.id),
     catalogTotal: () => photos.length,
     prevBtn: document.getElementById("prev"),
@@ -1044,6 +1071,9 @@ import { createInstallPrompt } from "./src/install.js";
           // 按文件名去重 folder 与 custom，缺了它去重会整体失效
           file: item.file || String(src).split("/").pop(),
           id: item.file || item.src || `f${i}`,
+          // slug（F-4）：分享按钮拼逐图展签页 URL 用。与 palette 同属白名单拷贝，
+          // 漏接管不会报错、只会静默退回 #p= 深链（分享卡随之失效）
+          slug: item.slug || "",
           width: Number(item.width) || 0,
           height: Number(item.height) || 0,
           // 序厅预载候选：sync 预算好的整串（hero-srcset 规则的家在 photos_lib）。

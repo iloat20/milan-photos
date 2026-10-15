@@ -1324,7 +1324,7 @@
     -webkit-user-select: none;
   }
 
-  /* 手势提示（U-3）：chrome 行中间的临时引导（计数与关闭之间）。默认 opacity:0 但
+  /* 手势提示（U-3）：chrome 行中间的临时引导（计数与分享/关闭控件组之间）。默认 opacity:0 但
      **保留占位**——chrome 行高由 36px 关闭钮钉死，提示（~34px）出现/消失不动行几何。
      文本由 lightbox.js 写入；展示的过渡重启靠「卸类→重排→加类」（与 .is-lit 同法）。
      pointer-events:none：提示绝不吞手势；省略号兜底极窄屏（320px 级）。 */
@@ -1351,7 +1351,16 @@
     opacity: 1;
   }
 
-  .lb-close {
+  /* chrome 右端控件组（F-4）：分享 + 关闭。两个「对话框级」按钮成组、键盘顺序相邻；
+     规格与关闭钮共用同一玻璃圆钮语言（改动任意一个都请连带复核另一个）。 */
+  .lb-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .lb-close,
+  .lb-share {
     appearance: none;
     border: 0;
     width: 36px;
@@ -1370,7 +1379,8 @@
     transition: background 0.25s var(--ease);
   }
 
-  .lb-close:hover {
+  .lb-close:hover,
+  .lb-share:hover {
     background: var(--fill-strong);
   }
 

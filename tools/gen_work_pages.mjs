@@ -79,7 +79,11 @@ export function slugSource(photo) {
 }
 
 /**
- * 逐条解析 slug。`meta.json` 的 `[file].slug` 可选覆盖，缺省回退文件名 stem。
+ * 逐条解析 slug。来源顺序（F-4 起）：
+ *   1. `manifest.slug` —— `npm run sync` 写入的唯一归一来源（浏览器分享按钮读同一份）；
+ *   2. 回退（老/降级清单）：`meta.json` 的 `[file].slug` 覆盖 > 文件名 stem。
+ * 两处归一算法相同的实现分别住在 photos_lib.py / 本文件，一致性由「真清单一致性」
+ * 单测在真数据上钉住（红了就 `npm run sync`）。
  *
  * 冲突抛出而非去重：重名会让一页静默消失（站点照常可访问）。
  * @returns {string[]} 与 manifest.photos 同序的 slug
@@ -89,7 +93,10 @@ export function resolveSlugs(manifest, meta = {}) {
   const used = new Map();
   return photos.map((photo) => {
     const override = meta?.[photo.file]?.slug;
-    const slug = normalizeSlug(override ?? slugSource(photo));
+    const slug =
+      photo?.slug != null
+        ? String(photo.slug)
+        : normalizeSlug(override ?? slugSource(photo));
     if (!SLUG_RE.test(slug)) {
       throw new Error(
         `gen-work-pages: ${photo.file} 归一后的 slug 非空且须匹配 [a-z0-9-]："${slug}"`

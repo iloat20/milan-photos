@@ -3,6 +3,7 @@
     {
       "src": "photos/mmexport1788447848472.jpg",
       "file": "mmexport1788447848472.jpg",
+      "slug": "rou-guang",
       "title": "柔光",
       "caption": "风从窗缝进来，把光吹散在锁骨上。",
       "date": "2026-09-22",
@@ -27,6 +28,7 @@
     {
       "src": "photos/IMG20260817164949_01.jpg",
       "file": "IMG20260817164949_01.jpg",
+      "slug": "guang-ming-ding",
       "title": "光明顶",
       "caption": "走完一千级石阶，只为抬手碰一下云。",
       "date": "2026-09-22",
@@ -51,6 +53,7 @@
     {
       "src": "photos/IMG20260817164045.jpg",
       "file": "IMG20260817164045.jpg",
+      "slug": "ya-bian-xiao-zuo",
       "title": "崖边小坐",
       "caption": "把登山杖立在脚边，云海替他把话说完。",
       "date": "2026-09-22",
@@ -75,6 +78,7 @@
     {
       "src": "photos/IMG20260817155446.jpg",
       "file": "IMG20260817155446.jpg",
+      "slug": "zhi-tou",
       "title": "枝头",
       "caption": "它只停了三次心跳，树就记住了这个重量。",
       "date": "2026-09-22",
@@ -99,6 +103,7 @@
     {
       "src": "photos/1700559942072.jpg",
       "file": "1700559942072.jpg",
+      "slug": "ye-bo",
       "title": "夜泊",
       "caption": "月在水里碎成一片绿，船还没有醒。",
       "date": "2026-09-22",
@@ -119,6 +124,7 @@
     {
       "src": "photos/08-portrait-silhouette.jpg",
       "file": "08-portrait-silhouette.jpg",
+      "slug": "08-portrait-silhouette",
       "title": "剪影",
       "caption": "人退成轮廓，空间开始说话。",
       "date": "2026-09-22",
@@ -139,6 +145,7 @@
     {
       "src": "photos/07-botanical.jpg",
       "file": "07-botanical.jpg",
+      "slug": "07-botanical",
       "title": "叶脉",
       "caption": "一束侧光，让植物变成雕塑。",
       "date": "2026-09-22",
@@ -159,6 +166,7 @@
     {
       "src": "photos/06-neon-window.jpg",
       "file": "06-neon-window.jpg",
+      "slug": "06-neon-window",
       "title": "窗上霓虹",
       "caption": "雨珠把城市拆成散景。",
       "date": "2026-09-22",
@@ -179,6 +187,7 @@
     {
       "src": "photos/05-desert-dunes.jpg",
       "file": "05-desert-dunes.jpg",
+      "slug": "05-desert-dunes",
       "title": "沙脊",
       "caption": "金色与阴影在地平线上对峙。",
       "date": "2026-09-22",
@@ -199,6 +208,7 @@
     {
       "src": "photos/04-mist-lake.jpg",
       "file": "04-mist-lake.jpg",
+      "slug": "04-mist-lake",
       "title": "雾湖",
       "caption": "水面把山影轻轻对折。",
       "date": "2026-09-22",
@@ -219,6 +229,7 @@
     {
       "src": "photos/03-light-trails.jpg",
       "file": "03-light-trails.jpg",
+      "slug": "03-light-trails",
       "title": "光轨",
       "caption": "长曝光把速度写成一条条琥珀色笔迹。",
       "date": "2026-09-22",
@@ -239,6 +250,7 @@
     {
       "src": "photos/02-staircase.jpg",
       "file": "02-staircase.jpg",
+      "slug": "02-staircase",
       "title": "混凝土螺旋",
       "caption": "光从顶部漏下，台阶像悬空的年轮。",
       "date": "2026-09-22",
@@ -259,6 +271,7 @@
     {
       "src": "photos/01-city-rain.jpg",
       "file": "01-city-rain.jpg",
+      "slug": "01-city-rain",
       "title": "雨夜俯瞰",
       "caption": "街道把灯光揉碎，再还给夜色。",
       "date": "2026-09-22",
@@ -279,6 +292,7 @@
     {
       "src": "photos/IMG20260916193852.jpg",
       "file": "IMG20260916193852.jpg",
+      "slug": "yan-shang-deng",
       "title": "檐上灯",
       "caption": "月亮爬得很慢，那盏灯替它先亮着。",
       "date": "2026-09-16",
@@ -303,6 +317,7 @@
     {
       "src": "photos/IMG20260916193836.jpg",
       "file": "IMG20260916193836.jpg",
+      "slug": "yan-xia",
       "title": "檐下",
       "caption": "退后两步，才看见灯下面还站着一座房子。",
       "date": "2026-09-16",
@@ -327,6 +342,7 @@
     {
       "src": "photos/IMG20260916193647.jpg",
       "file": "IMG20260916193647.jpg",
+      "slug": "ye-shu",
       "title": "夜树",
       "caption": "光从下面打上来，树把黑夜剪成一地碎影。",
       "date": "2026-09-16",
@@ -351,6 +367,7 @@
     {
       "src": "photos/IMG20260817155358.jpg",
       "file": "IMG20260817155358.jpg",
+      "slug": "wu-zhong-shi-jie",
       "title": "雾中石阶",
       "caption": "石头先被雾泡软，人才敢站上去。",
       "date": "2026-08-17",
@@ -375,6 +392,7 @@
     {
       "src": "photos/IMG20260817155311.jpg",
       "file": "IMG20260817155311.jpg",
+      "slug": "ju-zhang",
       "title": "举杖",
       "caption": "把木杖举过头顶，算是跟这座山打过招呼。",
       "date": "2026-08-17",

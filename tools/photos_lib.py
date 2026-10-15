@@ -35,6 +35,17 @@ def title_from_name(name: str) -> str:
     return stem or Path(name).stem
 
 
+def normalize_slug(raw: str) -> str:
+    """slug 归一：小写、非字母数字整段折成单个连字符、去首尾连字符。
+
+    与 tools/gen_work_pages.mjs 的 normalizeSlug 是**同一条规则的两份实现**：
+    这份在 sync 时写进 manifest（浏览器 F-4 分享按钮与逐图页生成器共用的唯一
+    来源），那份负责生成器的校验与老清单的回退计算。一致性由
+    tests/unit/gen-work-pages.test.mjs 的「真清单一致性」用例在真数据上钉住。
+    """
+    return re.sub(r"[^a-z0-9]+", "-", str(raw or "").lower()).strip("-")
+
+
 def file_date(path: Path) -> str:
     ts = path.stat().st_mtime
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
@@ -458,6 +469,12 @@ def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None)
     item = {
         "src": f"photos/{name}",
         "file": name,
+        # slug（F-4）：meta 覆盖 > 文件名 stem（与 JS slugSource 同规则：去最后一个扩展名）。
+        # 取覆盖的语义与 JS 的 `override ?? slugSource` 对齐：**null 才回退**，空串照走
+        # （`"slug": ""` 是策展笔误，交给构建期 SLUG_RE 大声报错，不在生成端静默兜底）。
+        "slug": normalize_slug(
+            info["slug"] if info.get("slug") is not None else re.sub(r"\.[^.]+$", "", name)
+        ),
         "title": info.get("title") or title_from_name(name),
         "caption": info.get("caption") or "",
         # 回退链：手写 meta > 已入馆日期（防 CI/本机 mtime 漂移）> EXIF > mtime

@@ -282,11 +282,21 @@
            写入（HTML 留空，避免第二份文案常量）。aria-hidden：它是会消失的临时视觉
            引导，读屏不听它（方向键翻页对读屏用户属既有模态契约）。 -->
       <p class="lb-hint" id="lbHint" aria-hidden="true"></p>
-      <button class="lb-close" id="close" type="button" aria-label="关闭观画室">
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
-          <path d="M1 1l12 12M13 1L1 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-        </svg>
-      </button>
+      <!-- F-4 单件分享：分享当前作品的逐图展签页 URL（社交平台据此展开逐图卡片）。
+           Web Share / 剪贴板的时序与 URL 构造在 app.js（share 端口），反馈文案在
+           lightbox.js；按钮不携带数据 —— 分享目标恒为「当下这张」。 -->
+      <div class="lb-actions">
+        <button class="lb-share" id="lbShare" type="button" aria-label="分享这件作品">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M12 15.5V3.5M7.5 7.5 12 3l4.5 4.5M7 10.5H5.5A1.5 1.5 0 0 0 4 12v8.5A1.5 1.5 0 0 0 5.5 22h13a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5H17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button class="lb-close" id="close" type="button" aria-label="关闭观画室">
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+            <path d="M1 1l12 12M13 1L1 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <figure class="lightbox-stage">
       <button class="lb-arrow lb-prev" id="prev" type="button" aria-label="上一件">

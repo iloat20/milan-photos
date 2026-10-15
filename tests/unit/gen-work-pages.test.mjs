@@ -47,7 +47,7 @@ const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(ROOT, "photos", "manifest.json"), "utf8")
 );
 /* 策展源：title / slug / caption / date 都写在这里，`npm run sync` 用它重建 manifest
-   （slug 不进 manifest，由生成器直接读本文件） */
+   （slug 自 F-4 起也进 manifest —— sync 的产物是唯一归一来源，生成器以它为准） */
 const META = JSON.parse(
   fs.readFileSync(path.join(ROOT, "photos", "meta.json"), "utf8")
 );
@@ -69,21 +69,35 @@ test("slugSource：文件名去扩展名（形态是 manifest 里的 photos/<fil
   assert.equal(slugSource({ file: "photos/IMG_0001.JPEG" }), "IMG_0001");
 });
 
-test("resolveSlugs：meta 无覆盖时全部回退文件名 stem，且合法、两两不同", () => {
-  const slugs = resolveSlugs(MANIFEST, {});
-  assert.equal(slugs.length, MANIFEST.photos.length);
-  for (const slug of slugs) {
-    assert.match(slug, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, `非法 slug：${slug}`);
-  }
-  assert.equal(new Set(slugs).size, slugs.length, "slug 必须两两不同");
-  assert.ok(slugs.includes("01-city-rain"));
-  assert.ok(slugs.includes("img20260817164949-01"));
+test("resolveSlugs：清单无 slug（老/降级清单）时回退 meta 覆盖 > 文件名 stem", () => {
+  // 合成一份**无 slug** 的清单：真清单自 F-4 起带 slug，会走「manifest 优先」路径
+  const manifest = {
+    photos: [{ file: "01-city-rain.jpg" }, { file: "IMG20260817164949_01.jpg" }],
+  };
+  assert.deepEqual(resolveSlugs(manifest, {}), ["01-city-rain", "img20260817164949-01"]);
+  assert.deepEqual(
+    resolveSlugs(manifest, { "IMG20260817164949_01.jpg": { slug: "Rou Guang" } }),
+    ["01-city-rain", "rou-guang"]
+  );
 });
 
-test("resolveSlugs：meta.json 的 slug 可覆盖文件名", () => {
+test("resolveSlugs：meta.json 的 slug 可覆盖文件名（清单无 slug 的回退路径）", () => {
   const manifest = { photos: [{ file: "IMG20260101010101.jpg" }] };
   const meta = { "IMG20260101010101.jpg": { slug: "Morning Mist" } };
   assert.deepEqual(resolveSlugs(manifest, meta), ["morning-mist"]);
+});
+
+test("resolveSlugs：清单自带 slug 优先（sync 的产物是唯一归一来源）", () => {
+  const manifest = { photos: [{ file: "IMG20260101010101.jpg", slug: "rou-guang" }] };
+  // meta 后来改了 slug 但还没 sync：以清单为准 —— 页面与分享按钮一起保持旧值（自洽），
+  // 而不是一边新 URL、一边旧 URL 地静默分叉
+  const meta = { "IMG20260101010101.jpg": { slug: "Another Name" } };
+  assert.deepEqual(resolveSlugs(manifest, meta), ["rou-guang"]);
+  // 清单里混进非法 slug 照样报错（不静默归一替它收拾）
+  assert.throws(
+    () => resolveSlugs({ photos: [{ file: "a.jpg", slug: "Bad Slug" }] }),
+    /\[a-z0-9-\]/
+  );
 });
 
 test("resolveSlugs：冲突必须报错，不静默去重", () => {
@@ -362,6 +376,22 @@ test("真 meta.json：18 件都定了标题，地址里不再有数码导出名"
     if (info.slug) {
       assert.ok(slugs.includes(info.slug), `${file} 的 slug "${info.slug}" 没被采用`);
     }
+  }
+});
+
+test("真清单一致性：manifest.slug 与「meta 覆盖 ?? 文件名 stem」的归一结果逐条相等", () => {
+  /* 跨语言防漂移：Python（photos_lib.normalize_slug，sync 时写入 manifest）与 JS
+     （gen_work_pages.normalizeSlug，回退路径与生成器校验用）是同一规则的两份实现。
+     不一致时不会立即报错（页面与分享按钮都读 manifest），但下次 sync 会悄悄换 URL ——
+     这里在真数据上钉住。红了就跑 `npm run sync` 重生成清单。 */
+  for (const photo of MANIFEST.photos) {
+    const override = META[photo.file]?.slug;
+    const expected = normalizeSlug(override ?? slugSource(photo));
+    assert.equal(
+      photo.slug,
+      expected,
+      `${photo.file}：manifest.slug="${photo.slug}" 与归一结果 "${expected}" 不一致（跑 npm run sync）`
+    );
   }
 });
 

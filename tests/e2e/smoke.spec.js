@@ -217,6 +217,89 @@ test.describe("画廊冒烟", () => {
     await expect(hint).not.toHaveClass(/is-on/);
   });
 
+  test.describe("单件分享（F-4）", () => {
+    // 复制回落要用真剪贴板读回；Chromium 下需显式授权（127.0.0.1 属安全上下文）
+    test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
+    test("分享回落剪贴板：复制的是逐图展签页绝对 URL，且该页可达、canonical 自指、与所看作品同题", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        // 压掉 U-3 首开提示：本用例只关心分享反馈胶囊，不要让两套文案抢同一个节点
+        localStorage.setItem("milan-lb-hint", "1");
+        // 模拟「无 Web Share」环境：own property 遮蔽原型上的 getter
+        Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
+      });
+      await page.goto("/");
+      await expect(page.locator(".card")).toHaveCount(18);
+      await page.locator(".card").first().click();
+      await expect(page.locator("#lightbox")).toBeVisible();
+
+      await page.locator("#lbShare").click();
+
+      // 反馈两路同行：视觉胶囊（aria-hidden）+ 读屏播报（role=status）
+      const hint = page.locator("#lbHint");
+      await expect(hint).toHaveClass(/is-on/);
+      await expect(hint).toHaveText("已复制链接");
+      await expect(page.locator("#lbCountLive")).toHaveText("已复制链接");
+
+      // 剪贴板里是绝对 URL，且不是 #p= 哈希深链（哈希对社交抓取器不可见，卡片是空的）
+      const origin = new URL(page.url()).origin;
+      const copied = await page.evaluate(() => navigator.clipboard.readText());
+      expect(copied.startsWith(`${origin}/`)).toBe(true);
+      expect(copied).toMatch(/\/p\/[a-z0-9-]+\/$/);
+
+      // 拿这个 URL 真去取一次：200、canonical 自指同一路径（canonical 走生产站点前缀
+      // /milan-photos/，本地预览在站根 —— 比对后缀；严格前缀自指由「逐页 SEO」用例钉）
+      const res = await page.request.get(copied);
+      expect(res.ok()).toBeTruthy();
+      const html = await res.text();
+      const canonical = /<link rel="canonical" href="([^"]+)"/.exec(html);
+      expect(canonical).toBeTruthy();
+      expect(new URL(canonical[1]).pathname.endsWith(new URL(copied).pathname)).toBe(true);
+
+      // 页面讲的正是眼前这幅画（题名一致；正文带《》、<title> 不带，用朴素包含）
+      const title = (await page.locator("#lbTitle").textContent()).replace(/[《》]/g, "");
+      expect(title.length).toBeGreaterThan(0);
+      expect(html).toContain(title);
+    });
+
+    test("分享优先 Web Share API：载荷 {title, url} 装箱正确，不落剪贴板、无复制反馈", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        localStorage.setItem("milan-lb-hint", "1");
+        window.__shared = null;
+        Object.defineProperty(navigator, "share", {
+          value: (data) => {
+            window.__shared = data;
+            return Promise.resolve();
+          },
+          configurable: true,
+        });
+      });
+      await page.goto("/");
+      await expect(page.locator(".card")).toHaveCount(18);
+      await page.locator(".card").first().click();
+      await expect(page.locator("#lightbox")).toBeVisible();
+
+      // 键盘路径：聚焦 + Enter，不依赖鼠标
+      await page.locator("#lbShare").focus();
+      await page.keyboard.press("Enter");
+
+      const shared = await page.evaluate(() => window.__shared);
+      expect(shared).toBeTruthy();
+      expect(shared.title).toBe((await page.locator("#lbTitle").textContent()).trim());
+      expect(shared.url).toMatch(/\/p\/[a-z0-9-]+\/$/);
+
+      // 系统分享面板自身即反馈：不弹胶囊、不写剪贴板（先给错误实现落地的时机再断言）
+      await page.waitForTimeout(400);
+      await expect(page.locator("#lbHint")).not.toHaveClass(/is-on/);
+      const clip = await page.evaluate(() => navigator.clipboard.readText().catch(() => ""));
+      expect(clip).not.toContain("/p/");
+    });
+  });
+
   test("灯箱档位回退：无中图作品也走派生图，不再回落 jpg 原图（P-3 回归锁）", async ({
     page,
     request,

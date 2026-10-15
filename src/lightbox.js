@@ -115,9 +115,13 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  * @param {HTMLElement|null} ports.countEl    `#lbCount`（chrome 行左端「3 / 18」，aria-hidden）
  * @param {HTMLElement|null} ports.countLive  `#lbCountLive`（sr-only live region，播报用）
  * @param {HTMLElement|null} ports.hintEl     `#lbHint`（首次打开的一次性手势提示，chrome 行中间）
+ * @param {HTMLElement|null} ports.shareEl    `#lbShare`（F-4 分享按钮，chrome 行右端）
  * @param {() => boolean} ports.coarsePointer 粗指针（触屏）判定；提示文案由此二分（U-3）
  * @param {() => boolean} ports.claimHint     「本次是否应显示提示」——同一设备至多返回一次 true；
  *        跨会话记忆归宿主（storage 与 matchMedia 同属 app.js 的既有分工，本模块一概不碰）
+ * @param {(photo:object, title:string) => Promise<"shared"|"copied"|"failed"|"cancelled">} ports.share
+ *        单件分享（F-4）：Web Share / 剪贴板与 URL 构造（要读 `location`）全归宿主，
+ *        本域只按结果码选反馈文案 —— 仅 `copied` / `failed` 给反馈，成功与取消静默。
  * @param {(photo:object) => number} ports.catalogIndex
  *        该画在**全量馆藏**中的序号（0 起）；不在时返回 -1。序号语义必须与墙号
  *        `MIL · 003` / 逐图页 pager 一致（全量），不能传当前筛选序列的序号 ——
@@ -166,8 +170,10 @@ export function createLightbox({
   countEl,
   countLive,
   hintEl,
+  shareEl,
   coarsePointer,
   claimHint,
+  share,
   catalogIndex,
   catalogTotal,
   prevBtn,
@@ -308,15 +314,15 @@ export function createLightbox({
     hintEl.classList.remove("is-on");
   }
 
-  function showHint() {
+  function showHint(text, ms = HINT_MS) {
     if (!hintEl) return;
-    hintEl.textContent = lightboxHintText(Boolean(coarsePointer && coarsePointer()));
+    hintEl.textContent = text;
     // 卸类 → 强制重排 → 加类：让 opacity 过渡每次都从头播（与 sync() 重启 .is-lit 同法；
     // prefers-reduced-motion 下过渡已被清掉，重排无副作用）。
     hintEl.classList.remove("is-on");
     void hintEl.offsetWidth;
     hintEl.classList.add("is-on");
-    hintTimer = setTimeout(hideHint, HINT_MS);
+    hintTimer = setTimeout(hideHint, ms);
   }
 
   /* ────────────────────────── 开 / 关 ────────────────────────── */
@@ -355,7 +361,9 @@ export function createLightbox({
       if (closeBtn) closeBtn.focus();
       // U-3：一次性手势提示（claimHint 至多返回一次 true）。时机在模态展开之后：
       // 提示的计时与可见性都从「灯箱真的开着」开始算。
-      if (hintEl && typeof claimHint === "function" && claimHint()) showHint();
+      if (hintEl && typeof claimHint === "function" && claimHint()) {
+        showHint(lightboxHintText(Boolean(coarsePointer && coarsePointer())));
+      }
     };
 
     if (prefersVT()) {
@@ -555,6 +563,32 @@ export function createLightbox({
     step(1);
   });
   on(closeBtn, "click", close);
+
+  /* ────────────────────────── 单件分享（F-4） ──────────────────────────
+     Web Share / 剪贴板是宿主能力（端口 share）；本域只按结果码选反馈文案。
+     反馈双路：视觉胶囊复用 U-3 的 #lbHint（aria-hidden，读屏不听它），播报走
+     F-5 的 #lbCountLive（role=status）—— 下一次翻页的 sync() 会自然覆盖它。 */
+
+  const SHARE_COPIED_TEXT = "已复制链接";
+  const SHARE_FAILED_TEXT = "复制失败";
+  /** 分享反馈停留时长：比手势提示短 ——「已复制」是瞬时状态确认，无需 4s。 */
+  const SHARE_FEEDBACK_MS = 2000;
+
+  on(shareEl, "click", async () => {
+    const photo = photos()[pos];
+    if (!photo || typeof share !== "function") return;
+    let code;
+    try {
+      code = await share(photo, displayTitle(photo, pos));
+    } catch {
+      code = "failed"; // 宿主未捕获的异常同样以「失败」收场，不穿出去打断对话框
+    }
+    // shared / cancelled：系统分享面板自身即反馈，静默
+    if (code !== "copied" && code !== "failed") return;
+    const text = code === "copied" ? SHARE_COPIED_TEXT : SHARE_FAILED_TEXT;
+    showHint(text, SHARE_FEEDBACK_MS);
+    if (countLive) countLive.textContent = text;
+  });
 
   const stage = lightbox?.querySelector(".lightbox-stage") || null;
   let swipeX = 0;

@@ -30,6 +30,7 @@ import {
   positionLabel,
   positionAnnouncement,
   lightboxHintText,
+  shareUrlFor,
   toLocalDate,
   ymKey,
   ymLabel,
@@ -515,4 +516,35 @@ test("lightboxHintText：按指针精度二分文案，两份互不串味", () =
   assert.ok(coarse.includes("双击放大") && coarse.includes("双指缩放"));
   assert.ok(!coarse.includes("← →"));
   assert.notEqual(fine, coarse);
+});
+
+/* ───────────── F-4 单件分享 ───────────── */
+
+test("shareUrlFor：有 slug 走逐图展签页绝对 URL，且先剥掉当时地址栏上的 #p= hash", () => {
+  assert.equal(
+    shareUrlFor(
+      { slug: "rou-guang", id: "IMG20260817164949_01.jpg" },
+      "https://e.com/milan-photos/#p=IMG20260817164949_01.jpg"
+    ),
+    "https://e.com/milan-photos/p/rou-guang/"
+  );
+  // 子路径站点（Pages）与站根（本地 8080）都从传入的 href 派生，不写死任何 origin
+  assert.equal(
+    shareUrlFor({ slug: "01-city-rain" }, "http://127.0.0.1:8080/#p=x"),
+    "http://127.0.0.1:8080/p/01-city-rain/"
+  );
+});
+
+test("shareUrlFor：无 slug（浏览器内上传的自定义图）回落站内深链 #p=<id>", () => {
+  assert.equal(
+    shareUrlFor({ id: "u1a2b3" }, "https://e.com/milan-photos/#p=t"),
+    "https://e.com/milan-photos/#p=u1a2b3"
+  );
+  // id 里的特殊字符要编码，别把参数切断
+  assert.equal(shareUrlFor({ id: "a b&c" }, "https://e.com/"), "https://e.com/#p=a%20b%26c");
+});
+
+test("shareUrlFor：两者皆缺时回落站点根，不产生 undefined 字样", () => {
+  assert.equal(shareUrlFor({}, "https://e.com/milan-photos/#p=t"), "https://e.com/milan-photos/");
+  assert.equal(shareUrlFor(null, "https://e.com/"), "https://e.com/");
 });

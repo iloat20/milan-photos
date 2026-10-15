@@ -76,6 +76,19 @@ export function lightboxHintText(coarse) {
   return coarse ? "双击放大 · 双指缩放" : "← → 翻页 · 双击放大";
 }
 
+/** 单件分享 URL（F-4）。
+ *
+ *  有 slug → 逐图展签页的**绝对 URL**（社交抓取器能展开逐图卡片，这是分享钮
+ *  存在的全部理由）；无 slug（浏览器内上传的自定义图）→ 站内深链 `#p=<id>`，
+ *  两者皆缺 → 站点根。先剥掉 `pageHref` 的 hash —— 灯箱开着时地址栏正是 `#p=…`。 */
+export function shareUrlFor(photo, pageHref) {
+  const base = String(pageHref || "").split("#")[0];
+  const slug = photo?.slug ? String(photo.slug) : "";
+  if (slug) return new URL(`p/${encodeURIComponent(slug)}/`, base).href;
+  const id = photo?.id != null ? String(photo.id) : "";
+  return id ? `${base}#p=${encodeURIComponent(id)}` : base;
+}
+
 /** 归一为**本地时区**的 YYYY-MM-DD；非法输入返回空串（调用方据此跳过该条） */
 export function toLocalDate(msOrDate) {
   const d = msOrDate instanceof Date ? msOrDate : new Date(msOrDate);

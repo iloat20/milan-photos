@@ -88,9 +88,9 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 
 ## 必做：Service Worker 版本
 
-改 `index.html` / `styles.css` / `app.js` / `public/sw.js` 后，**必须**把 `public/sw.js` 里的 `VERSION`（当前形如 `milan-vN`）往上抬。否则旧壳层缓存会让线上更新失效。产物名固定不带 hash 正是这条纪律的前提：URL 永远稳定，清单与缓存键才追得上。
+改 `index.html` / `styles.css` / `app.js` / `public/sw.js` 后**不再有任何人工版本动作**——`VERSION` 自 P-5（2026-10-13）起由构建期按**内容指纹**注入（`tools/sw-version.mjs`，形状 `milan-<8 位 hex>`，指纹 = `dist/index.html` + `app.js` + `styles.css` + `photos/manifest.json` 的 sha256）。改四件套任一 → 指纹变 → 缓存名变（install 原子重建 + activate 清异名旧缓存）；**只改 `sw.js` 自身**（指纹不含它，防自指）同样生效：字节变 → 浏览器重装 → 同名缓存被 `addAll` 覆盖重建。产物名固定不带 hash 正是这条机制的前提：URL 永远稳定，清单与缓存键才追得上。
 
-历史例外（只换 `assets/fonts/*.woff2` 不抬版本：字体子集是超集缩减、而抬版本会连 `CACHE_MEDIA` 一起清空）**随自托管字体一起退役**——见下「字体」节。现在没有例外：改任何壳层资产都抬版本。
+历史例外（只换 `assets/fonts/*.woff2` 不抬版本：字体子集是超集缩减、而抬版本会连 `CACHE_MEDIA` 一起清空）**随自托管字体一起退役**——见下「字体」节。现在没有例外：任何壳层资产改动都会自动换版本（或触发重装），无需人工。
 
 ## 字体：系统栈（子集工具已退役）
 

@@ -364,11 +364,20 @@ export function renderWorkPage({
   <meta name="color-scheme" content="light dark" />
   <!-- 与 index.html 同一段解析期主题初值：本站的手动主题存在 localStorage，而本页不带
        app.js（无 JS 依赖）。不等解析期落定的话，「存 light + 系统 dark」的用户从搜索结果
-       落地会看到与主页相反的底色。只读不写，try/catch 兜 Safari 隐私模式的 getItem 抛错。 -->
+       落地会看到与主页相反的底色。只读不写，try/catch 兜 Safari 隐私模式的 getItem 抛错。
+       手动主题的 theme-color override 与主页同机制：媒体版只认系统偏好，无 media 的
+       那条必须插在它们之前才会被浏览器采用（树序第一条匹配）。 -->
   <script>
     try {
       var t = localStorage.getItem("milan-theme");
-      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      if (t === "light" || t === "dark") {
+        document.documentElement.dataset.theme = t;
+        var tc = document.createElement("meta");
+        tc.name = "theme-color";
+        tc.content = t === "light" ? "#ffffff" : "#000000";
+        tc.setAttribute("data-milan-theme-color", "");
+        document.head.insertBefore(tc, document.querySelector('meta[name="theme-color"]'));
+      }
     } catch {}
   </script>
   <link rel="canonical" href="${canonical}" />
@@ -509,10 +518,19 @@ export function buildWorkPages({ manifest, meta = {}, siteUrl = SITE_URL }) {
       siteUrl,
     }),
   }));
+  // 主页条目的 lastmod 取馆藏**最新创作日期**：主页内容的「有新意」= 新作上墙。
+  // 不能用构建时间 —— 每次构建都变，等于告诉爬虫天天更新（会拉低 lastmod 的声望），
+  // 而内容可能纹丝未动；日期缺失的降级是省略该字段（renderSitemap 只写真值）。
+  const latestDate =
+    photos
+      .map((p) => p.date)
+      .filter(Boolean)
+      .sort()
+      .at(-1) || "";
   const entries = [
     // 主页条目不带 image 扩展：assets/og.jpg 是站点分享卡不是馆藏作品，
     // 喂给图片搜索反而会把「展厅一角」当成一件作品。
-    { loc: siteUrl, changefreq: "weekly", priority: "1.0" },
+    { loc: siteUrl, lastmod: latestDate, changefreq: "weekly", priority: "1.0" },
     ...photos.map((photo, index) => ({
       loc: absoluteUrl(`p/${slugs[index]}/`, siteUrl),
       lastmod: photo.date || "",

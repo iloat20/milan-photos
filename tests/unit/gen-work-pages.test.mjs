@@ -261,6 +261,25 @@ test("buildWorkPages：页数与 manifest 同序，首尾 pager 不绕环", () =
   assert.ok(sitemap.includes("<loc>https://iloat20.github.io/milan-photos/p/03-third/</loc>"));
 });
 
+test("buildWorkPages：主页 lastmod = 馆藏最新日期（内容更新的代理量）", () => {
+  const { sitemap } = buildWorkPages({ manifest: syntheticManifest() });
+  const first = /<url>\s*([\s\S]*?)<\/url>/.exec(sitemap);
+  assert.ok(first, "sitemap 首个 <url> 块应是主页条目");
+  assert.ok(first[1].includes("<loc>https://iloat20.github.io/milan-photos/</loc>"));
+  assert.ok(
+    first[1].includes("<lastmod>2026-03-03</lastmod>"),
+    "主页 lastmod 应取全部 photo.date 的最大值（新作上墙 = 主页有更新）"
+  );
+  // 主页 1 条 + date 同为 2026-03-03 的逐图条目 1 条：值一致但来源不同，不得多写
+  assert.equal((sitemap.match(/<lastmod>2026-03-03<\/lastmod>/g) || []).length, 2);
+
+  // 日期全缺时省略该字段（只写真值）；绝不回落到构建时间（每次构建都变，无信息量）
+  const bare = buildWorkPages({
+    manifest: { photos: [{ file: "a.jpg", title: "a", src: "photos/a.jpg" }] },
+  }).sitemap;
+  assert.ok(!bare.includes("<lastmod>"), "无日期时不得写空 lastmod");
+});
+
 test("buildWorkPages：prev/next 链是一条无环的完整路径", () => {
   const { pages } = buildWorkPages({ manifest: syntheticManifest() });
   const nextOf = new Map();

@@ -1254,6 +1254,91 @@ test.describe("画廊冒烟", () => {
     expect(await heroBgWith("dark", "light")).toContain("oklab");
   });
 
+  test("theme-color 跟随手动主题（override meta 压过系统媒体查询）", async ({ browser }) => {
+    // 两条 media 版 theme-color 只认系统偏好；「系统亮 + 手动切暗」时地址栏/状态栏
+    // 会一直停在 #ffffff。浏览器取**树序第一条匹配**的 theme-color，故修复是把
+    // 手动主题的 override meta 插到两条 media 版之前（解析期脚本与切换按钮两处同步）。
+    // 判定直接照浏览器的取值规则取，而不是数 meta 条数（条数对而顺序错同样失效）。
+    const ctx = await browser.newContext({
+      colorScheme: "light",
+      viewport: { width: 1280, height: 900 },
+    });
+    const p = await ctx.newPage();
+    const active = () =>
+      p.evaluate(() => {
+        const metas = [...document.querySelectorAll('meta[name="theme-color"]')];
+        const m = metas.find((x) => !x.media || matchMedia(x.media).matches);
+        return m ? m.content : null;
+      });
+
+    await p.goto("/");
+    await expect(p.locator(".card")).toHaveCount(18);
+    expect(await active(), "未手动选过 → 系统亮色 meta 应生效").toBe("#ffffff");
+
+    await p.locator("#themeToggle").click();
+    await expect(p.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(await active(), "手动暗色后主题色必须同步变暗").toBe("#000000");
+
+    await p.locator("#themeToggle").click();
+    await expect(p.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(await active()).toBe("#ffffff");
+    await ctx.close();
+  });
+
+  test("theme-color 的解析期路径：存了手动主题时不等 app.js 即生效", async ({ browser }) => {
+    // 与「主题初值不依赖 app.js」同族：override meta 必须由解析期脚本落定，
+    // 否则「系统暗 + 手动亮」的用户会先看到暗色地址栏再翻白。不点任何东西 ——
+    // 本页唯一可能的写入者就是那 4 行解析期脚本（切换按钮没被触发）。
+    const ctx = await browser.newContext({
+      colorScheme: "dark",
+      viewport: { width: 1280, height: 900 },
+    });
+    await ctx.addInitScript(() => localStorage.setItem("milan-theme", "light"));
+    const p = await ctx.newPage();
+    await p.goto("/");
+    expect(
+      await p.evaluate(() => {
+        const metas = [...document.querySelectorAll('meta[name="theme-color"]')];
+        const m = metas.find((x) => !x.media || matchMedia(x.media).matches);
+        return m ? m.content : null;
+      }),
+      "存 light + 系统 dark → 首帧 theme-color 必须已是亮色"
+    ).toBe("#ffffff");
+    await ctx.close();
+  });
+
+  test("禁用 JavaScript：骨架屏不空转、noscript 文案给出说明（样式走 CSP hash）", async ({
+    browser,
+  }) => {
+    // 无 JS 时骨架屏等不到 app.js 置 [hidden]，会永远闪烁；noscript 里的样式块负责
+    // 藏掉它（与轮播的死控件），并给出一句说明。样式块受 style-src 管控 ——
+    // hash 由构建期 csp.mjs 计算，漏算即被拦下、下面的 display 断言会红。
+    // javaScriptEnabled:false 只拦页面脚本；locator / evaluate（走 CDP）照常可用。
+    const ctx = await browser.newContext({
+      javaScriptEnabled: false,
+      viewport: { width: 1280, height: 900 },
+    });
+    const p = await ctx.newPage();
+    await p.goto("/");
+
+    // 前置：页面脚本真的没跑（否则后面的「隐藏」可能来自 app.js 的正常收尾，空洞通过）
+    expect(
+      await p.evaluate(() => document.querySelectorAll(".card").length),
+      "app.js 不得执行"
+    ).toBe(0);
+
+    await expect(p.locator("noscript .empty-text")).toBeVisible();
+    const displays = await p.evaluate(() => ({
+      skeleton: getComputedStyle(document.getElementById("gallerySkeleton")).display,
+      prevArrow: getComputedStyle(document.getElementById("heroPrev")).display,
+      controls: getComputedStyle(document.querySelector(".hero-carousel-controls")).display,
+    }));
+    expect(displays.skeleton, "无 JS 时骨架屏必须退场（否则永远闪）").toBe("none");
+    expect(displays.prevArrow, "无 JS 时轮播箭头不得留下死控件").toBe("none");
+    expect(displays.controls).toBe("none");
+    await ctx.close();
+  });
+
   test("库房设置面板走 popover：点开、原生 Esc 关、关闭即不可见", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
@@ -1971,29 +2056,42 @@ test.describe("画廊冒烟", () => {
     ]) {
       expect(csp, `CSP 缺少指令：${directive}`).toContain(directive);
     }
-    // 不得预置逃生阀：本站无 markup 内联样式、无 <style> 注入（样式写入全走 CSSOM）
+    // 不得预置逃生阀：no-JS 兜底的那一处 <style>（noscript 内）走 style-src 的
+    // hash 放行，而不是开 unsafe-inline
     expect(csp).not.toContain("unsafe-inline");
     expect(csp).not.toContain("unsafe-eval");
 
-    /* hash 双向自洽：声明的每个 hash 都能在页面某段内联脚本上验证通过（无悬空 hash），
-       每段内联脚本也都被声明（无漏算）。CRLF→LF 归一是按 HTML 解析器的算法来的。
+    /* hash 双向自洽（script-src 对脚本、style-src 对样式分开比对）：声明的每个 hash
+       都能在页面找到对应内容（无悬空），每段内容也都被声明（无漏算）。CRLF→LF 归一是
+       按 HTML 解析器的算法来的。
        ⚠️ 本条**不能**证明 hash 会被浏览器接受——它与构建脚本用的是同一条归一规则，
-       两边一起错就一起通过。真正的地面真值是下面那条运行时零违规用例。 */
-    const declared = (csp.match(/'(sha256-[A-Za-z0-9+/=]+)'/g) || [])
-      .map((s) => s.slice(1, -1))
+       两边一起错就一起通过。地面真值在别处：脚本侧是「CSP 运行时零违规」用例，
+       样式侧是「禁用 JavaScript」用例（hash 真被拦下时骨架屏不会退到 display:none）。 */
+    const strip = (s) => s.replace(/<!--[\s\S]*?-->/g, ""); // 与 csp.mjs 同规则：注释不是元素
+    const hashOf = (text) =>
+      "sha256-" +
+      createHash("sha256")
+        .update(text.replace(/\r\n?/g, "\n"))
+        .digest("base64");
+    const declaredOf = (directive) => {
+      const m = new RegExp(`${directive} ([^;]+)`).exec(csp);
+      return (m ? m[1].match(/'(sha256-[A-Za-z0-9+/=]+)'/g) || [] : [])
+        .map((s) => s.slice(1, -1))
+        .sort();
+    };
+    const scanned = strip(html);
+    const scripts = [...scanned.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+      .map((m) => hashOf(m[1]))
       .sort();
-    const actual = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
-      .map(
-        (m) =>
-          "sha256-" +
-          createHash("sha256")
-            .update(m[1].replace(/\r\n?/g, "\n"))
-            .digest("base64")
-      )
+    // JSON-LD + 主题初值 + 清单预取，三段；少一段说明锚点漂了
+    expect(scripts).toHaveLength(3);
+    expect(declaredOf("script-src")).toEqual(scripts);
+    const styles = [...scanned.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)]
+      .map((m) => hashOf(m[1]))
       .sort();
-    // JSON-LD + 主题初值 + LCP 预载，三段；少一段说明锚点漂了
-    expect(actual).toHaveLength(3);
-    expect(declared).toEqual(actual);
+    // 全页唯一内联样式 = noscript 的 no-JS 兜底块；它在则需被放行，不在则该指令不带 hash
+    expect(styles, "noscript 兜底样式块缺失（style-src 的 hash 将无对照）").toHaveLength(1);
+    expect(declaredOf("style-src")).toEqual(styles);
   });
 
   test("SW 缓存版本 = 构建期内容指纹，与四件套独立重算一致", async ({ request }) => {
@@ -2225,6 +2323,18 @@ test.describe("逐图展签页", () => {
     // S-3 图片扩展：每件作品恰好一条 image:loc，全指派生图且逐条可达 ——
     // 图片搜索直接从 sitemap 取图，这里死了等于该入口整个失效。
     const xml = await res.text();
+
+    // 主页条目的 lastmod = 馆藏最新创作日期，与 manifest 真数据对拍：不得是构建时间
+    //（每次构建都变，会稀释 lastmod 的信任），也不得是空标签（Google 会当噪声）
+    const latest = photos
+      .map((p) => p.date)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+    const homeBlock = /<url>\s*([\s\S]*?)<\/url>/.exec(xml);
+    expect(homeBlock, "sitemap 首个 <url> 块应是主页条目").not.toBeNull();
+    expect(homeBlock[1]).toContain(`<lastmod>${latest}</lastmod>`);
+
     const imageLocs = [...xml.matchAll(/<image:loc>([^<]+)<\/image:loc>/g)].map((m) => m[1]);
     expect(imageLocs.length, "每件作品一条 image:loc").toBe(photos.length);
     expect((xml.match(/xmlns:image=/g) || []).length, "图片命名空间恰好一次").toBe(1);

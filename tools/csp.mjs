@@ -14,11 +14,24 @@
  */
 import crypto from "node:crypto";
 
+/** 剔除 HTML 注释后再扫描：注释里的 `<style>` / `<script>` 字样不是元素，浏览器
+ *  把它们当注释文本，正则却会把它们当真。本仓踩过：no-JS 兜底注释里写了 `<style>`
+ *  字面量，style 的 hash 被算成「注释 + 样式」的混合体 → CSP 拦下样式，而有 JS 时
+ *  页面完全正常（只有「禁用 JavaScript」那条地面真值用例能抓住）。
+ *  边界：脚本**内容里**合法的 `<!-- … -->` 序列也会被一并削掉 —— 本站唯一的 JSON
+ *  数据块（JSON-LD）按生成器纪律把 `<` 全部转义为 `\u003c`，其余内联脚本是固定文本，
+ *  故不会误伤；将来若内联脚本要内嵌 `<!--`，须先回来改掉这条。 */
+const stripComments = (html) => String(html ?? "").replace(/<!--[\s\S]*?-->/g, "");
+
 /** 抓 `<script>` 且**无 src** 的那些（`<script src=…>` 不是内联，不需要 hash）。
  *  注意这也会抓到 `type="application/ld+json"` 这类数据块：CSP 到底管不管它由
  *  浏览器实现决定，写进 hash **多写无害**（只是允许了一个不存在的需求），
  *  漏写则可能被拦 —— 故一律算进去。 */
 const INLINE_SCRIPT_RE = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+/** 内联 `<style>`：本站只允许一处出现在 `<noscript>` 里（无 JS 兜底，见 index.html）。
+ *  有 JS 时 noscript 内容按纯文本解析、根本不产生 style 元素；无 JS 时它是
+ *  **唯一**能让骨架屏退场的样式 —— 被拦即没有第二条路，故与脚本同套 hash 机制。 */
+const INLINE_STYLE_RE = /<style[^>]*>([\s\S]*?)<\/style>/gi;
 const CHARSET_RE = /<meta\s+charset=["']?[^>]*>/i;
 
 /**
@@ -30,7 +43,24 @@ const CHARSET_RE = /<meta\s+charset=["']?[^>]*>/i;
  * （脚本文本处于 HTML 的 "script data" 状态，不做字符引用解码，故无需处理实体。）
  */
 export function inlineScriptHashes(html) {
-  return Array.from(String(html ?? "").matchAll(INLINE_SCRIPT_RE), (m) => {
+  return Array.from(stripComments(html).matchAll(INLINE_SCRIPT_RE), (m) => {
+    const text = m[1];
+    return {
+      text,
+      hash:
+        "sha256-" +
+        crypto
+          .createHash("sha256")
+          .update(text.replace(/\r\n?/g, "\n"))
+          .digest("base64"),
+    };
+  });
+}
+
+/** 内联样式块与 `inlineScriptHashes` 同一套规则（含注释剔除与 CRLF 归一的因由）。
+ *  `<style>` 的文本同样处于 RAWTEXT 状态：不做字符引用解码。 */
+export function inlineStyleHashes(html) {
+  return Array.from(stripComments(html).matchAll(INLINE_STYLE_RE), (m) => {
     const text = m[1];
     return {
       text,
@@ -50,23 +80,25 @@ export function inlineScriptHashes(html) {
  * 只能用 `<meta>` 形式：GitHub Pages 不能下发响应头，故 `frame-ancestors` /
  * `report-uri` / `sandbox` 与 Report-Only 一概不可用。
  *
- * 不预置逃生阀：不写 `'unsafe-inline'` / `'unsafe-eval'`。本站无 markup 内联样式、
- * 无 `<style>` 注入（样式写入全走 CSSOM，不受 style-src 管控），故 `style-src`
- * 也不必放开。唯一必须放行的跨源目标是 GitHub REST API（库房「同步馆藏数据到 GitHub」）。
+ * 不预置逃生阀：不写 `'unsafe-inline'` / `'unsafe-eval'`。样式写入全走 CSSOM
+ * （不受 style-src 管控），唯一的 markup 内联样式是主页 `<noscript>` 里的
+ * no-JS 兜底块 —— 它由 `styleHashes` 逐块放行，而非开 `'unsafe-inline'`。
+ * 唯一必须放行的跨源目标是 GitHub REST API（库房「同步馆藏数据到 GitHub」）。
  *
  * 逐图页其实用不到 `connect-src` 的 github、`worker-src` 与 `manifest-src`
- * （它不注册 SW、无 webmanifest），但**刻意保持与主页同一套**：两套会漂移，
- * 而漂移的那一侧不会有任何报错。
+ * （它不注册 SW、无 webmanifest），也**没有** `<noscript>` 兜底（页面本就无 JS 依赖），
+ * 但指令集合刻意保持与主页同一套：两套会漂移，而漂移的那一侧不会有任何报错。
  */
-export function buildCsp(hashes) {
+export function buildCsp(hashes, styleHashes = []) {
   const list = Array.isArray(hashes) ? hashes.filter(Boolean) : [];
   if (!list.length) {
     throw new Error("csp: 没有内联脚本 hash，拒绝生成 script-src");
   }
+  const styles = Array.isArray(styleHashes) ? styleHashes.filter(Boolean) : [];
   return [
     "default-src 'self'",
     ["script-src 'self'", ...list.map((h) => `'${h}'`)].join(" "),
-    "style-src 'self'",
+    ["style-src 'self'", ...styles.map((h) => `'${h}'`)].join(" "),
     "img-src 'self'",
     "connect-src 'self' https://api.github.com",
     "worker-src 'self'", // sw.js
@@ -96,8 +128,9 @@ export function injectCspMeta(html, csp) {
   return source.replace(CHARSET_RE, (m) => `${m}\n  ${meta}`);
 }
 
-/** 一步到位：解析内联脚本 → 生成指令 → 插入 meta。返回带 CSP 的 HTML。 */
+/** 一步到位：解析内联脚本与样式 → 生成指令 → 插入 meta。返回带 CSP 的 HTML。 */
 export function withCsp(html) {
   const hashes = inlineScriptHashes(html).map((s) => s.hash);
-  return injectCspMeta(html, buildCsp(hashes));
+  const styleHashes = inlineStyleHashes(html).map((s) => s.hash);
+  return injectCspMeta(html, buildCsp(hashes, styleHashes));
 }

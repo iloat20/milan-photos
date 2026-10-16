@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="description" content="米兰美术馆 · 摄影作品陈列：重点陈列轮播、展厅索引与观画室。" />
-  <!-- 跟随系统外观：亮/暗两套主题各自声明主题色，地址栏/状态栏与页面同底 -->
+  <!-- 跟随系统外观：亮/暗两套主题各自声明主题色，地址栏/状态栏与页面同底。
+       手动主题存有偏好时由下方解析期脚本补一条无 media 的 override —— 浏览器取
+       theme-color 的规则是**树序第一条匹配**，那一条必须排在这两条之前。 -->
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
   <meta name="color-scheme" content="light dark" />
@@ -12,13 +14,24 @@
        属性选择器，等到 app.js（type=module，默认 defer）执行时才设，首帧就会先按**系统**
        外观绘制 —— 实测线上（存 dark + 系统 light）在 t=1173/1208ms 出现两帧白底（~57ms），
        慢设备/慢网下会退化成内容级闪烁。这里只读不写，手动切换仍由 app.js 的 toggle 负责。
-       try/catch 不可省：Safari 隐私模式 / 禁用 cookie 时 localStorage.getItem 直接抛异常，
-       不兜会连坐整段脚本（该脚本同时还负责主题以外的解析期工作则更严重）。
+       手动主题还要同步 theme-color：上面两条 media 版只认系统偏好，「系统亮 + 手动暗」时
+       地址栏会一直亮着。override 插在它们**之前**并带 data-milan-theme-color 标记，
+       app.js 的切换按钮按同一标记更新同一条（色值字面量仅此脚本 + 那两条 meta 共四份，
+       没有第五处来源）。try/catch 不可省：Safari 隐私模式 / 禁用 cookie 时
+       localStorage.getItem 直接抛异常，不兜会连坐整段脚本（该脚本同时还负责主题以外的
+       解析期工作则更严重）。
        本脚本受产物 CSP 的 script-src hash 管控，内容一改就必须重新构建（构建期算 hash）。 -->
   <script>
     try {
       var t = localStorage.getItem("milan-theme");
-      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      if (t === "light" || t === "dark") {
+        document.documentElement.dataset.theme = t;
+        var tc = document.createElement("meta");
+        tc.name = "theme-color";
+        tc.content = t === "light" ? "#ffffff" : "#000000";
+        tc.setAttribute("data-milan-theme-color", "");
+        document.head.insertBefore(tc, document.querySelector('meta[name="theme-color"]'));
+      }
     } catch {}
   </script>
   <link rel="canonical" href="https://iloat20.github.io/milan-photos/" />
@@ -206,6 +219,23 @@
       <div class="gallery-skeleton" id="gallerySkeleton" aria-hidden="true">
         <span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
+      <!-- 禁用 JavaScript 的兜底：骨架屏的 [hidden] 永远等不到 app.js 来置位（会一直
+           闪烁），序厅的箭头/控制条也是死控件 —— 这条 <style> 把它们隐去并给出说明。
+           <style> 受 style-src 管控：hash 由构建期 tools/csp.mjs 计算（no-JS 访客没有
+           脚本环境，这条样式被拦下就**没有第二条路**了），改内容必须重新构建。
+           有 JS 时 noscript 内容按纯文本解析、不产生任何节点，对本页零影响。 -->
+      <noscript>
+        <style>
+          .gallery-skeleton,
+          .hero-carousel-arrow,
+          .hero-carousel-controls {
+            display: none;
+          }
+        </style>
+        <div class="empty">
+          <p class="empty-text">展厅的布置需要 JavaScript；启用后重新打开本页即可观展。</p>
+        </div>
+      </noscript>
       <div class="gallery" id="galleryGrid"></div>
       <!-- 空状态（F-9）：#empty 默认 hidden，文案与重试入口的显隐全部由 app.js 的
            updateEmptyState() 决定（唯一出口）；两句文案的**单一来源**是 src/util.js 的

@@ -141,8 +141,9 @@ function finalizePlugin() {
       if (!count) {
         throw new Error("csp-meta: dist/index.html 里找不到内联脚本，hash 无从计算");
       }
+      const styleCount = csp.inlineStyleHashes(html).length;
       fs.writeFileSync(htmlPath, csp.withCsp(html), "utf8");
-      console.log(`csp-meta: 注入 ${count} 个内联脚本 hash`);
+      console.log(`csp-meta: 注入 ${count} 个内联脚本 hash、${styleCount} 个内联样式 hash`);
 
       // ── ② SW 缓存版本号 ────────────────────────────────────────
       const swv = await load("sw-version.mjs");

@@ -82,14 +82,15 @@ function isManifest(url) {
 }
 
 function isShellRequest(url) {
+  // 曾把 /milan、/milan-photos（serve.py 时代的站点根）当壳层路径列为分支：
+  // 现在导航请求由 fetch 里的 `mode === "navigate"` 分支先接走（Network First），
+  // 且 base="./" 下所有壳层子资源都带扩展名 —— 那两个分支再无人走，已删。
   const path = url.pathname.replace(/\/+$/, "") || "/";
   return (
     path.endsWith("/styles.css") ||
     path.endsWith("/app.js") ||
     path.endsWith("/index.html") ||
-    path.endsWith("/") ||
-    path.endsWith("/milan") ||
-    path.endsWith("/milan-photos")
+    path.endsWith("/")
   );
 }
 

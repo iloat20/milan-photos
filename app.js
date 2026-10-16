@@ -1956,6 +1956,21 @@ import { createInstallPrompt } from "./src/install.js";
      而回归网（smoke.spec.js 的 CSP 零违规 + 主题不依赖 app.js 两个用例）正是要抓它。
      手动切换的**写入**仍在这里，与内联脚本无重叠。 */
   const THEME_KEY = "milan-theme";
+
+  /* 手动主题的 theme-color 同步（与 index.html 解析期脚本同一标记、同一色值、同一条
+     「插在两条 media 版之前」的规则）：不压过去的话，media 版只认系统偏好，
+     「系统亮 + 手动暗」时地址栏/状态栏会一直亮着。解析期已建过则这里只改 content。 */
+  function syncThemeColorMeta(theme) {
+    let meta = document.querySelector('meta[name="theme-color"][data-milan-theme-color]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      meta.setAttribute("data-milan-theme-color", "");
+      document.head.insertBefore(meta, document.querySelector('meta[name="theme-color"]'));
+    }
+    meta.content = theme === "dark" ? "#000000" : "#ffffff";
+  }
+
   const themeToggle = document.getElementById("themeToggle");
   if (themeToggle) {
     themeToggle.addEventListener("click", () => {
@@ -1968,6 +1983,7 @@ import { createInstallPrompt } from "./src/install.js";
       const next = current === "light" ? "dark" : "light";
       document.documentElement.dataset.theme = next;
       localStorage.setItem(THEME_KEY, next);
+      syncThemeColorMeta(next);
     });
   }
 })();

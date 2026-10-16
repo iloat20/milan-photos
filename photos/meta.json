@@ -59,42 +59,49 @@
   },
   "IMG20260817155446.jpg": {
     "title": "枝头",
+    "featured": 3,
     "slug": "zhi-tou",
     "caption": "它只停了三次心跳，树就记住了这个重量。",
     "date": "2026-09-22"
   },
   "IMG20260817164045.jpg": {
     "title": "崖边小坐",
+    "featured": 4,
     "slug": "ya-bian-xiao-zuo",
     "caption": "把登山杖立在脚边，云海替他把话说完。",
     "date": "2026-09-22"
   },
   "IMG20260817164949_01.jpg": {
     "title": "光明顶",
+    "featured": 2,
     "slug": "guang-ming-ding",
     "caption": "走完一千级石阶，只为抬手碰一下云。",
     "date": "2026-09-22"
   },
   "IMG20260916193647.jpg": {
     "title": "夜树",
+    "featured": 7,
     "slug": "ye-shu",
     "caption": "光从下面打上来，树把黑夜剪成一地碎影。",
     "date": "2026-09-16"
   },
   "IMG20260916193836.jpg": {
     "title": "檐下",
+    "featured": 6,
     "slug": "yan-xia",
     "caption": "退后两步，才看见灯下面还站着一座房子。",
     "date": "2026-09-16"
   },
   "IMG20260916193852.jpg": {
     "title": "檐上灯",
+    "featured": 5,
     "slug": "yan-shang-deng",
     "caption": "月亮爬得很慢，那盏灯替它先亮着。",
     "date": "2026-09-16"
   },
   "mmexport1788447848472.jpg": {
     "title": "柔光",
+    "featured": 1,
     "slug": "rou-guang",
     "caption": "风从窗缝进来，把光吹散在锁骨上。",
     "date": "2026-09-22"

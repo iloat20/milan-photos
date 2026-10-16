@@ -978,6 +978,14 @@
       transform 0.45s var(--ease);
   }
 
+  /* D-1：低分辨率母版（短边 ≤ 640 的源，如《夜泊》360×360）画心盒宽钳到源宽 ——
+     重点陈列行（is-feature 独占整行、宽至 64vh）下也居中小尺幅呈现，绝不放大发虚。
+     只防放大、不禁缩小：窄于源宽的格走 100%。--card-maxw 由 app.js 按源宽写行内。 */
+  .card-media.is-lowres {
+    max-width: min(100%, var(--card-maxw, 100%));
+    margin-inline: auto;
+  }
+
   /* 环境光：取自画作本身的调色板（manifest 预计算），落在卡片四周。
      只做氛围、不压画心：低透明度 + 大范围径向衰减。 */
   .card-media::before {

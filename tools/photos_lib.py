@@ -480,6 +480,16 @@ def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None)
         # 回退链：手写 meta > 已入馆日期（防 CI/本机 mtime 漂移）> EXIF > mtime
         "date": info.get("date") or (prev_dates or {}).get(name) or photo_date(path),
     }
+    # featured（F-3）：序厅选片的策展排名（正整数、越小越靠前）。出现即校验 ——
+    # 策展笔误在生成端大声红，不静默兜底（与 slug 同哲学）。
+    featured = info.get("featured")
+    if featured is not None:
+        if isinstance(featured, bool) or not isinstance(featured, int) or featured < 1:
+            raise SystemExit(
+                f"meta.json: {name} 的 featured 必须是不小于 1 的整数（越小越靠前），"
+                f"实际为 {featured!r}"
+            )
+        item["featured"] = featured
     if animated:
         item["animated"] = True
     if thumbs.get("1200"):
@@ -554,10 +564,43 @@ def manifest_order_key(item: dict) -> tuple[str, str]:
     return (item.get("date") or "", item.get("file") or "")
 
 
+def check_featured_ranks(items: list[dict]) -> None:
+    """featured 排名须全局唯一（F-3）：重复名意味着先后无从判定，属策展笔误，报错退出。"""
+    seen: dict[int, str] = {}
+    for it in items:
+        rank = it.get("featured")
+        if rank is None:
+            continue
+        name = str(it.get("file"))
+        if rank in seen:
+            raise SystemExit(
+                f"meta.json: featured 排名 {rank} 重复（{seen[rank]} 与 {name}），排名须唯一"
+            )
+        seen[rank] = name
+
+
+def hero_file(items: list[dict]) -> str | None:
+    """序厅首张（= 解析期 preload 的目标）的 file 指针（F-3）：featured 最小者；缺省陈列首张。
+
+    与 src/util.js 的 selectHeroPhotos 是同一条规则的两个实现（python 写指针、JS 做
+    选片），一致性由 tests/unit/util.test.mjs 的「真清单契约」对拍
+    （manifest.hero === selectHeroPhotos(photos)[0].file）；任一侧漂移即红。
+    """
+    if not items:
+        return None
+    ranked = [it for it in items if isinstance(it.get("featured"), int)]
+    if not ranked:
+        return items[0].get("file")
+    pick = min(ranked, key=lambda it: it["featured"])  # 平级取先出现者（= 陈列序靠前）
+    name = pick.get("file")
+    return name if isinstance(name, str) else None
+
+
 def build_photos() -> list[dict]:
     meta = load_meta()
     prev_dates = load_prev_dates()
     items = [photo_item(p, meta, prev_dates) for p in list_photo_files()]
     # 显式排序：顺序是策展结果，必须环境无关（见 manifest_order_key）
     items.sort(key=manifest_order_key, reverse=True)
+    check_featured_ranks(items)
     return items

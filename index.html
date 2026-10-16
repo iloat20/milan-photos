@@ -82,10 +82,12 @@
        实测（4× CPU 节流，移动视口）：清单在 58ms 到手，但 app.js 的解析 + 执行
        要 ~180ms，其内联的 preloadImage 因此把高优先级图推迟到 270ms 才发起。
        内联脚本没法 import src/util.js，所以候选串由 sync 预算进 manifest
-       （heroSrcset / heroAvifSrcset，与 palette 同一范式）：这里只搬运字符串，
-       不重算任何规则。规则仍在 src/util.js 里，只在「清单是旧/降级版」时由
-       app.js 的 preloadImage 兜底（两组值一致由 tests/unit/hero-srcset.test.mjs
-       拿提交的 manifest 逐条钉住；imagesizes 与 HERO_SIZES 同值由同测试钉住）。 */
+       （heroSrcset / heroAvifSrcset，与 palette 同一范式），且首张由 manifest
+       顶层的 hero 指针指名（F-3）——此处只搬运字符串与指针，不重算任何规则。
+       规则仍在 src/util.js 里，只在「清单是旧/降级版」时由 app.js 的
+       preloadImage 兜底；imagesizes 与 HERO_SIZES 同值、hero 指针与
+       selectHeroPhotos 口径一致，分别由 tests/unit/medium-width.test.mjs 与
+       util.test.mjs 的真清单契约钉住。 */
     window.__milanManifest
       /* 必须读**副本**：同一 Response 还要交给 app.js 消费（app.js 复用这个 Promise
          并 res.json()）。这里直接读原件会把 body 消费掉，app.js 随后拿到
@@ -94,7 +96,11 @@
          此处顺序天然安全；回归由 tests/e2e/smoke.spec.js 的「只被消费一次」用例钉住。 */
       .then((res) => (res && res.ok ? res.clone().json() : null))
       .then((data) => {
-        const first = data && (Array.isArray(data) ? data[0] : (data.photos || [])[0]);
+        // 序厅首张（LCP）由 manifest.hero 指针指名（sync 按 meta.json 的 featured
+        // 排名生成，F-3）；旧/缺指针的清单回落陈列首张 —— 与「只搬运、不重算规则」
+        // 的约定一致（口径由 util.test.mjs 的真清单契约对拍）。
+        const list = (data && (Array.isArray(data) ? data : data.photos || [])) || [];
+        const first = list.find((p) => p.file === (data && data.hero)) || list[0];
         const srcset = first && (first.heroAvifSrcset || first.heroSrcset);
         if (!srcset) return; // 旧/降级清单：交给 app.js 兜底
         const link = document.createElement("link");

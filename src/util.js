@@ -215,6 +215,37 @@ export function heroAvifSrcset(photo) {
   return parts.filter(Boolean).join(", ");
 }
 
+/* ── F-3 序厅策展精选 ─────────────────────────────────────────────────── */
+
+/** 序厅轮播的缺省上限（无 featured 时的回落张数；有精选时数量由策展决定） */
+export const HERO_MAX = 8;
+
+/** 序厅选片（F-3）：meta.json 的 featured（唯一正整数，越小越靠前）由 sync 归一进
+ *  manifest。有精选 → 按 rank 升序**全量**返回（数量交给策展，不截断）；无 → 陈列序
+ *  前 max 张（旧行为）。排名重复（手工改过的清单）时 sort 稳定 → 保持陈列序，
+ *  不抛错；python 端在 sync 阶段已对重复排名报错拦截。 */
+export function selectHeroPhotos(photos, max = HERO_MAX) {
+  const list = photos || [];
+  const featured = list.filter((p) => Number.isInteger(p?.featured) && p.featured >= 1);
+  if (featured.length) return featured.sort((a, b) => a.featured - b.featured);
+  return list.slice(0, max);
+}
+
+/* ── D-1 低分辨率母版钳制 ──────────────────────────────────────────────── */
+
+/** 低分辨率母版的判据（短边 px ≤ 此值）：卡片画心不放大超过源宽。
+ *  当前馆藏唯一命中是 360×360 的《夜泊》；640 远小于重点陈列行的放大行程。 */
+export const LOW_RES_MAX_EDGE = 640;
+
+/** 低分辨率母版的画心限宽（D-1）：短边 ≤ LOW_RES_MAX_EDGE 时返回源宽（px），
+ *  否则 0（不钳）。宽高任一未知 → 0：无权判低清，宁可不动。 */
+export function lowResCapWidth(photo) {
+  const w = Number(photo?.width) || 0;
+  const h = Number(photo?.height) || 0;
+  if (!(w > 0) || !(h > 0) || Math.min(w, h) > LOW_RES_MAX_EDGE) return 0;
+  return w;
+}
+
 /** 灯箱用图：动图走原文件保证能播，其余取**最大可用档**
  *  （medium → thumb → src）。原图 `src` 只在派生图全缺时才被触达 ——
  *  这正是 P-1「母版移出产物」的前置：修完后静态作品不再请求 `photos/<name>.<ext>`。 */

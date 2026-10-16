@@ -602,11 +602,11 @@ test.describe("画廊冒烟", () => {
     await expect(page.locator("#lightbox")).toBeVisible();
   });
 
-  test("hero 轮播切换与分页点", async ({ page }) => {
+  test("hero 轮播切换与分页点", async ({ page, request }) => {
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
     const slides = page.locator(".hero-carousel-slide");
-    await expect(slides).toHaveCount(8);
+    await expect(slides).toHaveCount(await expectedHeroCount(request));
     const activeIdx = () =>
       slides.evaluateAll((els) =>
         els.findIndex((el) => el.classList.contains("is-active"))
@@ -621,6 +621,86 @@ test.describe("画廊冒烟", () => {
     await expect.poll(activeIdx, { timeout: 3_000 }).toBe(1);
     await page.locator("#heroPrev").click();
     await expect.poll(activeIdx, { timeout: 3_000 }).toBe(0);
+  });
+
+  /** 序厅精选的期望张数（F-3）：manifest 里 featured 正整数项；无精选回落 8（HERO_MAX）。 */
+  async function expectedHeroCount(request) {
+    const manifest = await (await request.get("/photos/manifest.json")).json();
+    const featured = (manifest.photos || []).filter(
+      (p) => Number.isInteger(p.featured) && p.featured >= 1
+    );
+    return featured.length || 8;
+  }
+
+  test("序厅是策展精选：数量与顺序都跟 meta.json 的 featured（F-3）", async ({ page, request }) => {
+    // featured 是策展源（meta.json）经 sync 归一进 manifest 的排名字段；序厅此前是
+    // photos.slice(0, 8)（陈列序），360×360 的《夜泊》与多张 1024 档作品因此坐进首屏。
+    const manifest = await (await request.get("/photos/manifest.json")).json();
+    const featured = (manifest.photos || [])
+      .filter((p) => Number.isInteger(p.featured) && p.featured >= 1)
+      .sort((a, b) => a.featured - b.featured);
+    expect(featured.length, "策展至少要选 2 张，否则轮播点 / 暂停按钮无意义").toBeGreaterThan(1);
+    // 18/18 均已定名（不触发《无题 · NN》回落），故 alt 即《title》
+    const expectedAlts = featured.map((p) => `《${p.title}》`);
+
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    const slides = page.locator(".hero-carousel-slide");
+    await expect(slides).toHaveCount(featured.length);
+    const alts = await slides.evaluateAll((els) => els.map((el) => el.querySelector("img")?.alt));
+    expect(alts, "序厅逐张顺序须等于 featured 升序").toEqual(expectedAlts);
+  });
+
+  test("序厅预载跟随策展首张（manifest.hero 指针，F-3）", async ({ page, request }) => {
+    // 解析期预载此前锚定 photos[0]；选片改由 featured 决定后，锚点换成 manifest 顶层
+    // 的 hero 指针（sync 生成）——内联脚本只查指针，不重算选片规则。
+    const manifest = await (await request.get("/photos/manifest.json")).json();
+    const heroFile = manifest.hero || manifest.photos[0]?.file;
+    expect(heroFile, "manifest 必须能定位序厅首张").toBeTruthy();
+
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    const readPreload = () =>
+      page.evaluate(() => {
+        const l = [...document.querySelectorAll('link[rel="preload"][as="image"]')].find((x) =>
+          x.getAttribute("imagesrcset")
+        );
+        return l
+          ? `${l.getAttribute("href") || ""} ${l.getAttribute("imagesrcset") || ""}`
+          : null;
+      });
+    await expect.poll(readPreload, { timeout: 5_000 }).not.toBeNull();
+    const stem = heroFile.replace(/\.[^.]+$/, "");
+    expect(await readPreload(), "预载目标不是策展首张").toContain(stem);
+  });
+
+  test("低分辨率母版：《夜泊》360×360 的画心不放大超出源宽（D-1）", async ({ page }) => {
+    // 常态格宽（约 170–330px）小于源宽 360，明面症状只在「重点陈列」行（is-feature
+    // 独占整行、宽至 64vh）或未来版式变化里出现 —— 短边 ≤640 的条目画心盒宽钳到
+    // 源宽（.card-media.is-lowres + --card-maxw），只防放大、不禁缩小。
+    // 这里把「重点陈列」这一行状态在 DOM 上重现后再量（与 renderGallery 的装配同形）。
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+
+    const m = await page.evaluate(() => {
+      const mediaOf = (alt) =>
+        document.querySelector(`.card img[alt="${alt}"]`)?.closest(".card-media");
+      const media = mediaOf("《夜泊》");
+      const card = media?.closest(".card");
+      const before = media?.getBoundingClientRect().width ?? -1;
+      const capw = media ? getComputedStyle(media).getPropertyValue("--card-maxw").trim() : "";
+      const hasClass = media?.classList.contains("is-lowres") ?? false;
+      const rouLow = mediaOf("《柔光》")?.classList.contains("is-lowres") ?? null;
+      card?.classList.add("is-feature");
+      const featured = media?.getBoundingClientRect().width ?? -1;
+      return { before, featured, hasClass, capw, rouLow };
+    });
+    expect(m.hasClass, "低分辨率卡应挂 .is-lowres").toBe(true);
+    expect(m.capw).toBe("360px");
+    expect(m.rouLow, "高清卡不得误挂 is-lowres").toBe(false);
+    expect(m.before, "常态格宽下也不超源宽").toBeLessThanOrEqual(361);
+    expect(m.featured, "重点陈列行里画心仍不得超源宽").toBeLessThanOrEqual(361);
+    expect(m.featured, "须确实处于「宽行」状态，断言才不是空架子").toBeGreaterThan(300);
   });
 
   test("Service Worker 激活只清理本站旧缓存", async ({ page }) => {
@@ -1226,13 +1306,16 @@ test.describe("画廊冒烟", () => {
     await expect(page.locator(".card")).toHaveCount(18);
 
     const arts = page.locator(".hero-art");
-    await expect(arts).toHaveCount(8);
+    // 张数由策展（meta.json featured）决定，F-3 起不再是写死的 8 —— 精确张数由
+    // 「序厅是策展精选」用例对 manifest 钉住，这里只需要「存在非活动画面」可测。
+    const heroCount = await arts.count();
+    expect(heroCount).toBeGreaterThan(1);
 
-    // 8 张 slide 叠放在同一位置：只有活动那张能进 Tab 序列 / 无障碍树。
+    // 多张 slide 叠放在同一位置：只有活动那张能进 Tab 序列 / 无障碍树。
     // 用 <button> 承载画作后，opacity:0 + pointer-events:none 已挡不住键盘，
     // 必须靠活动态切换 visibility。
     await expect(arts.nth(0)).toBeVisible();
-    for (let i = 1; i < 8; i += 1) {
+    for (let i = 1; i < heroCount; i += 1) {
       await expect(arts.nth(i)).toBeHidden();
     }
 
@@ -1244,7 +1327,7 @@ test.describe("画廊冒烟", () => {
     await page.locator("#close").click();
     await expect(page.locator("#lightbox")).toBeHidden();
 
-    // 再 Tab 一步：不得落到任何 .hero-art（那 7 张不可见的都必须被跳过）
+    // 再 Tab 一步：不得落到任何 .hero-art（非活动画面都必须被跳过）
     await arts.first().focus();
     await page.keyboard.press("Tab");
     const landedOnArt = await page.evaluate(
@@ -1668,7 +1751,8 @@ test.describe("画廊冒烟", () => {
       await page.goto("/");
       await expect(page.locator(".card")).toHaveCount(18);
 
-      // 序厅 8 张全是 2026-09，筛到 2026年8月 必然进入「筛选不含该画」那条路径
+      // 序厅精选全部落在 2026-09（当前策展），筛到 2026年8月 必然进入「筛选不含该画」
+      // 那条路径；若未来策展把 8 月的画选进序厅，本用例需换一个「不含活动画面」的筛选月
       await page.locator("#filterBar button", { hasText: "2026年8月" }).click();
       await expect(page.locator(".card")).toHaveCount(2);
 
@@ -1677,11 +1761,11 @@ test.describe("画廊冒烟", () => {
       expect(src.inGallery).toBe(false);
     });
 
-    test("灯箱会话期间序厅停止自动轮播，关闭后恢复", async ({ page }) => {
+    test("灯箱会话期间序厅停止自动轮播，关闭后恢复", async ({ page, request }) => {
       // 关灯箱时要缩回「用户点的那幅序厅画面」，轮播若在模态框背后继续转，
       // 被点的 slide 会变成 opacity:0 / visibility:hidden，配对到隐形状比不配对更糟。
       await page.goto("/");
-      await expect(page.locator(".hero-carousel-slide")).toHaveCount(8);
+      await expect(page.locator(".hero-carousel-slide")).toHaveCount(await expectedHeroCount(request));
       const activeIndex = () =>
         page.evaluate(() =>
           [...document.querySelectorAll(".hero-carousel-slide")].findIndex((s) =>

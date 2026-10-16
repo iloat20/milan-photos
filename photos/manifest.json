@@ -7,6 +7,7 @@
       "title": "柔光",
       "caption": "风从窗缝进来，把光吹散在锁骨上。",
       "date": "2026-09-22",
+      "featured": 1,
       "thumb": "photos/thumbs/mmexport1788447848472.webp",
       "thumbSrcset": "photos/thumbs/mmexport1788447848472-400.webp 300w, photos/thumbs/mmexport1788447848472-800.webp 600w, photos/thumbs/mmexport1788447848472.webp 900w",
       "thumbAvifSrcset": "photos/thumbs/mmexport1788447848472-400.avif 300w, photos/thumbs/mmexport1788447848472-800.avif 600w, photos/thumbs/mmexport1788447848472.avif 900w",
@@ -32,6 +33,7 @@
       "title": "光明顶",
       "caption": "走完一千级石阶，只为抬手碰一下云。",
       "date": "2026-09-22",
+      "featured": 2,
       "thumb": "photos/thumbs/IMG20260817164949_01.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817164949_01-400.webp 300w, photos/thumbs/IMG20260817164949_01-800.webp 600w, photos/thumbs/IMG20260817164949_01.webp 900w",
       "thumbAvifSrcset": "photos/thumbs/IMG20260817164949_01-400.avif 300w, photos/thumbs/IMG20260817164949_01-800.avif 600w, photos/thumbs/IMG20260817164949_01.avif 900w",
@@ -57,6 +59,7 @@
       "title": "崖边小坐",
       "caption": "把登山杖立在脚边，云海替他把话说完。",
       "date": "2026-09-22",
+      "featured": 4,
       "thumb": "photos/thumbs/IMG20260817164045.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817164045-400.webp 300w, photos/thumbs/IMG20260817164045-800.webp 600w, photos/thumbs/IMG20260817164045.webp 900w",
       "thumbAvifSrcset": "photos/thumbs/IMG20260817164045-400.avif 300w, photos/thumbs/IMG20260817164045-800.avif 600w, photos/thumbs/IMG20260817164045.avif 900w",
@@ -82,6 +85,7 @@
       "title": "枝头",
       "caption": "它只停了三次心跳，树就记住了这个重量。",
       "date": "2026-09-22",
+      "featured": 3,
       "thumb": "photos/thumbs/IMG20260817155446.webp",
       "thumbSrcset": "photos/thumbs/IMG20260817155446-400.webp 300w, photos/thumbs/IMG20260817155446-800.webp 600w, photos/thumbs/IMG20260817155446.webp 900w",
       "thumbAvifSrcset": "photos/thumbs/IMG20260817155446-400.avif 300w, photos/thumbs/IMG20260817155446-800.avif 600w, photos/thumbs/IMG20260817155446.avif 900w",
@@ -296,6 +300,7 @@
       "title": "檐上灯",
       "caption": "月亮爬得很慢，那盏灯替它先亮着。",
       "date": "2026-09-16",
+      "featured": 5,
       "thumb": "photos/thumbs/IMG20260916193852.webp",
       "thumbSrcset": "photos/thumbs/IMG20260916193852-400.webp 400w, photos/thumbs/IMG20260916193852-800.webp 800w, photos/thumbs/IMG20260916193852.webp 1200w",
       "thumbAvifSrcset": "photos/thumbs/IMG20260916193852-400.avif 400w, photos/thumbs/IMG20260916193852-800.avif 800w, photos/thumbs/IMG20260916193852.avif 1200w",
@@ -321,6 +326,7 @@
       "title": "檐下",
       "caption": "退后两步，才看见灯下面还站着一座房子。",
       "date": "2026-09-16",
+      "featured": 6,
       "thumb": "photos/thumbs/IMG20260916193836.webp",
       "thumbSrcset": "photos/thumbs/IMG20260916193836-400.webp 400w, photos/thumbs/IMG20260916193836-800.webp 800w, photos/thumbs/IMG20260916193836.webp 1200w",
       "thumbAvifSrcset": "photos/thumbs/IMG20260916193836-400.avif 400w, photos/thumbs/IMG20260916193836-800.avif 800w, photos/thumbs/IMG20260916193836.avif 1200w",
@@ -346,6 +352,7 @@
       "title": "夜树",
       "caption": "光从下面打上来，树把黑夜剪成一地碎影。",
       "date": "2026-09-16",
+      "featured": 7,
       "thumb": "photos/thumbs/IMG20260916193647.webp",
       "thumbSrcset": "photos/thumbs/IMG20260916193647-400.webp 300w, photos/thumbs/IMG20260916193647-800.webp 600w, photos/thumbs/IMG20260916193647.webp 900w",
       "thumbAvifSrcset": "photos/thumbs/IMG20260916193647-400.avif 300w, photos/thumbs/IMG20260916193647-800.avif 600w, photos/thumbs/IMG20260916193647.avif 900w",
@@ -414,5 +421,6 @@
         "accent": "rgba(74, 101, 124, 0.75)"
       }
     }
-  ]
+  ],
+  "hero": "mmexport1788447848472.jpg"
 }

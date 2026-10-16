@@ -6,7 +6,7 @@
  * 这也是 P2-2 拆分的第一份收益：这些函数此前埋在 app.js 的 IIFE 里，
  * 任何一行改动都只能靠 e2e 冒烟间接观察。
  *
- * 唯一读取真实文件的是末尾那条「真清单契约」—— 灯箱取图链路必须对**真实 18 件**
+ * 唯一读取真实文件的是末尾那几组「真清单契约」—— 灯箱取图链路必须对**真实 18 件**
  * 成立，纯函数自身的用例（含空值）覆盖不到「真实数据里到底有没有落到原图」。
  *
  * 注意：本文件是 .mjs（强制 ESM），而 src/util.js 的 ESM 身份由
@@ -39,6 +39,10 @@ import {
   stripExt,
   safeFileName,
   heroSrc,
+  selectHeroPhotos,
+  HERO_MAX,
+  lowResCapWidth,
+  LOW_RES_MAX_EDGE,
   largestSrcsetUrl,
   largestStill,
   largestAvif,
@@ -547,4 +551,69 @@ test("shareUrlFor：无 slug（浏览器内上传的自定义图）回落站内�
 test("shareUrlFor：两者皆缺时回落站点根，不产生 undefined 字样", () => {
   assert.equal(shareUrlFor({}, "https://e.com/milan-photos/#p=t"), "https://e.com/milan-photos/");
   assert.equal(shareUrlFor(null, "https://e.com/"), "https://e.com/");
+});
+
+/* ───────────── F-3 序厅策展精选（featured → 序厅） ───────────── */
+
+test("selectHeroPhotos：featured 正整数定序；无精选回落陈列序前 HERO_MAX 张", () => {
+  const p = (id, featured) => (featured === undefined ? { id } : { id, featured });
+
+  // 无任何 featured：保持旧行为（陈列序前 max 张）
+  assert.deepEqual(
+    selectHeroPhotos([p("a"), p("b"), p("c")], 2).map((x) => x.id),
+    ["a", "b"]
+  );
+  const ten = Array.from({ length: 10 }, (_, i) => p(`x${i}`));
+  assert.equal(selectHeroPhotos(ten).length, HERO_MAX, "缺省上限是 HERO_MAX");
+
+  // 有 featured：精选者按 rank 升序**全量**返回（数量交给策展，不再按 HERO_MAX 截断）
+  const curated = [p("a", 3), p("b"), p("c", 1), p("d", 2)];
+  assert.deepEqual(
+    selectHeroPhotos(curated, 2).map((x) => x.id),
+    ["c", "d", "a"]
+  );
+
+  // 排名重复（手工改过的清单）：稳定排序保持陈列序，不抛错、不定序漂移
+  assert.deepEqual(
+    selectHeroPhotos([p("a", 5), p("b", 5), p("c", 1)]).map((x) => x.id),
+    ["c", "a", "b"]
+  );
+
+  // 非法值视同没有：0 / 负数 / 字符串 / 布尔 / 小数
+  const bad = [p("a", 0), p("b", -1), p("c", "1"), p("d", true), p("e", 1.5), p("f", 2)];
+  assert.deepEqual(selectHeroPhotos(bad).map((x) => x.id), ["f"]);
+});
+
+test("lowResCapWidth：低分辨率母版钳到源宽；高清 / 未知一律不钳（D-1）", () => {
+  assert.equal(LOW_RES_MAX_EDGE, 640);
+  assert.equal(lowResCapWidth({ width: 360, height: 360 }), 360, "《夜泊》360×360");
+  assert.equal(lowResCapWidth({ width: 500, height: 2000 }), 500, "短边 500 ≤ 640");
+  assert.equal(lowResCapWidth({ width: 640, height: 640 }), 640, "边界含 640");
+  assert.equal(lowResCapWidth({ width: 1024, height: 901 }), 0, "1024 档不钳");
+  assert.equal(lowResCapWidth({ width: 641, height: 2000 }), 0, "短边 641 > 640");
+  assert.equal(lowResCapWidth({}), 0, "缺宽高 → 不钳（无权判低清）");
+  assert.equal(lowResCapWidth({ width: 0, height: 360 }), 0);
+  assert.equal(lowResCapWidth({ width: 360, height: 0 }), 0);
+  assert.equal(lowResCapWidth(null), 0);
+});
+
+test("真清单契约：manifest.hero 与 selectHeroPhotos 的选择一致（F-3）", () => {
+  // python 端（sync 写 hero 指针）与 JS 端（序厅选片）是同一条规则的两个实现，
+  // 这里逐条对拍：指针指的必须是 JS 规则选出的首张 —— 任一侧漂移即红。
+  const first = selectHeroPhotos(MANIFEST.photos, HERO_MAX)[0];
+  assert.ok(first, "真清单里应当能选出序厅首张");
+  assert.equal(MANIFEST.hero, first.file, "manifest.hero 指针 ≠ 按 featured 规则选出的首张");
+  for (const p of MANIFEST.photos) {
+    if ("featured" in p) {
+      assert.ok(
+        Number.isInteger(p.featured) && p.featured >= 1,
+        `${p.file} 的 featured 必须为正整数，实际 ${JSON.stringify(p.featured)}`
+      );
+    }
+  }
+  // 反向自证（防空架子）：真清单当前确有精选，否则上面可能是「两边都在回落」凑出来的
+  assert.ok(
+    MANIFEST.photos.some((p) => p.featured >= 1),
+    "真清单里没有任何 featured，契约测不到选片"
+  );
 });

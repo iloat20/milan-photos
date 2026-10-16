@@ -14,6 +14,9 @@ import {
   heroSrc,
   heroSrcset,
   heroAvifSrcset,
+  selectHeroPhotos,
+  HERO_MAX,
+  lowResCapWidth,
   HERO_SIZES,
   emptyState,
 } from "./src/util.js";
@@ -21,7 +24,7 @@ import { createLightbox } from "./src/lightbox.js";
 import { createInstallPrompt } from "./src/install.js";
 
 (() => {
-  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,mediumSrcset?:string,mediumAvifSrcset?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,slug?:string,fileName?:string,custom?:boolean,width?:number,height?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
+  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,mediumSrcset?:string,mediumAvifSrcset?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,slug?:string,fileName?:string,custom?:boolean,width?:number,height?:number,featured?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -519,7 +522,6 @@ import { createInstallPrompt } from "./src/install.js";
   }
 
   /* —— 顶栏下方半屏轮播 —— */
-  const HERO_MAX = 8;
   let heroPos = 0;
   let heroTimer = 0;
   let heroSlides = [];
@@ -762,7 +764,7 @@ import { createInstallPrompt } from "./src/install.js";
     heroTrack.innerHTML = "";
     if (heroDots) heroDots.innerHTML = "";
 
-    const list = photos.slice(0, HERO_MAX);
+    const list = selectHeroPhotos(photos, HERO_MAX);
     if (!list.length) {
       heroCarousel.classList.add("is-empty");
       syncHeroPauseButton();
@@ -1074,6 +1076,9 @@ import { createInstallPrompt } from "./src/install.js";
           // slug（F-4）：分享按钮拼逐图展签页 URL 用。与 palette 同属白名单拷贝，
           // 漏接管不会报错、只会静默退回 #p= 深链（分享卡随之失效）
           slug: item.slug || "",
+          // featured（F-3）：序厅选片排名（正整数，越小越靠前）。与 palette 同属
+          // 白名单拷贝，漏接管不会报错、只会静默退回「陈列序前 8」旧行为
+          featured: item.featured || 0,
           width: Number(item.width) || 0,
           height: Number(item.height) || 0,
           // 序厅预载候选：sync 预算好的整串（hero-srcset 规则的家在 photos_lib）。
@@ -1089,7 +1094,7 @@ import { createInstallPrompt } from "./src/install.js";
       // 只预载序厅首图（= LCP 元素）：候选与 <picture> 同串同 sizes，选中即命中。
       // 第 2/3 张不预载——在 lantern 的 LCP 图里非低优先级图会计入 max(endTime)，
       // 与首图争模拟带宽反而拉长 LCP；它们本就会由 near 集合以低优先级加载。
-      const firstHero = folderPhotos[0];
+      const firstHero = selectHeroPhotos(folderPhotos, HERO_MAX)[0];
       if (firstHero) {
         preloadImage(heroSrc(firstHero), "high", {
           srcset: heroAvifSrcset(firstHero) || heroSrcset(firstHero),
@@ -1302,6 +1307,14 @@ import { createInstallPrompt } from "./src/install.js";
 
       const media = document.createElement("div");
       media.className = "card-media";
+
+      // 低分辨率母版（D-1，如 360×360 的《夜泊》）：画心盒宽钳到源宽 —— 重点陈列
+      // 行（is-feature 独占整行、宽至 64vh）与未来版式下都不放大超过原生宽度。
+      const lowResCap = lowResCapWidth(photo);
+      if (lowResCap) {
+        media.classList.add("is-lowres");
+        media.style.setProperty("--card-maxw", `${lowResCap}px`);
+      }
 
       // 墙签浮层：默认无字陈列，hover/键盘聚焦才浮现。
       // 单一文本节点：多节点列布局会被 axe 提取为 \n 分隔的可见文本，与 aria-label 无法匹配

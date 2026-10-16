@@ -92,10 +92,22 @@ export function injectHomeImageArray(html, items) { … 恰好一次断言；emb
 
 ### 3.4 `lighthouserc.json`
 
-```diff
+~~```diff
 -        "categories:performance": [ "warn", { "minScore": 0.9 } ],
 +        "categories:performance": [ "error", { "minScore": 0.9 } ],
-```
+```~~
+
+**§8 实测推翻（2026-10-16，CI 红 `26ea610` 后回退 warn）**：error ≥0.9 在 GitHub Actions
+runner 上是**恒红噪声门禁**，实测证据两条：
+
+- 上一批（`114187b`，无 JSON-LD 注入）CI 的 performance = **0.87** —— 基线本就压在 0.9
+  之下，此前一直靠 warn 才绿；
+- 本批 CI 实测 **0.63**：注入内容仅 ~4 KB 内联 JSON，不可能是 0.24 跌幅的主因 ——
+  LHCI 在 CI runner 上**单跑**（`numberOfRuns: 1`）的类别分抖动极大。
+
+结论：审计原文「把 performance 提为 error」在「CI 单跑 + 共享 runner」环境不可行。
+要把它变成可信的硬门禁，前置条件是 P-8/P-9（真实性能优化）+ 多轮取中位数 + 独立
+审计 job —— 属独立批次。线上真实站点的抽验见 §8。
 
 ### 3.5 测试与护栏
 

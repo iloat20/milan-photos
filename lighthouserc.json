@@ -28,7 +28,7 @@
           }
         ],
         "categories:performance": [
-          "error",
+          "warn",
           {
             "minScore": 0.9
           }

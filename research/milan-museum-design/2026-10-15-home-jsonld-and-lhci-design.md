@@ -158,4 +158,22 @@ runner 上是**恒红噪声门禁**，实测证据两条：
 
 - 主页 JSON-LD 的 `image` 项未带 `width/height`（逐图页有）——数组语境下抓取器会按 contentUrl 自取尺寸，省体积；
   若将来要严格对齐逐图页字段，在 `buildHomeImages` 一处加即可。
-- 无其他遗留。
+- **P-10 的可信硬门禁**：前置是 P-8/P-9 真实优化 + 多轮取中位数 + 独立审计 job（见 §8 回退记录），属独立批次。
+
+## 8. 线上真实站点审计（2026-10-16，`76cdc68` 部署后，决策 6 承诺）
+
+对 `https://iloat20.github.io/milan-photos/` 直跑 3 轮 Lighthouse（headless，本机真网络）：
+
+| 轮次 | performance | a11y | best-practices | SEO | LCP | TBT | CLS |
+|---|---|---|---|---|---|---|---|
+| 1 | 1.0 | 1.0 | 1.0 | 1.0 | 1.5 s | 40 ms | 0.019 |
+| 2 | 1.0 | 1.0 | 1.0 | 1.0 | 1.5 s | 30 ms | 0.019 |
+| 3 | 1.0 | 1.0 | 1.0 | 1.0 | 1.2 s | 20 ms | 0.003 |
+
+**四类别三轮全满分。** 这组数与 CI runner 的 0.63/0.87（§3.4 回退记录）互为对照，
+坐实「CI 分数是节流 runner 假象，站点真实性能没有问题」——P-10 的正确落点不是
+在 CI 里把 warn 提成 error，而是「以线上审计为准、CI 保持 warn 作先导信号」。
+
+线上 JSON-LD 抽验（curl 直取产物页解析）：`ImageGallery.image` = 18 项 `ImageObject`，
+首项 `name: 柔光 / url: /p/rou-guang/ / contentUrl: medium/*.webp`；18 项
+contentUrl **全部**指向 `photos/` 派生图、零母版引用。

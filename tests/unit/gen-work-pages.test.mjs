@@ -20,11 +20,13 @@ import {
   SITE_URL,
   absoluteUrl,
   bracketedTitle,
+  buildHomeImages,
   buildWorkPages,
   embedJsonLd,
   escapeHtml,
   escapeXml,
   formatDateCN,
+  injectHomeImageArray,
   mediumSize,
   normalizeSlug,
   pictureSrcsets,
@@ -512,4 +514,62 @@ test("展签页自带 CSP：指令齐备，且声明的 hash 与页内脚本自�
       `slug=${page.slug} 的展签页没带 CSP`
     );
   }
+});
+
+/* ────────────────────────── S-2 主页结构化数据 ────────────────────────── */
+
+test("buildHomeImages：18 项与馆藏同序，逐项指派生图 + 逐图页，题名不带书名号", () => {
+  const items = buildHomeImages({ manifest: MANIFEST, meta: META });
+  assert.equal(items.length, MANIFEST.photos.length);
+  const slugs = resolveSlugs(MANIFEST, META);
+  items.forEach((item, index) => {
+    const photo = MANIFEST.photos[index];
+    assert.equal(item["@type"], "ImageObject");
+    assert.equal(item.name, plainTitle(photo, index));
+    assert.ok(!item.name.includes("《"));
+    assert.equal(item.url, `${SITE_URL}p/${slugs[index]}/`);
+    // contentUrl 与逐图页 og:image 同源（shareImage）——抓图器两处抓的是同一张
+    assert.equal(item.contentUrl, absoluteUrl(shareImage(photo), SITE_URL));
+    // 绝不指向母版：母版不在产物里（P-1），指向它就是线上 404
+    assert.match(item.contentUrl, /\/photos\/(thumbs|medium)\//);
+    assert.ok(item.description && item.description.length > 0);
+    assert.match(item.datePublished, /^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+test("buildHomeImages：无 slug 清单回退 meta 覆盖（与逐图页同一条解析）", () => {
+  const manifest = {
+    photos: [
+      {
+        file: "IMG20260101010101.jpg",
+        title: "甲",
+        date: "2026-01-01",
+        width: 100,
+        height: 80,
+        thumbSrcset: "photos/thumbs/x-400.webp 400w",
+      },
+    ],
+  };
+  const meta = { "IMG20260101010101.jpg": { slug: "Morning Mist" } };
+  const items = buildHomeImages({ manifest, meta });
+  assert.equal(items[0].url, `${SITE_URL}p/morning-mist/`);
+});
+
+test("injectHomeImageArray：占位符恰好一次才注入；二次注入 / 缺占位都报错", () => {
+  const html = '<script type="application/ld+json">{\n    "image": []\n  }</script>';
+  const out = injectHomeImageArray(html, [{ "@type": "ImageObject", name: "柔光" }]);
+  assert.ok(out.includes('"image": ['));
+  assert.ok(out.includes("柔光"));
+  assert.ok(!out.includes('"image": []'));
+  // 防二次注入：占位符这时已消失，再注必须报错（静默的坏法是替换成「数组里套数组」）
+  assert.throws(() => injectHomeImageArray(out, []), /恰好/);
+  assert.throws(() => injectHomeImageArray("<p>没有占位符</p>", []), /恰好/);
+});
+
+test("injectHomeImageArray：< 转义为 \\u003c，且注入结果是可解析的 JSON 数组", () => {
+  const out = injectHomeImageArray('"image": []', [{ name: "a</script>b" }]);
+  assert.ok(!out.includes("</script>"));
+  assert.ok(out.includes("\\u003c"));
+  const json = out.slice(out.indexOf("["), out.lastIndexOf("]") + 1);
+  assert.deepEqual(JSON.parse(json), [{ name: "a</script>b" }]);
 });

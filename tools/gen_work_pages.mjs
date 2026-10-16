@@ -508,6 +508,63 @@ export function buildWorkPages({ manifest, meta = {}, siteUrl = SITE_URL }) {
   return { pages, sitemap: renderSitemap({ entries }) };
 }
 
+/* ────────────────────────── 主页结构化数据（S-2） ────────────────────────── */
+
+/** 源码 index.html 里的占位符（ImageGallery 的 image 数组）。**恰好一次**纪律：
+ *  多于一处或消失都会让构建报错 —— 静默的坏法是「注入到了别的地方」或「没注入，
+ *  线上富结果素材整个缺失」，两者页面都完全正常、没有任何用例会红。 */
+const HOME_IMAGE_SLOT = '"image": []';
+
+/**
+ * 主页 ImageGallery 的 `image` 数组：与逐图页同一套取值机器（shareImageInfo /
+ * plainTitle / captionText 都只有一份实现），同一件作品在全站被抓图器与结构化
+ * 数据描述为同一张图、同一个名字。
+ *
+ * `contentUrl` 取现存最大派生图（与逐图页 og:image 同源）：**绝不回落母版** ——
+ * 母版不在产物里（P-1），指向它就是线上 404，且富结果校验器会记成抓取失败。
+ */
+export function buildHomeImages({ manifest, meta = {}, siteUrl = SITE_URL }) {
+  const photos = manifest?.photos || [];
+  const slugs = resolveSlugs(manifest, meta);
+  return photos.map((photo, index) => {
+    const share = shareImageInfo(photo);
+    const node = {
+      "@type": "ImageObject",
+      name: plainTitle(photo, index),
+      // 逐图展签页：深链 #p= 是哈希，抓取器看不见；每项都必须有自己的静态落点
+      url: absoluteUrl(`p/${slugs[index]}/`, siteUrl),
+      contentUrl: absoluteUrl(share.url, siteUrl),
+    };
+    const caption = captionText(photo);
+    if (caption) node.description = caption;
+    if (photo?.date) node.datePublished = photo.date;
+    return node;
+  });
+}
+
+/**
+ * 把数组嵌进主页占位符：`"image": []` → `"image": [ … ]`。
+ *
+ * 续行补 4 空格前缀，让 JSON-LD 在源码的 4 空格缩进层级里保持整齐（纯版面）。
+ * 转义走 embedJsonLd（`<` → `\u003c`）：标题/说明里出现 `</script>` 时不会提前
+ * 闭合数据块。替换用**函数形式** —— 字符串形式的替换会把内容里的 `$&` 当反向引用。
+ */
+export function injectHomeImageArray(html, items) {
+  const source = String(html ?? "");
+  const count = source.split(HOME_IMAGE_SLOT).length - 1;
+  if (count !== 1) {
+    throw new Error(
+      `gen-work-pages: 主页 JSON-LD 占位符 ${HOME_IMAGE_SLOT} 必须恰好出现一次` +
+        `（实际 ${count} 处）——源码 index.html 的 ImageGallery 块里应恰有一处，见那里的注释。`
+    );
+  }
+  const rendered = embedJsonLd(items)
+    .split("\n")
+    .map((line, index) => (index === 0 ? line : `    ${line}`))
+    .join("\n");
+  return source.replace(HOME_IMAGE_SLOT, () => `"image": ${rendered}`);
+}
+
 /** 读磁盘上的 manifest / meta（`meta.json` 缺失不致命：它只提供覆盖项） */
 export function loadSources({
   manifestPath = path.join(ROOT, "photos", "manifest.json"),

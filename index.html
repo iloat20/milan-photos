@@ -45,6 +45,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 
+  <!-- 主页结构化数据（S-2）：image 数组由构建期注入 —— build-finalize 的 ⓪ 步骤
+       调 tools/gen_work_pages.mjs 的 buildHomeImages / injectHomeImageArray。
+       这里保持空数组占位，且**必须恰好一处**（占位符消失/重复都会让构建失败）。 -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -57,7 +60,8 @@
     "provider": {
       "@type": "Organization",
       "name": "米兰美术馆"
-    }
+    },
+    "image": []
   }
   </script>
 

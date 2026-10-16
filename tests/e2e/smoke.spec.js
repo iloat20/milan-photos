@@ -63,6 +63,28 @@ test.describe("画廊冒烟", () => {
     expect(list.filter((p) => p.thumbAvifSrcset)).toHaveLength(18);
   });
 
+  test("主页图库结构化数据：ImageGallery 的 image 数组 18 项全指派生图与逐图页（S-2）", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const raw = await page.locator('script[type="application/ld+json"]').first().textContent();
+    const data = JSON.parse(raw);
+    expect(data["@type"]).toBe("ImageGallery");
+    expect(Array.isArray(data.image)).toBe(true);
+    expect(data.image).toHaveLength(18);
+    for (const item of data.image) {
+      // 抓图器拿到的必须是**派生图**（母版不在产物里，指向母版即线上 404）
+      expect(item.contentUrl).toMatch(/\/photos\/(thumbs|medium)\//);
+      expect(item.contentUrl.startsWith("https://iloat20.github.io/milan-photos/")).toBe(true);
+      // 每项都指回它的逐图展签页（#p= 是哈希，爬虫与抓取器看不见）
+      expect(item.url).toMatch(/^https:\/\/iloat20\.github\.io\/milan-photos\/p\/[a-z0-9-]+\/$/);
+      expect(item.name.trim().length).toBeGreaterThan(0);
+      expect(item.name).not.toContain("《");
+      expect(item.description.trim().length).toBeGreaterThan(0);
+      expect(item.datePublished).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
   test("灯箱开合（<dialog> 原生模态）", async ({ page }) => {
     await page.goto("/");
     const cards = page.locator(".card");

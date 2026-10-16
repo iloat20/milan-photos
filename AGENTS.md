@@ -30,8 +30,8 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | 路径 | 角色 |
 |------|------|
 | `photos/*.{jpg,png,webp,gif,avif}` | 原图（源）— **长边 ≤2560px、不含 GPS EXIF**（见下「必做」） |
-| `photos/meta.json` | **策展源**：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem。改了 `title`/`caption`/`slug` 必须跑 `npm run sync` 才会落到 manifest（`slug` 自 F-4 起**进 manifest**：`photo_item()` 归一写入，是逐图页生成器与分享按钮共用的唯一来源；两处归一实现的一致性由单测「真清单一致性」钉住） |
-| `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` 字段 |
+| `photos/meta.json` | **策展源**：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem；可选的 `featured`（F-3 序厅精选排名：**唯一正整数、越小越靠前**；非正整数与重复排名都由 sync 报错拦截）。改了 `title`/`caption`/`slug`/`featured` 必须跑 `npm run sync` 才会落到 manifest（`slug` 自 F-4 起**进 manifest**：`photo_item()` 归一写入，是逐图页生成器与分享按钮共用的唯一来源；两处归一实现的一致性由单测「真清单一致性」钉住） |
+| `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` / `featured` 字段与顶层 `hero` 指针（F-3） |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成，灯箱改用最大缩略档 `thumbs/`） |
 | `tools/gen_work_pages.mjs` | 逐图展签页 `/p/<slug>/` + `sitemap.xml` 的生成器（构建期 `closeBundle` 里跑；规则可被单测直接调用） |
@@ -196,6 +196,8 @@ done
 - 观画室的**题下策展说明**（`.lb-caption`，取 `meta.json` 的 `caption`）必须**恒占一行**：`.lightbox-meta` 是 `flex-shrink: 0` 且高度由内容撑开，而空说明确实会遇到（浏览器内上传的图没有 manifest 条目、也就没有 caption；2026-10-10 起馆藏 18 件已全部写完策展说明）—— 空值若用 `display: none`（或干脆不占位），切到无说明的图时上方画框会被挤得**整块跳一下**。空值一律 `visibility: hidden` + `min-height: 1lh`（红态实证：改成 `display: none` 后题名区高度差 26.8px）。护栏是 e2e「题名区高度恒定」那条 —— 只断言「元素不可见」抓不住它。该用例的空说明样本由**页面 JS 层拦 `photos/manifest.json` 自造**（馆藏补齐后清单里已无空样本；该请求归 SW 的 `isManifest` 分支接管，`page.route` 拦不到，故包 `window.fetch`）。取值归 `util.captionText()`（trim 后为空即视为没有，**不**做《无题》式降级）。
 - 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
 - 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2` + 边框提亮到 `--hairline`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
+- **序厅是策展精选，不是陈列序前 8**（F-3）：`meta.json` 的 `featured` 经 sync 归一进 manifest（排名校验与顶层 `hero` 指针在 `photos_lib`）；序厅取 `selectHeroPhotos()`（有精选按 rank 全序、无精选回落陈列序前 `HERO_MAX`）；`index.html` 解析期预载只查 `hero` 指针，`app.js` 兜底取 `selectHeroPhotos()[0]` —— 两处口径一致性由 `util.test.mjs` 的真清单契约对拍。**别**把精选逻辑写回数组截断，也别在 `photos[]` 上重排（会连带动展厅/筛选/逐图页序）。
+- **低分辨率母版不放大**（D-1）：母版短边 ≤ `LOW_RES_MAX_EDGE`(640) 的条目，卡片画心盒宽钳到源宽（`.card-media.is-lowres` + 行内 `--card-maxw`，见 `lowResCapWidth()`），重点陈列行也居中小尺幅；灯箱 1× 本就是原生尺寸封顶（`lightboxNeed` 的 min(scale,1)），缩放倍率**不**按图降级。
 - 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。
 
 ### 网格与比例（正名）

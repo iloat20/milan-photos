@@ -325,6 +325,30 @@ test("renderSitemap：条目顺序即输入顺序，lastmod 只出现在有值�
   assert.ok(xml.endsWith("</urlset>\n"));
 });
 
+test("renderSitemap：image 条目输出图片扩展且命名空间恰好一次；无 image 时无命名空间", () => {
+  const withImage = renderSitemap({
+    entries: [
+      { loc: `${SITE_URL}p/a/`, image: `${SITE_URL}photos/medium/a.webp` },
+      { loc: `${SITE_URL}p/b/` },
+    ],
+  });
+  assert.equal((withImage.match(/xmlns:image=/g) || []).length, 1);
+  assert.equal((withImage.match(/<image:image>/g) || []).length, 1);
+  assert.ok(withImage.includes(`<image:loc>${SITE_URL}photos/medium/a.webp</image:loc>`));
+  // 主页条目（无 image）不得带空 <image:image>
+  const noImage = renderSitemap({ entries: [{ loc: `${SITE_URL}` }] });
+  assert.ok(!noImage.includes("image:"), "无 image 条目时不得出现图片命名空间");
+});
+
+test("renderSitemap：image:loc 走与 loc 同一张转义实体表", () => {
+  const xml = renderSitemap({
+    entries: [{ loc: `${SITE_URL}p/x/`, image: `${SITE_URL}photos/a<b>&c.webp` }],
+  });
+  assert.ok(
+    xml.includes(`<image:loc>${SITE_URL}photos/a&lt;b&gt;&amp;c.webp</image:loc>`)
+  );
+});
+
 /* ────────────────────────── 真 manifest 契约 ────────────────────────── */
 
 test("真 manifest：18 页、slug 唯一、标题两两不同、canonical 自指", () => {
@@ -347,6 +371,20 @@ test("真 manifest：18 页、slug 唯一、标题两两不同、canonical 自�
   assert.equal(locs.length, pages.length + 1);
   for (const page of pages) {
     assert.ok(locs.includes(`${SITE_URL}p/${page.slug}/`), `sitemap 缺 ${page.slug}`);
+  }
+});
+
+test("真 manifest：sitemap 图片扩展与逐图页 og:image 同源，全指派生图（零 .jpg 母版）", () => {
+  const { pages, sitemap } = buildWorkPages({ manifest: MANIFEST });
+  const images = [...sitemap.matchAll(/<image:loc>([^<]+)<\/image:loc>/g)].map((m) => m[1]);
+  assert.equal(images.length, pages.length, "每件作品恰好一条 image:loc");
+  for (const u of images) {
+    assert.ok(
+      u.startsWith(SITE_URL) && u.includes("/photos/"),
+      `须是站点绝对 URL 且指向 photos/ 派生图：${u}`
+    );
+    // P-1 后母版（.jpg）不在产物里，指向即线上 404 —— 图片搜索会拿到死链
+    assert.ok(!/\.jpe?g$/i.test(u), `母版 .jpg 不得进 sitemap：${u}`);
   }
 });
 

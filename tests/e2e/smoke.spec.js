@@ -2137,6 +2137,18 @@ test.describe("逐图展签页", () => {
       expect(page.status(), `${loc} 应 200（静态托管的「目录 + index.html」）`).toBe(200);
       expect(page.headers()["content-type"]).toContain("text/html");
     }
+
+    // S-3 图片扩展：每件作品恰好一条 image:loc，全指派生图且逐条可达 ——
+    // 图片搜索直接从 sitemap 取图，这里死了等于该入口整个失效。
+    const xml = await res.text();
+    const imageLocs = [...xml.matchAll(/<image:loc>([^<]+)<\/image:loc>/g)].map((m) => m[1]);
+    expect(imageLocs.length, "每件作品一条 image:loc").toBe(photos.length);
+    expect((xml.match(/xmlns:image=/g) || []).length, "图片命名空间恰好一次").toBe(1);
+    for (const loc of imageLocs) {
+      expect(loc, `母版 .jpg 不得进 sitemap（P-1 后不在产物）：${loc}`).not.toMatch(/\.jpe?g$/i);
+      const img = await request.get(pagePath(loc));
+      expect(img.status(), `${loc} 应 200`).toBe(200);
+    }
   });
 
   test("逐页 SEO 字段齐备：title 唯一 / canonical 自指 / og:image 绝对且可达 / alt 非空 / JSON-LD 可解析", async () => {

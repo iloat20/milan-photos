@@ -454,12 +454,18 @@ ${renderJsonLd({ photo, index, slug, siteUrl, share })}
 /* ────────────────────────── sitemap ────────────────────────── */
 
 /**
- * @param {{entries:{loc:string,lastmod?:string,changefreq?:string,priority?:string}[]}} args
+ * sitemap 渲染。条目可选 `image`（Google 图片扩展）：sitemap 协议本身只描述页面，
+ * 图片站的天然流量入口是图片搜索 —— 不写扩展，抓取器得先爬完每个页面才能发现图。
+ * @param {{entries:{loc:string,lastmod?:string,changefreq?:string,priority?:string,image?:string}[]}} args
  */
 export function renderSitemap({ entries = [] }) {
+  // 图片命名空间只在真有 image 条目时输出，且恰好一次 —— 空命名空间是合法但无意义的噪音
+  const hasImage = entries.some((entry) => entry.image);
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    hasImage
+      ? '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">'
+      : '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
   ];
   for (const entry of entries) {
     lines.push("  <url>");
@@ -467,6 +473,11 @@ export function renderSitemap({ entries = [] }) {
     if (entry.lastmod) lines.push(`    <lastmod>${escapeXml(entry.lastmod)}</lastmod>`);
     if (entry.changefreq) lines.push(`    <changefreq>${escapeXml(entry.changefreq)}</changefreq>`);
     if (entry.priority) lines.push(`    <priority>${escapeXml(entry.priority)}</priority>`);
+    if (entry.image) {
+      lines.push("    <image:image>");
+      lines.push(`      <image:loc>${escapeXml(entry.image)}</image:loc>`);
+      lines.push("    </image:image>");
+    }
     lines.push("  </url>");
   }
   lines.push("</urlset>", "");
@@ -499,10 +510,15 @@ export function buildWorkPages({ manifest, meta = {}, siteUrl = SITE_URL }) {
     }),
   }));
   const entries = [
+    // 主页条目不带 image 扩展：assets/og.jpg 是站点分享卡不是馆藏作品，
+    // 喂给图片搜索反而会把「展厅一角」当成一件作品。
     { loc: siteUrl, changefreq: "weekly", priority: "1.0" },
     ...photos.map((photo, index) => ({
       loc: absoluteUrl(`p/${slugs[index]}/`, siteUrl),
       lastmod: photo.date || "",
+      // 与逐图页 og:image / JSON-LD contentUrl 同一取值机器（shareImageInfo，
+      // 现存最大派生图，绝不母版）：同一件作品在抓图器眼里全站同值。
+      image: absoluteUrl(shareImage(photo), siteUrl),
     })),
   ];
   return { pages, sitemap: renderSitemap({ entries }) };

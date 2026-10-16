@@ -388,12 +388,13 @@ def _srcset_string(entries: list[tuple[str, int]]) -> str:
 
 
 def hero_srcsets(item: dict) -> dict:
-    """序厅首图（= LCP 元素）的响应式候选，供 HTML 解析期直接预载。
+    """序厅首图（= LCP 元素）的响应式候选，供构建期预载注入直接消费。
 
-    为什么预算在 sync 而不是留给前端算：``index.html`` 的内联脚本要在 app.js
-    执行**之前**发出预载，而它没法 import ``src/util.js``。把规则留在前端就等于
-    在 HTML 里抄一份 —— 这里预算好，内联脚本只搬运字符串，规则仍只有一份
-    （本函数），前端只在「清单是旧/降级版」时用 ``heroSrcset()`` 兜底。
+    为什么预算在 sync 而不是留给前端算：预载由 ``tools/hero-preload.mjs`` 在
+    构建收尾时写进 ``dist/index.html``（预加载扫描器解析到即发起，零脚本依赖），
+    那个生成器读的是**仓库里提交的 manifest**。把规则留在前端就等于再抄一份 ——
+    这里预算好，生成器只搬运字符串，规则仍只有一份（本函数），前端只在
+    「清单是旧/降级版」与「直服源码不跑构建」时用 ``heroSrcset()`` 兜底。
 
     与 ``src/util.js`` 的 ``heroSrcset`` / ``heroAvifSrcset`` 同构：
     缩略图各档 + 中图（大屏兜底）；动图没有中图，因此自然只剩缩略图。

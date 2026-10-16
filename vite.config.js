@@ -104,8 +104,10 @@ function workPagesPlugin() {
  * 串行执行 —— Rollup 的 closeBundle 是**并行**钩子（同钩子多插件同时跑），
  * 拆成多个插件就失去了顺序保证。
  *
- *   ⓪ 主页 `ImageGallery` 的 `image` 数组（S-2）：读仓库 manifest 注入 index.html。
- *      **必须在 ① 之前** —— 这个数据块是内联脚本，hash 要进 script-src 名单。
+ *   ⓪ 主页两处构建期注入：`ImageGallery` 的 `image` 数组（S-2）与序厅首图预载
+ *      （tools/hero-preload.mjs）。**都必须在 ① 之前** —— 数据块是内联脚本，
+ *      hash 要进 script-src 名单；预载标签虽不参与 hash，但同属「最终字节的
+ *      组成部分」，让 ① 一次性写盘最不易漏。
  *   ① 给 `dist/index.html` 注入全指令集 CSP。
  *      （逐图展签页自带 CSP —— 那个生成器也在 closeBundle 里跑，同样不能靠插件先后。）
  *   ② SW 缓存版本号：读 ① 之后的四件套算内容指纹，写进 `dist/sw.js`。
@@ -127,13 +129,16 @@ function finalizePlugin() {
     async closeBundle() {
       const htmlPath = path.join(ROOT, "dist", "index.html");
 
-      // ── ⓪ 主页结构化数据：ImageGallery 的 image 数组（S-2）──────────
-      // 必须在 ① 的 hash 计算**之前**落地：这个数据块是内联脚本，它的 sha256
-      // 要进 script-src 名单（e2e「CSP hash 双向自洽」就是这条顺序的护栏）。
+      // ── ⓪ 主页构建期注入：结构化数据 + 序厅预载（都在 ① 的 hash/写盘之前）──
+      // 数据块是内联脚本，它的 sha256 要进 script-src 名单（e2e「CSP hash 双向自洽」
+      // 就是这条顺序的护栏）；预载标签由 hero 指针 + sync 预计算的候选串拼成，
+      // 清单是**降级版**（无候选串）时注入说明注释、留给 app.js 的 preloadImage 兜底。
       const gp = await load("gen_work_pages.mjs");
       const { manifest, meta } = gp.loadSources();
       let html = fs.readFileSync(htmlPath, "utf8");
       html = gp.injectHomeImageArray(html, gp.buildHomeImages({ manifest, meta }));
+      const hp = await load("hero-preload.mjs");
+      html = hp.injectHeroPreload(html, hp.heroPreloadTag(manifest));
 
       // ── ① 主页 CSP ─────────────────────────────────────────────
       const csp = await load("csp.mjs");

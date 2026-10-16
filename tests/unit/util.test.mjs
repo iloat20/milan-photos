@@ -39,6 +39,7 @@ import {
   stripExt,
   safeFileName,
   heroSrc,
+  preloadType,
   selectHeroPhotos,
   HERO_MAX,
   lowResCapWidth,
@@ -226,6 +227,20 @@ test("heroSrc：动图只用静态缩略图，避免首屏拉原文件", () => {
   assert.equal(heroSrc({ thumb: "t", src: "s" }), "t");
   assert.equal(heroSrc({ src: "s" }), "s");
   assert.equal(heroSrc({}), "");
+});
+
+test("preloadType：取首个候选的 URL 判格式（整串正则的 $ 锚点永不命中）", () => {
+  assert.equal(
+    preloadType("photos/thumbs/a-400.avif 300w, photos/thumbs/a.avif 900w", "photos/medium/a.webp"),
+    "image/avif",
+    "候选串以宽度描述符结尾，必须看首个候选而不是整串"
+  );
+  assert.equal(preloadType("photos/thumbs/a.webp 900w", ""), "image/webp");
+  // 无 srcset 时回落到 href（清单降级 / 直服源码形态的兜底）
+  assert.equal(preloadType("", "photos/medium/a.avif"), "image/avif");
+  assert.equal(preloadType("", "photos/thumbs/a.webp"), "image/webp");
+  assert.equal(preloadType("", "photos/a.jpg"), "", "未知格式不写 type（交给浏览器嗅探）");
+  assert.equal(preloadType("", ""), "");
 });
 
 test("lightboxSrc：动图走原文件保证能播；静态图取最大可用档 medium → thumb → src", () => {

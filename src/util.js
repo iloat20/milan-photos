@@ -215,6 +215,27 @@ export function heroAvifSrcset(photo) {
   return parts.filter(Boolean).join(", ");
 }
 
+/** 预载标签的 type 提示：取**首个候选的 URL** 判扩展名，返回 "image/avif" /
+ *  "image/webp" / ""（未知格式不写 type，交给浏览器嗅探）。
+ *
+ *  为什么是「首个候选」：候选串以宽度描述符结尾（`"…-400.avif 300w, … 900w"`），
+ *  拿整串去 /\.avif$/ 匹配时 `$` 锚点永远落在 "900w" 后面，条件恒假 —— 2026-10-02
+ *  的红态实证就是「type 从未写上」，注释里「不支持该格式的浏览器跳过预载」形同虚设。
+ *  同一 srcset 的候选由 photos_lib 按同一格式整体产出（AVIF 串全是 .avif），故只看
+ *  首个候选即可；退化为单 URL 的 href 同样适配。
+ *
+ *  消费点：app.js 的 preloadImage（**兜底**路径 —— 产物形态下预载由构建期静态注入
+ *  tools/hero-preload.mjs 写入 HTML，preloadImage 的 already 判定会跳过）。 */
+export function preloadType(srcset, href = "") {
+  const first = String(srcset || href || "")
+    .split(",")[0]
+    .trim()
+    .split(/\s+/)[0];
+  if (/\.avif$/i.test(first)) return "image/avif";
+  if (/\.webp$/i.test(first)) return "image/webp";
+  return "";
+}
+
 /* ── F-3 序厅策展精选 ─────────────────────────────────────────────────── */
 
 /** 序厅轮播的缺省上限（无 featured 时的回落张数；有精选时数量由策展决定） */

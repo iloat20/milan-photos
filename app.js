@@ -14,6 +14,7 @@ import {
   heroSrc,
   heroSrcset,
   heroAvifSrcset,
+  preloadType,
   selectHeroPhotos,
   HERO_MAX,
   lowResCapWidth,
@@ -442,18 +443,12 @@ import { createInstallPrompt } from "./src/install.js";
       if (opts.sizes) link.setAttribute("imagesizes", opts.sizes);
     }
     // 声明 type：不支持该格式的浏览器跳过预载，避免 AVIF 在老浏览器白下。
-    // 有 imagesrcset 时按**首个候选的 URL** 判定格式。这里曾拿整条候选串去
-    // /\.avif$/ 匹配——而候选串是以宽度描述符结尾的（"…-400.avif 300w, …900w"），
-    // $ 锚点永远落在 "900w" 后面，条件恒假 → type 从未写上，上面那句注释形同虚设
-    // （e2e 红态实证：带 imagesrcset 的 preload，type 属性为空）。
-    // 同一 srcset 的候选由 photos_lib 按同一格式整体产出（AVIF 串全是 .avif），
-    // 故只看首个候选即可；退化为单 URL 的 href 同样适配。
-    const firstUrl = String(opts.srcset || href || "")
-      .split(",")[0]
-      .trim()
-      .split(/\s+/)[0];
-    if (/\.avif$/i.test(firstUrl)) link.type = "image/avif";
-    else if (/\.webp$/i.test(firstUrl)) link.type = "image/webp";
+    // 判定规则在 util.preloadType（首个候选的 URL → 格式，那条「$ 锚点落在宽度
+    // 描述符后」的教训写在函数上），由单测钉住 —— 这里是它的兜底调用点：产物形态
+    // 下预载由构建期静态注入（tools/hero-preload.mjs）完成、preloadImage 的 already
+    // 判定会跳过，本函数只有「清单降级 / 直服源码不跑构建」时才真正走到。
+    const type = preloadType(opts.srcset, href);
+    if (type) link.type = type;
     link.setAttribute("fetchpriority", priority);
     document.head.appendChild(link);
     if (priority !== "high") {
@@ -1082,8 +1077,9 @@ import { createInstallPrompt } from "./src/install.js";
           width: Number(item.width) || 0,
           height: Number(item.height) || 0,
           // 序厅预载候选：sync 预算好的整串（hero-srcset 规则的家在 photos_lib）。
-          // index.html 的内联脚本直接读 manifest 原件（不走这里）；本字段是给
-          // app.js 的 preloadImage 用的兜底——两处取到同一串，才不会重复下不同候选。
+          // 构建期注入（tools/hero-preload.mjs）直接读 manifest 原件、不走这里；
+          // 本字段是给 app.js 的 preloadImage 用的兜底（降级清单 / 直服源码形态）
+          // ——两处必须取到同一串，预载与 <picture> 才不会各下各的候选。
           heroSrcset: item.heroSrcset || "",
           heroAvifSrcset: item.heroAvifSrcset || "",
           // 预计算墙色调色板：这里是逐字段白名单拷贝，新字段必须显式接管，
@@ -1092,6 +1088,9 @@ import { createInstallPrompt } from "./src/install.js";
         };
       });
       // 只预载序厅首图（= LCP 元素）：候选与 <picture> 同串同 sizes，选中即命中。
+      // 产物形态里这一步通常是 no-op —— 构建期已把同 href 的静态预载写进 HTML
+      // （tools/hero-preload.mjs），preloadImage 的 already 判定会直接跳过；
+      // 它真正兜的是「清单降级」与「直服源码不跑构建」两种形态。
       // 第 2/3 张不预载——在 lantern 的 LCP 图里非低优先级图会计入 max(endTime)，
       // 与首图争模拟带宽反而拉长 LCP；它们本就会由 near 集合以低优先级加载。
       const firstHero = selectHeroPhotos(folderPhotos, HERO_MAX)[0];

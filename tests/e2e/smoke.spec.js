@@ -28,13 +28,15 @@ test.describe("画廊冒烟", () => {
   });
 
   test("manifest 响应体只被消费一次（不得有第二个消费者）", async ({ page }) => {
-    // 回归锁（2026-10-10 审查）：index.html 的解析期预载脚本与 app.js 曾共用同一个
+    // 回归锁（2026-10-10 审查）：index.html 的解析期脚本与 app.js 曾共用同一个
     // Response 并各自 .json() —— 第二个消费者抛 `TypeError: body stream already read`，
     // app.js 的 catch 把 folderPhotos 置空 → 展厅 0 卡、序厅 0 画面，且控制台零报错。
-    // 修复是内联脚本改读 res.clone()：原始响应体只交给 app.js 一个消费者。
+    // 修复是内联脚本改读 res.clone()。2026-10-16 起解析期脚本不再解析清单（预载改
+    // 构建期注入，见 tools/hero-preload.mjs），当前**只有 app.js 一个消费者**；
+    // 本用例保留为契约护栏：将来若有人再加解析期消费者而忘了 clone，bodyUsed 判定即红。
     // 这里直接观察「有没有人 json() 到一个已被消费的 body」，比「卡片数 = 18」
-    // 更早失败、也更直接指向根因（注意：修复后原始响应体 bodyUsed 应为 true——
-    // app.js 消费了它；所以不能断言 bodyUsed === false，只能断言无人读到已消费的 body）。
+    // 更早失败、也更直接指向根因（注意：原始响应体 bodyUsed 应为 true——app.js
+    // 消费了它；所以不能断言 bodyUsed === false，只能断言无人读到已消费的 body）。
     await page.addInitScript(() => {
       window.__jsonReads = [];
       const orig = Response.prototype.json;
@@ -48,8 +50,8 @@ test.describe("画廊冒烟", () => {
 
     const reads = await page.evaluate(() => window.__jsonReads);
     const manifestReads = reads.filter((r) => String(r.url).includes("manifest.json"));
-    // 前置：确实抓到了清单解析（解析期预载 + app.js 两处），否则下面的空数组是空洞通过
-    expect(manifestReads.length).toBeGreaterThanOrEqual(2);
+    // 前置：确实抓到了清单解析（当前唯一消费者是 app.js），否则下面的空数组是空洞通过
+    expect(manifestReads.length).toBeGreaterThanOrEqual(1);
     // 核心：没有任何一次 json() 落在已被消费的 body 上
     expect(manifestReads.filter((r) => r.bodyUsed)).toEqual([]);
   });
@@ -652,11 +654,27 @@ test.describe("画廊冒烟", () => {
   });
 
   test("序厅预载跟随策展首张（manifest.hero 指针，F-3）", async ({ page, request }) => {
-    // 解析期预载此前锚定 photos[0]；选片改由 featured 决定后，锚点换成 manifest 顶层
-    // 的 hero 指针（sync 生成）——内联脚本只查指针，不重算选片规则。
+    // 预载锚定 manifest 顶层的 hero 指针（sync 按 featured 生成）。2026-10-16 起
+    // 预载由**构建期**直接写进 HTML（tools/hero-preload.mjs），不再依赖解析期脚本：
+    // 下面先对「服务器返回的原始 HTML」断言 —— 不等 JS、不赌时机，静态才是判据；
+    // 再验浏览器里真的把它当图片预载（DOM 侧最终一致）。
     const manifest = await (await request.get("/photos/manifest.json")).json();
     const heroFile = manifest.hero || manifest.photos[0]?.file;
     expect(heroFile, "manifest 必须能定位序厅首张").toBeTruthy();
+    const hero = (manifest.photos || []).find((p) => p.file === heroFile) || manifest.photos[0];
+    const stem = heroFile.replace(/\.[^.]+$/, "");
+
+    const html = await (await request.get("/")).text();
+    const staticLink = /<link rel="preload" as="image"[^>]*>/.exec(html);
+    expect(staticLink, "构建期必须把序厅预载写进 HTML（缺了说明注入步骤被绕过/清单降级）").not.toBeNull();
+    expect(staticLink[0], "静态预载的目标不是策展首张").toContain(stem);
+    expect(staticLink[0]).toContain('fetchpriority="high"');
+    expect(staticLink[0]).toContain(
+      `type="${hero.heroAvifSrcset ? "image/avif" : "image/webp"}"`
+    );
+    expect(html, "占位注释不得残留到产物（注入是把占位整体替换掉）").not.toContain(
+      "HERO_PRELOAD"
+    );
 
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
@@ -670,7 +688,6 @@ test.describe("画廊冒烟", () => {
           : null;
       });
     await expect.poll(readPreload, { timeout: 5_000 }).not.toBeNull();
-    const stem = heroFile.replace(/\.[^.]+$/, "");
     expect(await readPreload(), "预载目标不是策展首张").toContain(stem);
   });
 
@@ -1999,10 +2016,12 @@ test.describe("画廊冒烟", () => {
     expect(displays).toEqual({ empty: "none", retry: "none" });
   });
 
-  test("图片预载必须带 type 提示（imagesrcset 按首个候选扩展名判定）", async ({ page }) => {
-    // preloadImage 用 /\.avif$/i.test(整条 srcset) 判格式，而候选串以 "900w" 这样的
-    // 宽度描述符结尾，$ 锚点永远不命中 → type 从未写上，注释里「不支持该格式的浏览器
-    // 跳过预载」形同虚设。红态实测：带 imagesrcset 的 preload 其 type 属性为 null。
+  test("图片预载必须带 type 提示（不支持该格式的浏览器才能跳过）", async ({ page }) => {
+    // 产物形态下这条预载来自构建期静态注入（tools/hero-preload.mjs），其 type 由
+    // manifest 字段判定（有 heroAvifSrcset → image/avif）。历史上这里守的是 app.js
+    // preloadImage 的整串正则 bug（$ 锚点落在宽度描述符后面、type 恒空）；那条兜底
+    // 路径如今由 util.preloadType 的单测直接钉住 —— e2e 里静态标签会先命中并遮蔽
+    // 兜底调用点，所以本用例锁的是「页面上实际存在的预载必须带 type」。
     await page.goto("/");
     await expect(page.locator(".card")).toHaveCount(18);
     await expect

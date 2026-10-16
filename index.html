@@ -83,53 +83,20 @@
        modulepreload；app.js / styles.css 的 <link rel="preload"> 也会被 Vite 当静态资源
        处理（实测：preload app.js 会复制出一份未压缩的 dist/assets/app.js，preload
        styles.css 则被静默删除）——入口脚本已在头部、样式表紧随其后，无需预载。 -->
+  <!-- 序厅首图（LCP）预载：由构建期注入（build-finalize 的 ⓪ 调 tools/hero-preload.mjs，
+       读 photos/manifest.json 的 hero 指针与 heroSrcset 候选串；占位注释必须恰好一处）。
+       预加载扫描器解析到本行即发起请求 —— 不再等任何脚本，也不再等清单的一个 RTT。
+       dev 形态不跑构建收尾，占位注释原样保留（无预载，属预期的形态差异）；
+       「非构建产物直服源码」时由 app.js 的 preloadImage 按缩略图现场算候选兜底。 -->
+  <!--HERO_PRELOAD-->
   <!-- 清单请求提前到 HTML 解析期：等 app.js 下载完再发 fetch 会在模拟图里
        串出 app.js → manifest → 序厅图 的三跳链（LCP 的 Load Delay 实测 334ms，
        每跳 ~150ms）。这里先发，app.js 用 window.__milanManifest 消费同一 Promise，
-       不重复请求；.catch 空接是防 app.js 启动前 rejection 冒 unhandledrejection。 -->
+       不重复请求；.catch 空接是防 app.js 启动前 rejection 冒 unhandledrejection。
+       本脚本只发请求（2026-10-16 起预载已移到上面的构建期注入，脚本不再解析清单）。 -->
   <script>
     window.__milanManifest = fetch("photos/manifest.json", { cache: "no-store" });
     window.__milanManifest.catch(() => {});
-
-    /* LCP 图（序厅首图）的预载也留在解析期 —— 不能交给 app.js。
-       实测（4× CPU 节流，移动视口）：清单在 58ms 到手，但 app.js 的解析 + 执行
-       要 ~180ms，其内联的 preloadImage 因此把高优先级图推迟到 270ms 才发起。
-       内联脚本没法 import src/util.js，所以候选串由 sync 预算进 manifest
-       （heroSrcset / heroAvifSrcset，与 palette 同一范式），且首张由 manifest
-       顶层的 hero 指针指名（F-3）——此处只搬运字符串与指针，不重算任何规则。
-       规则仍在 src/util.js 里，只在「清单是旧/降级版」时由 app.js 的
-       preloadImage 兜底；imagesizes 与 HERO_SIZES 同值、hero 指针与
-       selectHeroPhotos 口径一致，分别由 tests/unit/medium-width.test.mjs 与
-       util.test.mjs 的真清单契约钉住。 */
-    window.__milanManifest
-      /* 必须读**副本**：同一 Response 还要交给 app.js 消费（app.js 复用这个 Promise
-         并 res.json()）。这里直接读原件会把 body 消费掉，app.js 随后拿到
-         `TypeError: body stream already read` → folderPhotos 置空 → 全站静默白屏
-         （展厅 0 卡 / 序厅 0 画面，且控制台零报错）。clone() 须在 body 被读前调用，
-         此处顺序天然安全；回归由 tests/e2e/smoke.spec.js 的「只被消费一次」用例钉住。 */
-      .then((res) => (res && res.ok ? res.clone().json() : null))
-      .then((data) => {
-        // 序厅首张（LCP）由 manifest.hero 指针指名（sync 按 meta.json 的 featured
-        // 排名生成，F-3）；旧/缺指针的清单回落陈列首张 —— 与「只搬运、不重算规则」
-        // 的约定一致（口径由 util.test.mjs 的真清单契约对拍）。
-        const list = (data && (Array.isArray(data) ? data : data.photos || [])) || [];
-        const first = list.find((p) => p.file === (data && data.hero)) || list[0];
-        const srcset = first && (first.heroAvifSrcset || first.heroSrcset);
-        if (!srcset) return; // 旧/降级清单：交给 app.js 兜底
-        const link = document.createElement("link");
-        link.rel = "preload";
-        link.as = "image";
-        // href 是「不支持 imagesrcset 时的回退」，与 src/util.js 的 heroSrc 同序：
-        // medium → thumb（动图没有 medium，因此与 heroSrc 的 thumb 分支同值）
-        link.href = first.medium || first.thumb || first.src || "";
-        link.setAttribute("imagesrcset", srcset);
-        link.setAttribute("imagesizes", "min(86vw, 880px)");
-        // 格式由字段名判定：heroAvifSrcset 只由 AVIF 候选拼成，首个候选必是 AVIF
-        link.type = first.heroAvifSrcset ? "image/avif" : "image/webp";
-        link.setAttribute("fetchpriority", "high");
-        document.head.appendChild(link);
-      })
-      .catch(() => {});
   </script>
   <link rel="stylesheet" href="styles.css" />
   <!-- 入口脚本放头部：type="module" 默认 defer（不阻塞解析、解析完才执行），且头部

@@ -142,37 +142,12 @@ export function safeFileName(file) {
   return `${stamp}-${base || "photo.jpg"}`;
 }
 
-/** 从 srcset 串取 **w 描述符最大**的候选 URL；无候选 / 无描述符时取首个非空项，空串返回 ""。
- *  「取最大档」这条语义在 WebP 侧由 `photo.thumb`（= 最大缩略档）承担，
- *  AVIF 侧没有对应的标量字段，故从 `thumbAvifSrcset` 现算 —— 与 mediumWidth
- *  「由原图反推而非存储」同一范式，避免新增 manifest 字段与一次 sync。 */
-export function largestSrcsetUrl(srcset) {
-  let best = "";
-  let bestW = -1;
-  for (const part of String(srcset || "").split(",")) {
-    const [url, descriptor] = part.trim().split(/\s+/);
-    if (!url) continue;
-    const m = /^(\d+)w$/.exec(descriptor || "");
-    const w = m ? Number(m[1]) : 0;
-    if (w > bestW) {
-      bestW = w;
-      best = url;
-    }
-  }
-  return best;
-}
-
 /** 静态图最大可用档（WebP 侧）：medium > thumb > src。
- *  `thumb` 是最大缩略档，缺失（无 Pillow 的降级构建）时才落到原文件。 */
+ *  `thumb` 是最大缩略档，缺失（无 Pillow 的降级构建）时才落到原文件。
+ *  现役消费者只剩序厅（heroSrc）—— 灯箱自 2026-10-17 起原图直出，不再过这里；
+ *  `largestSrcsetUrl` / `largestAvif`（P-3 给灯箱现算 AVIF 顶层用）随直出退役。 */
 export function largestStill(photo) {
   return photo?.medium || photo?.thumb || photo?.src || "";
-}
-
-/** 静态图最大可用档（AVIF 侧）：mediumAvif > thumbAvifSrcset 顶层。
- *  `thumbAvifSrcset` 的档位与 medium 同参数生成（`thumb` 与 `medium` 共用质量常量），
- *  故对无 medium 的图，顶层 AVIF 是**质量中性**的替换而非降级。 */
-export function largestAvif(photo) {
-  return photo?.mediumAvif || largestSrcsetUrl(photo?.thumbAvifSrcset);
 }
 
 /** 序厅轮播用图：动图只用静态缩略图，避免首屏拉原文件 */
@@ -267,146 +242,15 @@ export function lowResCapWidth(photo) {
   return w;
 }
 
-/** 灯箱用图：动图走原文件保证能播，其余取**最大可用档**
- *  （medium → thumb → src）。原图 `src` 只在派生图全缺时才被触达 ——
- *  这正是 P-1「母版移出产物」的前置：修完后静态作品不再请求 `photos/<name>.<ext>`。 */
+/** 灯箱（观画室）用图：**一律原图直出**（2026-10-17 站主决策）——
+ *  观画室是「看画」的终点，放的就得是母版本身（`photos/<name>.<ext>`）。
+ *  `<img>`、hover 预热（prefetchUrl）、邻居预载三处同走这一个取值；
+ *  派生档（thumbs/medium）仍服务序厅与展厅列表：首屏与滚动网格吃的是体积。
+ *  动图（GIF）本就走原文件，与这里同值；无 src 时返回空串（调用方不设 src）。
+ *  旧实现是「最大可用档 medium → thumb → src」+ P-2 按 DPR 选档，
+ *  随原图直出整体退役（历史设计见 research/milan-museum-design/2026-10-11-lightbox-tier-fallback-design.md）。 */
 export function lightboxSrc(photo) {
-  if (photo?.animated) return photo.src || "";
-  return largestStill(photo);
-}
-
-/** 预载须与灯箱 <picture> 实际选中一致：AVIF 优先，动图仍走原文件。
- *  无 AVIF 变体时返回 WebP，`type="image/avif"` 会让浏览器跳过它、回落同值 —— 无重复下载。 */
-export function lightboxAvifOrFallback(photo) {
-  if (photo?.animated) return photo?.src || "";
-  return largestAvif(photo) || largestStill(photo);
-}
-
-/* ── 观画室按需求选档（P-2）─────────────────────────────────────────────────
-   加了 2048 档之后**不能**「永远取最大档」：移动端 DPR3 下一张竖图的需求宽约
-   1052，取 2048 档只是让弱网多下两倍字节，肉眼无差别。把「按需求选档」拆成四个
-   纯函数，浏览器与 Node 两侧共用同一份实现：
-
-     caps  = frameCaps(img)           画框可用区上限（读计算样式，不复刻 CSS）
-     need  = lightboxNeed(photo, …)   该图在当前 DPR 下的需求宽度
-     tiers = lightboxTiers(photo)     升序候选 [{url, w}]
-     url   = pickTier(tiers, need)    选 ≥ need 的最小档
-
-   `lightboxSrc` / `lightboxAvifOrFallback`（P-3 产物）保留不动，作为
-   「读不到画框 / 缺 width·height」时的兜底 —— 与 P-3「取最大可用档」语义一致，
-   故兜底路径不会比现状更差。 */
-
-/** 画框可用区上限（CSS px）：直接读 `.lightbox-img` 的 max-width / max-height。
- *
- *  **刻意不在 JS 里复刻 CSS 常量**（形如 `min(86vw, 940px) − 2*pad − 2*border`）：
- *  那样会引入「CSS 改了、JS 没跟上」的静默漂移，而且没有任何测试能发现它
- *  —— 与 `mediumWidth()` 的双份实现同类，但更隐蔽。读计算样式后这类漂移在结构上
- *  不可能发生；且 `<dialog>` 处于关闭态（hover 预载、开图前）同样解析出 px。
- *
- *  非数值（`max-width: none` 等）一律回退 0，由调用方据此走 P-3 的兜底最大档。
- *  @param {HTMLElement|null} imgEl `.lightbox-img`
- *  @param {Function} [getStyle] 仅测试注入；默认取全局 getComputedStyle（import 期不触碰）
- */
-export function frameCaps(imgEl, getStyle) {
-  const gs =
-    typeof getStyle === "function"
-      ? getStyle
-      : typeof getComputedStyle === "function"
-        ? getComputedStyle
-        : null;
-  if (!imgEl || !gs) return { w: 0, h: 0 };
-  const cs = gs(imgEl) || {};
-  const w = parseFloat(cs.maxWidth);
-  const h = parseFloat(cs.maxHeight);
-  return { w: Number.isFinite(w) ? w : 0, h: Number.isFinite(h) ? h : 0 };
-}
-
-/** 该图在当前画框上限与 DPR 下的需求宽度（设备 px）。
- *
- *  `scale = min(capsW/w, capsH/h, 1)`：等比缩放同时受宽高双约束；`min(…, 1)`
- *  保证小图不被放大（放大只插值、不增信息）。
- *
- *  返回 **0 表示「信息不足」而非「需求为 0」**——正常取值恒 ≥ 1。调用方用
- *  `need > 0` 判定能否走选档，否则回落 P-3 的最大可用档。
- *
- *  取整取**整式** `ceil(w · s · dpr)`，不是 `ceil(w · s) · dpr`：后者会把
- *  0.4 个设备像素放大成整整 1 个（移动端实测差 1px），而这个 px 正是选档边界。
- */
-export function lightboxNeed(photo, caps, dpr) {
-  const w = photo?.width;
-  const h = photo?.height;
-  if (!(w > 0) || !(h > 0) || !(caps?.w > 0) || !(caps?.h > 0)) return 0;
-  const scale = Math.min(caps.w / w, caps.h / h, 1);
-  return Math.ceil(w * scale * (dpr > 0 ? dpr : 1));
-}
-
-/** srcset 串 → [{url, w}]（缺 `w` 描述符记 0；空串 → []） */
-function parseTiers(srcset) {
-  const out = [];
-  for (const part of String(srcset || "").split(",")) {
-    const [url, descriptor] = part.trim().split(/\s+/);
-    if (!url) continue;
-    const m = /^(\d+)w$/.exec(descriptor || "");
-    out.push({ url, w: m ? Number(m[1]) : 0 });
-  }
-  return out;
-}
-
-/** 候选合并：按 url 去重（同 url 保留较大 w）、按 w 升序 */
-function mergeTiers(lists) {
-  const seen = new Map();
-  for (const { url, w } of lists) {
-    if (!url) continue;
-    const prev = seen.get(url);
-    if (prev === undefined || w > prev) seen.set(url, w);
-  }
-  return [...seen.entries()]
-    .map(([url, w]) => ({ url, w }))
-    .sort((a, b) => a.w - b.w);
-}
-
-/** 静态图 WebP 候选：`mediumSrcset`（1280 + 2048）+ `thumbSrcset`（400/800/1200）。
- *  老/降级清单只有 `medium` 标量时按它的反推宽度补一条。动图 → `[]`（走原文件）。 */
-export function lightboxTiers(photo) {
-  if (photo?.animated) return [];
-  const lists = [...parseTiers(photo?.mediumSrcset), ...parseTiers(photo?.thumbSrcset)];
-  if (!photo?.mediumSrcset && photo?.medium) {
-    lists.push({ url: photo.medium, w: mediumWidth(photo) });
-  }
-  return mergeTiers(lists);
-}
-
-/** 静态图 AVIF 候选：与 `lightboxTiers` 同构，只换 AVIF 变体 */
-export function lightboxAvifTiers(photo) {
-  if (photo?.animated) return [];
-  const lists = [...parseTiers(photo?.mediumAvifSrcset), ...parseTiers(photo?.thumbAvifSrcset)];
-  if (!photo?.mediumAvifSrcset && photo?.mediumAvif) {
-    lists.push({ url: photo.mediumAvif, w: mediumWidth(photo) });
-  }
-  return mergeTiers(lists);
-}
-
-/** 选「≥ need 的最小档」（恰好相等取该档）；全都比 need 小则取最大档；空候选 → `""`。 */
-export function pickTier(tiers, need) {
-  if (!tiers || !tiers.length) return "";
-  let best = "";
-  let bestW = Infinity;
-  for (const { url, w } of tiers) {
-    if (url && w >= need && w < bestW) {
-      bestW = w;
-      best = url;
-    }
-  }
-  if (best) return best;
-  // 全都比 need 小：取最大档（有总比没有好；浏览器不会自行放大，只是略软）
-  let maxW = -Infinity;
-  for (const { url, w } of tiers) {
-    if (url && w > maxW) {
-      maxW = w;
-      best = url;
-    }
-  }
-  return best;
+  return photo?.src || "";
 }
 
 /* —— 空状态判据（F-9 二分模型）——

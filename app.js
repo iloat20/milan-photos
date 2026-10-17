@@ -129,7 +129,6 @@ import { createInstallPrompt } from "./src/install.js";
   const lb = createLightbox({
     lightbox,
     img: document.getElementById("lbImg"),
-    source: document.getElementById("lbSource"),
     title: document.getElementById("lbTitle"),
     caption: document.getElementById("lbCaption"),
     // F-5 位置指示：视觉计数 + sr-only 播报节点，序号走全量馆藏（photos）
@@ -1002,43 +1001,6 @@ import { createInstallPrompt } from "./src/install.js";
     uploadStatus.classList.toggle("is-error", Boolean(isError));
   }
 
-  /** 上传前压缩：最长边 ≤2048px WebP；GIF/动图跳过压缩以免丢帧 */
-  async function compressImage(file, maxEdge = 2048, quality = 0.82) {
-    if (!file.type.startsWith("image/")) return file;
-    // GIF 直接保留，灯箱可播放
-    if (file.type === "image/gif") return file;
-    try {
-      const bitmap = await createImageBitmap(file, {
-        imageOrientation: "from-image",
-      });
-      const { width, height } = bitmap;
-      const scale = Math.min(1, maxEdge / Math.max(width, height));
-      if (scale >= 1 && file.size < 600 * 1024) {
-        bitmap.close();
-        return file;
-      }
-      const w = Math.max(1, Math.round(width * scale));
-      const h = Math.max(1, Math.round(height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(bitmap, 0, 0, w, h);
-      bitmap.close();
-      const blob = await new Promise((resolve) =>
-        canvas.toBlob(resolve, "image/webp", quality)
-      );
-      if (!blob || blob.size >= file.size) return file;
-      const name = `${stripExt(file.name || "photo")}.webp`;
-      return new File([blob], name, {
-        type: "image/webp",
-        lastModified: file.lastModified || Date.now(),
-      });
-    } catch {
-      return file;
-    }
-  }
-
   /* —— GitHub Contents API —— */
   const GH_KEY = "milan-gh-sync";
 
@@ -1252,21 +1214,20 @@ import { createInstallPrompt } from "./src/install.js";
       // 没转移就失败时由 catch 回收，避免反复失败累积泄漏
       let objectUrl = "";
       try {
+        // 原图直出（2026-10-17）：上传的**原文件**直接入藏，不做任何客户端压缩/
+        // 转码；母版治理（长边 ≤2560 / 去 GPS）由 CI 的 sync-photos 在仓库侧
+        // 统一完成。这里只挡 GitHub Contents API 肯定放不下的超大文件（25MB），
+        // 免得白等一次 422。
         if (file.size > 25 * 1024 * 1024) {
           fail += 1;
           continue;
         }
-        setStatus(`正在压缩：${file.name}…`);
-        const working = await compressImage(file);
-        if (working.size > 8 * 1024 * 1024) {
-          fail += 1;
-          continue;
-        }
+        setStatus(`正在入藏：${file.name}…`);
         const id = uid();
-        const date = toLocalDate(working.lastModified || file.lastModified || Date.now());
+        const date = toLocalDate(file.lastModified || Date.now());
         const title = stripExt(file.name) || "新照片";
-        const fileName = safeFileName(working);
-        objectUrl = URL.createObjectURL(working);
+        const fileName = safeFileName(file);
+        objectUrl = URL.createObjectURL(file);
         const dims = await new Promise((resolve) => {
           const probe = new Image();
           probe.onload = () =>
@@ -1274,16 +1235,16 @@ import { createInstallPrompt } from "./src/install.js";
           probe.onerror = () => resolve({ width: 0, height: 0 });
           probe.src = objectUrl;
         });
-        const isAnimated = working.type === "image/gif" || file.type === "image/gif";
+        const isAnimated = file.type === "image/gif";
         const record = {
           id,
-          blob: working,
+          blob: file,
           title,
           caption: "",
           date,
           fileName,
           animated: isAnimated,
-          createdAt: working.lastModified || file.lastModified || Date.now(),
+          createdAt: file.lastModified || Date.now(),
           width: dims.width,
           height: dims.height,
         };
@@ -1310,7 +1271,7 @@ import { createInstallPrompt } from "./src/install.js";
           // 远端失败单独计数：本机已存成功，不该和本地失败混为一谈
           try {
             ghItems.push(
-              await pushPhotoToGitHub(ghCfg, working, {
+              await pushPhotoToGitHub(ghCfg, file, {
                 fileName,
                 title,
                 caption: "",

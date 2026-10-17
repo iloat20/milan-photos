@@ -333,8 +333,9 @@ def ensure_medium_large(src: Path) -> tuple[str, str | None] | None:
     """生成 photos/medium/<stem>-2048.webp + .avif（长边 ~2048px）；原图不大于上限时不另存。
 
     与 ensure_medium 同谓词形状（都是「长边超过上限才出档」），只是上限更高、
-    产出名带 `-2048` 后缀，故 1280 档完全不动（序厅 heroSrcset / 逐图页 og:image 零变化）。
-    仅灯箱/展签页的高分屏档位会引用它。
+    产出名带 `-2048` 后缀，故 1280 档完全不动（序厅 heroSrcset 零变化）。
+    自原图直出（2026-10-17）起没有任何客户端引用它——观画室走母版、逐图页也走母版；
+    保留生成是数据一致性决策，停生成时须同步撤 manifest 字段与 global-setup 对策 4b。
     """
     try:
         from PIL import Image

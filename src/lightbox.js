@@ -17,12 +17,6 @@ import {
   captionText,
   displayTitle,
   lightboxSrc,
-  lightboxAvifOrFallback,
-  frameCaps,
-  lightboxNeed,
-  lightboxTiers,
-  lightboxAvifTiers,
-  pickTier,
   positionLabel,
   positionAnnouncement,
   lightboxHintText,
@@ -105,8 +99,7 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  *
  * @param {object} ports
  * @param {HTMLElement|null} ports.lightbox   `<dialog id="lightbox">`
- * @param {HTMLImageElement|null} ports.img   `#lbImg`
- * @param {HTMLSourceElement|null} ports.source `#lbSource`（AVIF 协商）
+ * @param {HTMLImageElement|null} ports.img   `#lbImg`（原图直出：src 即母版）
  * @param {HTMLElement|null} ports.title      `#lbTitle`（无字陈列下恒空）
  * @param {HTMLElement|null} ports.caption    `#lbCaption`（题下策展说明）
  *        无说明的图**不是**把它藏掉就完事：`.lightbox-meta` 高度由内容撑开，
@@ -146,8 +139,8 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  * @param {() => boolean} ports.prefersVT
  * @param {(update:()=>void) => object} ports.startVT
  * @returns {{open:(index:number, invoker?:Element|null, list?:object[]|null, source?:((photoId:string|null)=>Element|null)|null)=>void, isOpen:()=>boolean, prefetchUrl:(photo:object)=>string}}
- *          `prefetchUrl` 给宿主在灯箱未开时预热「本图真正会用到的那一档」，
- *          与 `<picture>` 同源（都过 `selectSrcs`）。
+ *          `prefetchUrl` 给宿主在灯箱未开时预热本图真正会加载的那张 ——
+ *          原图直出后即母版（`lightboxSrc`），与 `<img>` 严格同源。
  *          `open` 的第 4 参数是**本会话的显式过渡源提供者**：宿主回答「这张画此刻
  *          是否正由某个可见元素承载」。序厅（hero 轮播）点击时传它，从而以用户点中
  *          的那幅画面作配对源，而不是展厅里那张可能在屏外的卡片。
@@ -164,7 +157,6 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
 export function createLightbox({
   lightbox,
   img,
-  source,
   title,
   caption,
   countEl,
@@ -441,36 +433,13 @@ export function createLightbox({
 
   /* ────────────────────────── 换图 ────────────────────────── */
 
-  /** 本图在**当前画框**下真正要用的两档（AVIF / WebP），合成的是**单档 URL**。
-   *
-   *  四处取图（`<picture>` 的 AVIF source、`<img>`、hover 预载、邻居预载）必须
-   *  共用这一个函数 —— P-3 的教训是「预载 A、渲染 B」会让同一张图下两次。
-   *
-   *  刻意**不把多候选 srcset 交给 `<source>`**：`<source>` 没有 `sizes` 时默认
-   *  100vw，浏览器会按「视口宽 × DPR」自行协商，我们按画框上限算的选择就被架空了
-   *  （画框受**高度**双约束，比 100vw 窄得多，横屏大图会选大两档）。所以选完只
-   *  给一个不带描述符的 URL，协商权完全在本函数。
-   *
-   *  读不到画框上限或原图 `width/height` 时 `need === 0`，回落 P-3 的
-   *  「最大可用档」，故兜底路径不会比现状更差。动图不进选档（走原文件保证能播）。
-   */
-  function selectSrcs(photo) {
-    if (photo?.animated) return { avif: "", still: lightboxSrc(photo) };
-    const need = lightboxNeed(photo, frameCaps(img), window.devicePixelRatio || 1);
-    if (!need) return { avif: lightboxAvifOrFallback(photo), still: lightboxSrc(photo) };
-    return {
-      avif: pickTier(lightboxAvifTiers(photo), need) || lightboxAvifOrFallback(photo),
-      still: pickTier(lightboxTiers(photo), need) || lightboxSrc(photo),
-    };
-  }
-
   function preloadNeighbor(delta) {
     const arr = photos();
     if (!arr.length) return;
     const next = arr[(pos + delta + arr.length) % arr.length];
-    // 走 rel=preload：带 type=image/avif 时老浏览器免下无效图，与灯箱选中一致可复用。
+    // 原图直出：预载的与 <img> 真正加载的是同一个 URL（lightboxSrc），必然命中。
     // 只预载**一个**方向（由 step() 记录的 preloadDir 决定），不再前后各一张。
-    preload(selectSrcs(next).avif, "low");
+    preload(lightboxSrc(next), "low");
   }
 
   function sync() {
@@ -481,11 +450,8 @@ export function createLightbox({
     // 换图复位缩放/平移
     resetZoom(false);
     const titleText = displayTitle(photo, pos);
-    // AVIF source 与 <img> 同出 selectSrcs：无中图的图不会只填 mediumAvif 而落到空
-    // srcset（那会让浏览器跳过 source、回落 img.src，而预载早已下过 AVIF —— 同一张下两次）。
-    const { avif, still } = selectSrcs(photo);
-    if (source) source.srcset = avif;
-    img.src = still;
+    // 原图直出：<img> 就是母版本身（lightboxSrc），hover 预热与邻居预载同源
+    img.src = lightboxSrc(photo);
     img.alt = titleText;
     // 观画室底部题名：与卡片墙签同一套 displayTitle 产出，切图时同步更新
     if (title) title.textContent = titleText;
@@ -777,12 +743,11 @@ export function createLightbox({
     if (e.key === "ArrowRight") step(1);
   });
 
-  // prefetchUrl：宿主（app.js 卡片 hover/聚焦）在灯箱未开时就预热「本图真正会用到的那一档」。
-  // 走同一个 selectSrcs，故与 `<picture>` 选中同源；`<dialog>` 关闭态下 frameCaps 仍能
-  // 读到画框上限（见 util.frameCaps），所以开图前的预载不会猜错档位。
+  // prefetchUrl：宿主（app.js 卡片 hover/聚焦）在灯箱未开时就预热本图真正会加载的那张
+  // —— 原图直出后即母版（lightboxSrc），与 `<img>` 严格同源，开图前预载不会猜错。
   return {
     open,
     isOpen: () => Boolean(lightbox && lightbox.open),
-    prefetchUrl: (photo) => selectSrcs(photo).avif,
+    prefetchUrl: (photo) => lightboxSrc(photo),
   };
 }

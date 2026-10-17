@@ -24,10 +24,10 @@
 //         Vite 资源图（绝对 URL 或 public 内引用），漏拷即线上必 404；而 vite preview
 //         的 SPA 兜底会把 404 变成 200 text/html，本地永远看不出来（GitHub Pages
 //         没有兜底）——2026-09-30 审查抓到的 S1 就是这么漏上线的。
-//   对策 6（photos 产物清单，P-1）：manifest 里**会被请求**的每个路径都要在 dist
-//         真实存在；反过来，dist 里的母版必须**恰好**是「按需保留」选出的那批。
-//         正向漏拷 = 访客 404；反向多拷 = P-1 被静默回退成「整棵拷贝」（浪费 5.4 MB，
-//         而这正是本对策存在的原因：没有任何用例会因为「多拷」而变红）。
+//   对策 6（photos 产物清单，原图直出）：manifest 里**会被请求**的每个路径都要在 dist
+//         真实存在；反过来，dist/photos 下的母版必须全部都在引用集合里。
+//         正向漏拷 = 访客与爬虫 404（观画室/展签页/分享图都直出母版）；
+//         反向残留 = 引用集合之外的图混进 dist（没有任何请求方会取到它）。
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -184,7 +184,7 @@ module.exports = async function globalSetup(config) {
     problems.push(`引用完整性检查失败（${(err && err.message) || err}）`);
   }
 
-  // ── 对策 6：photos 产物清单（P-1：母版移出产物） ──
+  // ── 对策 6：photos 产物清单（原图直出：母版全量进产物且都会被请求） ──
   try {
     const { referencedPhotoPaths } = await import(
       pathToFileURL(path.join(ROOT, "tools", "photo-assets.mjs")).href
@@ -206,16 +206,17 @@ module.exports = async function globalSetup(config) {
       }
     }
 
-    // 反向：dist 里的母版必须**确实会被请求**（出现在引用集合里）。
+    // 反向：dist/photos 下的母版必须**确实会被请求**（出现在引用集合里）。
+    // 原图直出后全部 src 都在引用集合里，这条反过来说明：dist 里出现引用集合
+    // 之外的图片文件 = 不该在产物里的残留（或漏挂 manifest 的图）。
     // 刻意**不用**构建期决定拷什么的那份判断（masterSourcesToKeep）来校验 ——
-    // 拿它校验自己就是同义反复：红态实证过，让它无条件保留全部 src 时，用 kept
-    // 校验是一路绿（dist 里 18 个母版，kept 里也是 18 个，恰好一一对应）。
+    // 拿它校验自己就是同义反复（两边都从同一份 manifest 现算）。
     const referenced = new Set(refs);
     for (const name of fs.readdirSync(path.join(DIST, "photos"))) {
       if (!IMG_RE.test(name)) continue;
       if (!referenced.has(`photos/${name}`)) {
         problems.push(
-          `母版 photos/${name} 仍在 dist，但它不在「会被请求」之列 —— P-1 已把它移出产物`
+          `photos/${name} 在 dist 里，却不在 manifest 引用集合里 —— 无人会请求它（残留？漏挂？）`
         );
       }
     }
@@ -286,9 +287,11 @@ module.exports = async function globalSetup(config) {
       );
     }
 
-    // ── 对策 4b：中图候选串的蕴含式检查（P-2）──
+    // ── 对策 4b：中图候选串的蕴含式检查（sync 产出形状）──
     // **不能**把 mediumSrcset 塞进上面的 required：那是 `every()` 语义，而 9 张
     // 无中图的条目必然缺该字段，自检会整片误报。这里改成「有中图 ⇒ 必须有候选串」。
+    // 候选串自原图直出起**暂无消费方**（观画室直出母版）：这条从「防观画室退化」
+    // 转为钉住 sync 的产出形状——将来决定停生成 -2048 派生档时连同此检查一起撤。
     const missingLarge = items.filter(
       (it) => (it.medium || it.mediumAvif) && !(it.mediumSrcset && it.mediumAvifSrcset)
     );
@@ -305,8 +308,8 @@ module.exports = async function globalSetup(config) {
             `${names}${missingLarge.length > 3 ? ` 等 ${missingLarge.length} 条` : ""}`,
           `  （缺 mediumSrcset / mediumAvifSrcset；条目总数 ${items.length}）`,
           "",
-          "这是 P-2（2048 高清档）的产物契约：有中图就必须带候选串，否则观画室退化成",
-          "「只认标量档」，2048 档永远不会被选中——而页面看起来完全正常。",
+          "这是 sync 的产出契约：有中图就必须带候选串。候选串目前无客户端消费方",
+          "（观画室已原图直出）——若正在有意停生成派生档，请连同本检查一起撤。",
           "",
           "处置：python tools/sync_photos.py 重新生成并提交 photos/manifest.json",
           "",

@@ -27,11 +27,8 @@ import {
   escapeXml,
   formatDateCN,
   injectHomeImageArray,
-  mediumSize,
   normalizeSlug,
-  pictureSrcsets,
   plainTitle,
-  prefixSrcset,
   renderSitemap,
   shareImage,
   shareImageInfo,
@@ -41,7 +38,6 @@ import {
 
 import { referencedPhotoPaths } from "../../tools/photo-assets.mjs";
 
-import { mediumWidth } from "../../src/util.js";
 import { inlineScriptHashes } from "../../tools/csp.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -149,72 +145,6 @@ test("formatDateCN：ISO → 中文日期；月日不补零；非法输入原样
   assert.equal(formatDateCN(""), "");
   assert.equal(formatDateCN(null), "");
   assert.equal(formatDateCN("2026/09/22"), "2026/09/22");
-});
-
-test("mediumSize：有中图时按长边 1280 反推；无中图返回 null", () => {
-  const portrait = { width: 1536, height: 2048, medium: "photos/medium/a.webp" };
-  assert.deepEqual(mediumSize(portrait), { width: 960, height: 1280 });
-
-  const small = { width: 1024, height: 901, src: "photos/a.jpg" };
-  assert.equal(mediumSize(small), null, "长边 ≤1280 的照片没有中图产物");
-  // 与 util.mediumWidth 同源：无 medium 字段时它同样返回 0（"没有中图"的同一判据）
-  assert.equal(mediumWidth(small), 0);
-});
-
-test("pictureSrcsets：优先用 mediumSrcset（含 2048 档），老清单才回落 medium 标量", () => {
-  // 有 mediumSrcset（P-2 后的清单）：整体纳入，最后一个候选是 -2048
-  const rich = pictureSrcsets({
-    width: 2560,
-    height: 1920,
-    thumbSrcset: "photos/thumbs/a-400.webp 400w, photos/thumbs/a.webp 1200w",
-    thumbAvifSrcset: "photos/thumbs/a-400.avif 400w, photos/thumbs/a.avif 1200w",
-    medium: "photos/medium/a.webp",
-    mediumAvif: "photos/medium/a.avif",
-    mediumSrcset: "photos/medium/a.webp 1280w, photos/medium/a-2048.webp 2048w",
-    mediumAvifSrcset: "photos/medium/a.avif 1280w, photos/medium/a-2048.avif 2048w",
-  });
-  assert.equal(
-    rich.webp,
-    "../../photos/thumbs/a-400.webp 400w, ../../photos/thumbs/a.webp 1200w, " +
-      "../../photos/medium/a.webp 1280w, ../../photos/medium/a-2048.webp 2048w"
-  );
-  assert.equal(
-    rich.avif,
-    "../../photos/thumbs/a-400.avif 400w, ../../photos/thumbs/a.avif 1200w, " +
-      "../../photos/medium/a.avif 1280w, ../../photos/medium/a-2048.avif 2048w"
-  );
-  // 标量与 mediumSrcset 同时在场时**不得**重复出候选（同一个 medium 只出现一次）
-  assert.equal((rich.webp.match(/medium\/a\.webp/g) || []).length, 1);
-  assert.equal((rich.avif.match(/medium\/a\.avif/g) || []).length, 1);
-
-  // 老/降级清单：只有标量 medium + 反推宽度，行为与 P-2 前一致（逐字节）
-  const legacy = pictureSrcsets({
-    width: 1536,
-    height: 2048,
-    thumbSrcset: "photos/thumbs/a-400.webp 300w",
-    medium: "photos/medium/a.webp",
-    mediumAvif: "photos/medium/a.avif",
-  });
-  assert.equal(
-    legacy.webp,
-    "../../photos/thumbs/a-400.webp 300w, ../../photos/medium/a.webp 960w"
-  );
-  assert.equal(legacy.avif, "../../photos/medium/a.avif 960w");
-
-  // 无中图的小图：只剩缩略图候选
-  assert.deepEqual(pictureSrcsets({ width: 1024, height: 901, thumbSrcset: "t.webp 400w" }), {
-    avif: "",
-    webp: "../../t.webp 400w",
-  });
-});
-
-test("prefixSrcset：逐候选加 ../../ 前缀并保留宽度描述符", () => {
-  const out = prefixSrcset("photos/thumbs/a-400.webp 400w, photos/thumbs/a.webp 900w");
-  assert.equal(
-    out,
-    "../../photos/thumbs/a-400.webp 400w, ../../photos/thumbs/a.webp 900w"
-  );
-  assert.equal(prefixSrcset(""), "");
 });
 
 test("absoluteUrl：站点根相对路径解析为绝对 URL（不做前缀，避免重复）", () => {
@@ -393,18 +323,16 @@ test("真 manifest：18 页、slug 唯一、标题两两不同、canonical 自�
   }
 });
 
-test("真 manifest：sitemap 图片扩展与逐图页 og:image 同源，全指派生图（零 .jpg 母版）", () => {
+test("真 manifest：sitemap 图片扩展与逐图页 og:image 同源，全指母版（原图直出）", () => {
   const { pages, sitemap } = buildWorkPages({ manifest: MANIFEST });
   const images = [...sitemap.matchAll(/<image:loc>([^<]+)<\/image:loc>/g)].map((m) => m[1]);
   assert.equal(images.length, pages.length, "每件作品恰好一条 image:loc");
-  for (const u of images) {
-    assert.ok(
-      u.startsWith(SITE_URL) && u.includes("/photos/"),
-      `须是站点绝对 URL 且指向 photos/ 派生图：${u}`
-    );
-    // P-1 后母版（.jpg）不在产物里，指向即线上 404 —— 图片搜索会拿到死链
-    assert.ok(!/\.jpe?g$/i.test(u), `母版 .jpg 不得进 sitemap：${u}`);
-  }
+  images.forEach((u, i) => {
+    // 与逐图页 og:image / JSON-LD contentUrl 同一取值机器：母版本体
+    assert.equal(u, absoluteUrl(shareImage(MANIFEST.photos[i]), SITE_URL));
+    assert.match(u, /\/photos\/[^/]+\.\w+$/, `须是母版本体：${u}`);
+    assert.doesNotMatch(u, /\/(?:thumbs|medium)\//, `不得再指向派生档：${u}`);
+  });
 });
 
 test("真 meta.json：18 件都定了标题，地址里不再有数码导出名", () => {
@@ -454,87 +382,68 @@ test("真清单一致性：manifest.slug 与「meta 覆盖 ?? 文件名 stem」�
   }
 });
 
-/* ───────────────────── 分享图与产物清单（P-1） ───────────────────── */
+/* ───────────────────── 分享图与产物清单（原图直出） ───────────────────── */
 
-test("shareImageInfo：取现存最大的派生图，尺寸跟着选中那一档走", () => {
-  const base = { width: 2560, height: 1920, src: "photos/a.jpg" };
-
-  // mediumSrcset 最大档优先（-2048）
+test("shareImageInfo：取母版本体，尺寸即母版真实像素（原图直出）", () => {
+  // 回归锁（原图直出，2026-10-17）：旧实现此处选 -2048 派生档；有档也必须指母版
   assert.deepEqual(
     shareImageInfo({
-      ...base,
+      width: 2560,
+      height: 1920,
+      src: "photos/a.jpg",
       medium: "photos/medium/a.webp",
       mediumSrcset: "photos/medium/a.webp 1280w, photos/medium/a-2048.webp 2048w",
       thumbSrcset: "photos/thumbs/a.webp 1920w",
     }),
-    { url: "photos/medium/a-2048.webp", width: 2048, height: 1536 }
+    { url: "photos/a.jpg", width: 2560, height: 1920 }
   );
-
-  // 无 -2048 档 → medium 标量（1280），不是 thumb
+  // 竖图如实报竖图尺寸（而不是按某档派生图反推的那套）
   assert.deepEqual(
-    shareImageInfo({
-      ...base,
-      medium: "photos/medium/a.webp",
-      mediumSrcset: "photos/medium/a.webp 1280w",
-      thumbSrcset: "photos/thumbs/a.webp 1920w",
-    }),
-    { url: "photos/medium/a.webp", width: 1280, height: 960 }
+    shareImageInfo({ width: 1920, height: 2560, src: "photos/a.jpg" }),
+    { url: "photos/a.jpg", width: 1920, height: 2560 }
   );
+  // 尺寸缺失：只给 url，宽高字段缺省（消费方按 > 0 判定，不虚报任何尺寸）
+  assert.deepEqual(shareImageInfo({ src: "photos/a.jpg" }), { url: "photos/a.jpg" });
+  assert.deepEqual(shareImageInfo({}), { url: "" });
+});
 
-  // 无中图 → thumb 最大档
+test("shareImage：分享图一律 src 本体（无 src 才是空串）", () => {
   assert.equal(
     shareImage({
+      src: "photos/a.jpg",
       width: 1024,
       height: 901,
-      src: "photos/a.jpg",
       thumbSrcset: "photos/thumbs/a-400.webp 400w, photos/thumbs/a.webp 1024w",
     }),
-    "photos/thumbs/a.webp"
+    "photos/a.jpg"
   );
-
-  // 竖图的 -2048 档实际像素宽是 1536（按长边反推），不能虚报 2048
-  assert.deepEqual(
-    shareImageInfo({
-      width: 1920,
-      height: 2560,
-      src: "photos/a.jpg",
-      mediumSrcset: "photos/medium/a.webp 960w, photos/medium/a-2048.webp 1536w",
-    }),
-    { url: "photos/medium/a-2048.webp", width: 1536, height: 2048 }
-  );
+  assert.equal(shareImage({}), "");
 });
 
-test("shareImage：绝不回落母版 —— 无任何派生图时才用 src", () => {
-  // 「无 thumb」正是 needsMasterSource() 判真的条件，那张母版会被保留在产物里，
-  // 所以这条兜底与 P-1 的保留规则自洽（不是「指向不存在的文件」）
-  assert.equal(shareImage({ src: "photos/a.jpg", width: 800, height: 600 }), "photos/a.jpg");
-});
-
-test("真清单契约：逐图页引用的每个 photos/ 路径都在产物清单里", () => {
+test("真清单契约：逐图页引用的每个 photos/ 路径都在产物清单里（含母版）", () => {
   /* 爬虫与 IM 抓图器只看 HTML、不执行 JS —— 逐图页里任何指向 photos/ 的 URL
-     都必须是站上真实存在的文件。母版已移出产物（P-1），而这三处此前**全部**
-     指向母版：og:image、JSON-LD 的 image、<picture> 的兜底 <img src>
-     （前者由 shareImage 决定，后者此前写死 photo.src）。 */
+     都必须是站上真实存在的文件。原图直出后画心 <img src>、og:image、JSON-LD
+     的 image 与 contentUrl 四处**全部**指向母版：它们必须都在引用集合里
+     （构建期按它拷贝；漏了 = 访客与爬虫 404）。 */
   const { pages } = buildWorkPages({ manifest: MANIFEST, meta: META });
   const available = new Set(referencedPhotoPaths(MANIFEST.photos));
-  // 相对引用（<img src> / srcset）与绝对 URL（og:image / JSON-LD）两种形状都要抓
+  // 相对引用（<img src>）与绝对 URL（og:image / JSON-LD）两种形状都要抓
   const REF_RE = /(?:\.\.\/\.\.\/|milan-photos\/)(photos\/[A-Za-z0-9._/-]+)/g;
 
   let total = 0;
-  for (const page of pages) {
+  pages.forEach((page, i) => {
     const refs = [...page.html.matchAll(REF_RE)].map((m) => m[1]);
     assert.ok(refs.length > 0, `slug=${page.slug} 的页面里一个 photos/ 引用都没有`);
     for (const rel of refs) {
       total += 1;
       assert.ok(available.has(rel), `${page.slug} 引用了产物里没有的 ${rel}`);
-      assert.doesNotMatch(
-        rel,
-        /\.(?:jpe?g|png)$/i,
-        `${page.slug} 仍在引用母版 ${rel} —— 它不在产物里（P-1）`
-      );
     }
-  }
-  assert.ok(total >= pages.length, `引用总数 ${total} 少于页数 —— 抽取逻辑可能失效`);
+    // 画心（唯一的可见大图）必须直出母版：相对路径现算，与清单逐字节对
+    const img = /<img\s[^>]*src="([^"]+)"/.exec(page.html);
+    assert.ok(img, `slug=${page.slug} 缺 <img>`);
+    assert.equal(img[1], `../../${MANIFEST.photos[i].src}`, `${page.slug} 的画心必须直出母版`);
+  });
+  assert.ok(total >= pages.length * 4, `引用总数 ${total} 偏少 —— 抽取逻辑可能失效`);
 });
 
 /* ────────────────────────── CSP（页面自带，不等插件） ────────────────────────── */
@@ -575,7 +484,7 @@ test("展签页自带 CSP：指令齐备，且声明的 hash 与页内脚本自�
 
 /* ────────────────────────── S-2 主页结构化数据 ────────────────────────── */
 
-test("buildHomeImages：18 项与馆藏同序，逐项指派生图 + 逐图页，题名不带书名号", () => {
+test("buildHomeImages：18 项与馆藏同序，逐项指母版 + 逐图页，题名不带书名号", () => {
   const items = buildHomeImages({ manifest: MANIFEST, meta: META });
   assert.equal(items.length, MANIFEST.photos.length);
   const slugs = resolveSlugs(MANIFEST, META);
@@ -587,8 +496,9 @@ test("buildHomeImages：18 项与馆藏同序，逐项指派生图 + 逐图页�
     assert.equal(item.url, `${SITE_URL}p/${slugs[index]}/`);
     // contentUrl 与逐图页 og:image 同源（shareImage）——抓图器两处抓的是同一张
     assert.equal(item.contentUrl, absoluteUrl(shareImage(photo), SITE_URL));
-    // 绝不指向母版：母版不在产物里（P-1），指向它就是线上 404
-    assert.match(item.contentUrl, /\/photos\/(thumbs|medium)\//);
+    // 原图直出：必须指向母版本体（有派生档也必须不选）
+    assert.match(item.contentUrl, /\/photos\/[^/]+\.\w+$/);
+    assert.doesNotMatch(item.contentUrl, /\/(?:thumbs|medium)\//);
     assert.ok(item.description && item.description.length > 0);
     assert.match(item.datePublished, /^\d{4}-\d{2}-\d{2}$/);
   });

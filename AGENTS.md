@@ -1,6 +1,6 @@
 # AGENTS.md
 
-纯静态 GitHub Pages 照片墙（当前视觉：Apple 式系统语言——系统字体栈 + 中性表面 + 圆角卡片 + 毛玻璃 chrome，亮/暗双主题跟随系统）。**Vite 构建管线**（2026-09-30 起；此前是零构建源码直出）：仓库里是源码，线上是 `dist/` 产物——`vite.config.js` 固定产物名（不带 hash）、`base:"./"`（相对路径，兼容子路径站点）。工程化 dev 工具：Vite / ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` → `app.js`（构建时与 `src/*.js` 打成单文件，dev 下按 ESM 直服）+ `styles.css` + `public/`（`sw.js` / `manifest.webmanifest` / `robots.txt`，原样拷贝、不做转换）。缩略图与灯箱图走 `<picture>` AVIF/WebP 协商。远端：`git@github.com:iloat20/milan-photos.git`，Pages 由 `deploy.yml` 先复用 `ci.yml` 全量作门禁、再构建 `dist/` 经 Actions 发布（非分支直出）。
+纯静态 GitHub Pages 照片墙（当前视觉：Apple 式系统语言——系统字体栈 + 中性表面 + 圆角卡片 + 毛玻璃 chrome，亮/暗双主题跟随系统）。**Vite 构建管线**（2026-09-30 起；此前是零构建源码直出）：仓库里是源码，线上是 `dist/` 产物——`vite.config.js` 固定产物名（不带 hash）、`base:"./"`（相对路径，兼容子路径站点）。工程化 dev 工具：Vite / ESLint / Stylelint / Playwright 冒烟 / Lighthouse CI（`package.json` 仅 devDependencies）。入口：`index.html` → `app.js`（构建时与 `src/*.js` 打成单文件，dev 下按 ESM 直服）+ `styles.css` + `public/`（`sw.js` / `manifest.webmanifest` / `robots.txt`，原样拷贝、不做转换）。缩略图走 `<picture>` AVIF/WebP 协商；观画室（灯箱）与逐图展签页**原图直出**（母版本体），列表与序厅首屏仍走派生档。远端：`git@github.com:iloat20/milan-photos.git`，Pages 由 `deploy.yml` 先复用 `ci.yml` 全量作门禁、再构建 `dist/` 经 Actions 发布（非分支直出）。
 
 ## 命令
 
@@ -33,16 +33,16 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | `photos/meta.json` | **策展源**：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem；可选的 `featured`（F-3 序厅精选排名：**唯一正整数、越小越靠前**；非正整数与重复排名都由 sync 报错拦截）。改了 `title`/`caption`/`slug`/`featured` 必须跑 `npm run sync` 才会落到 manifest（`slug` 自 F-4 起**进 manifest**：`photo_item()` 归一写入，是逐图页生成器与分享按钮共用的唯一来源；两处归一实现的一致性由单测「真清单一致性」钉住） |
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` / `featured` 字段与顶层 `hero` 指针（F-3） |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
-| `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成，灯箱改用最大缩略档 `thumbs/`） |
+| `photos/medium/` | **生成物** — WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成）。原图直出后仍被序厅消费（`heroSrc` 标量档与 `heroSrcset` 候选串）；灯箱不再取它 |
 | `tools/gen_work_pages.mjs` | 逐图展签页 `/p/<slug>/` + `sitemap.xml` 的生成器（构建期 `closeBundle` 里跑；规则可被单测直接调用；sitemap 主页条目带 `lastmod` = 馆藏最新 `date`，无日期省略） |
 | `tools/hero-preload.mjs` | 序厅首图预载的构建期注入器（C 组，2026-10-17）：读 manifest 的 `hero` 指针与候选串，把静态 `<link rel="preload" as="image" imagesrcset …>` 替换进 `dist/index.html` 的 `<!--HERO_PRELOAD-->` 占位（`injectHeroPreload`；占位恰一处、替换后不得残留；降级清单给说明注释）。规则可被单测直接调用 |
-| `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入，另补拷 `assets/`（见 `copyStaticPlugin` 注释）。`dist/p/<slug>/index.html`（逐图页）与 `dist/sitemap.xml` 由 `workPagesPlugin` 生成——**仓库根曾有一份 `sitemap.xml`，已删除**（它只有 1 条 URL，且唯一消费者就是那段拷贝） |
+| `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 按清单拷入（`manifest.json` + `thumbs/` + `medium/` 整目录 + **全部母版**，`meta.json` 不发布），另补拷 `assets/`（见 `copyStaticPlugin` 注释）。`dist/p/<slug>/index.html`（逐图页）与 `dist/sitemap.xml` 由 `workPagesPlugin` 生成——**仓库根曾有一份 `sitemap.xml`，已删除**（它只有 1 条 URL，且唯一消费者就是那段拷贝） |
 
-- 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
+- 动图（GIF 等）**不生成 medium**；灯箱直接播原文件（静态图同走母版），列表用静帧 + 角标。
 - 日期回退链（`photo_item`）：`meta.json` 的 `date` > manifest 的已入馆日期 > EXIF > mtime。剥掉 EXIF 后仍由前两级兜住，故日期不会漂移；**18 张的 date 已全部写进 `meta.json`**，即使 manifest 丢失也只靠 mtime 之外的两级仍然稳定。
-- 原图**从不被访客请求**：`src/util.js` 的 `heroSrc` / `lightboxSrc` 都取**最大可用档** —— WebP 侧 `medium || thumb || src`（`thumb` 是最大缩略档），AVIF 侧 `mediumAvif || thumbAvifSrcset` 顶层（`largestAvif`，无对应标量字段故现算）；**只有动图才回落原文件**。所以母版只是「生成派生图的源 + 留档」，其体积不进入访客的关键路径——这正是它该被限长的原因。灯箱的 `<picture>` AVIF `srcset` 由 `lightboxAvifOrFallback()` 填，**与预载同源**，勿改回只填 `mediumAvif`（否则无中图的图会「预载 AVIF、渲染 WebP」下两次）。
-- 上传页可把压缩图写进 IndexedDB 本机预览；GitHub Token 只存浏览器 `localStorage`，勿写入仓库。
-- **逐图展签页 `/p/<slug>/`**（`tools/gen_work_pages.mjs`，构建期生成）：每件作品一个静态 HTML——`<img>` + 标题 + 策展说明 + 日期 + prev/next。存在理由是 SEO：站内深链 `#p=<file>` 是**哈希，搜索引擎不索引**，图片搜索入口此前为 0；逐图页同时让社交分享拿到**逐图**卡片（`og:image` = 该作中图）。改版式时注意三点：① 页面在 `/p/<slug>/` 下，所有资源引用都要 `../../` 前缀（`<picture>` 的 404 会**静默回落**到 `<img src>` 原图，页面看不出坏）；② slug 冲突**报错退出**，不静默去重；③ prev/next 首尾**不绕环**（爬虫看到环即断链判据失效）。**F-4 的分享按钮目标就是这些页面**（逐图 og 卡才有传播力；`#p=` 哈希对抓取器不可见，只留给没有 slug 的自定义上传图）。
+- **原图直出**（2026-10-17 起）：观画室（`lightboxSrc` → `photo.src`）、逐图展签页画心、og:image / JSON-LD / sitemap 分享图、以及上传入库**全部取母版本体**；母版因此**全量进 `dist/`**（拷贝范围由 `tools/photo-assets.mjs` 给出）。**展厅卡片与序厅首屏仍走派生档**（`thumbSrcset` / `heroSrcset`，母版的滚动体积与 LCP 代价不划算）。三条纪律：① 母版漏拷 = 观画室/爬虫 404，由 `tests/unit/photo-assets.test.mjs`（源侧存在性）与 e2e 对策 6（dist 侧双向核对）钉住；② 观画室不再有 `<picture>` / AVIF 协商（`#lbSource` 已删），DPR 选档（P-2）整机退役——别把「按需选档」加回来；③ 正因为母版是访客可见字节，`photos/` 的两条不变量（限长 ≤2560 + 无 GPS）比 P-1 时代更要紧。
+- 上传页把**原文件**写进 IndexedDB 本机预览、并向仓库 `photos/` 直传原文件（客户端不再压缩；入库后的 2560 上限与去 GPS 由 CI 的 sync 链路治理）。GitHub Token 只存浏览器 `localStorage`，勿写入仓库。
+- **逐图展签页 `/p/<slug>/`**（`tools/gen_work_pages.mjs`，构建期生成）：每件作品一个静态 HTML——`<img>`（**母版直出**）+ 标题 + 策展说明 + 日期 + prev/next。存在理由是 SEO：站内深链 `#p=<file>` 是**哈希，搜索引擎不索引**，图片搜索入口此前为 0；逐图页同时让社交分享拿到**逐图**卡片（`og:image` = 该作母版）。改版式时注意三点：① 页面在 `/p/<slug>/` 下，所有资源引用都要 `../../` 前缀——画心与 og:image 都直指母版，写错即 404，且**没有 `<picture>` 静默回落可兜**（直接开天窗）；② slug 冲突**报错退出**，不静默去重；③ prev/next 首尾**不绕环**（爬虫看到环即断链判据失效）。**F-4 的分享按钮目标就是这些页面**（逐图 og 卡才有传播力；`#p=` 哈希对抓取器不可见，只留给没有 slug 的自定义上传图）。
 
 ## 必做：母版的两条不变量（长边上限 + 无 GPS）
 
@@ -54,11 +54,13 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 背景（2026-09-29 治理，见 `research/milan-museum-design/2026-09-29-original-photo-remediation-design.md`）：
 入库的 5 张手机原图是 6144×8192 / 29.3 MB 量级，且**带 GPS EXIF 与蜂窝基站号（CELLID）**——
 站内展示只用 ≤1280px 的 medium，那 73 MB 原图从未被访客下载，却把拍摄地点公开发布了出去。
+**注意口径变化：2026-10-17 起观画室/逐图页/分享图改原图直出，「母版不进入访客请求」不再成立 —— 两条不变量（≤2560 / 无 GPS）反而更要紧。**
 
 新增照片时：
 
 - **上限必须 > `photos_lib.MEDIUM_MAX_EDGE`（当前 1280，全局只此一处定义）**。低于或等于该值时 `ensure_medium()`
-  会直接不生成 medium，灯箱回落原文件、**反而更糊**。工具自身对此有断言（`--max` 小于等于该值报错退出），
+  直接不生成 medium（那 8 张 1024 的图即此情况）——原图直出后观画室不受影响（走母版），
+  但序厅与档位候选串会少一档。工具自身对此有断言（`--max` 小于等于该值报错退出），
   阈值的唯一来源是 `photos_lib`：`downscale_photos.py` 就地 `from photos_lib import MEDIUM_MAX_EDGE`
   （它曾自带第三份拷贝 `= 1600`，在 medium 降到 1280 后没跟着改，导致 `--max 1400` 这种合法上限被拒——
   别再复制这个常量）。
@@ -209,7 +211,7 @@ CSP 的**单一来源**是 `tools/csp.mjs`：主页由 vite 插件注入 `dist/i
 历史记录：旧版曾用一份 `display: none !important` 清单（藏 `.hero-kicker` / `.chapter-sub` / `.card-meta` / `.lb-index` / `.upload-sub` / `.footer-note` 等）做「无字」，其中多数选择器早已无节点（no-op 声明）。2026-09-30 重绘时**清单连同这些死选择器整体删除**——这些名字**不要**再写成样式定义（写了就是新的死 CSS）。
 
 - 环境光取色：**在 sync 阶段预计算**（`photos_lib.photo_palette()` → manifest 的 `palette` 字段，四值 `wall` / `deep` / `glow` / `accent`），客户端只做样式赋值——卡片写 `--card-wall/--card-glow/--card-accent`（`applyCardPalette`），序厅与灯箱写 `--room-adapt*`（`@property` 注册、过渡平滑，见 `styles.css:27` 附近）。同一张画在卡片／序厅／灯箱共用一套色（P1-6 之前三处各采各的，同画三色）。`app.js` 的 `sampleRoomColor()` 退居**回退**，只服务浏览器内上传的图（`photo.custom`，没有 manifest 条目）。取色会按与前景文字的对比度**压暗**，避免亮画把 chrome 冲没。
-- 画框是**无框「抬起」**（2026-10-17 起）：照片贴边、圆角 `--r-md` + 分层投影 —— 与序厅/逐图页本来就是一套语言。卡片 = `.card-media` 无边框无内衬（`--shadow-1` 起，hover/聚焦抬升换 `--shadow-2`）；灯箱同构（`.lightbox-frame` 无 padding / 边框，`.lightbox-img` 上限直接取 `--frame-max-w/h` —— `frameCaps` 读的就是它）。2026-10-06～10-17 期间的「金色实体画框」（4px `#d4af37` + `--frame-inset` 内衬 / `--frame-pad`+`--frame-border`）已按站主反馈退役，**不要**把 `#d4af37` 或这些变量加回来；`tools/gen_assets.py` 的品牌资产随去金化重绘（纯字形图标 + 无框分享图），别再引用金色。
+- 画框是**无框「抬起」**（2026-10-17 起）：照片贴边、圆角 `--r-md` + 分层投影 —— 与序厅/逐图页本来就是一套语言。卡片 = `.card-media` 无边框无内衬（`--shadow-1` 起，hover/聚焦抬升换 `--shadow-2`）；灯箱同构（`.lightbox-frame` 无 padding / 边框，`.lightbox-img` 上限直接取 `--frame-max-w/h`）。2026-10-06～10-17 期间的「金色实体画框」（4px `#d4af37` + `--frame-inset` 内衬 / `--frame-pad`+`--frame-border`）已按站主反馈退役，**不要**把 `#d4af37` 或这些变量加回来；`tools/gen_assets.py` 的品牌资产随去金化重绘（纯字形图标 + 无框分享图），别再引用金色。
 - 环境光晕落在画框**之外**的四周（`.card-media::before`：径向 `--card-accent`、`opacity .45`、`inset: -28px -20px`、`z-index: -1`），**不要**打在画心上；为此 `.card-media` 自身 `overflow: visible` 不裁切，裁切只交给 `.card-media-glass`（管 hover 缩放不出框）。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
 - 观画室的**题下策展说明**（`.lb-caption`，取 `meta.json` 的 `caption`）必须**恒占一行**：`.lightbox-meta` 是 `flex-shrink: 0` 且高度由内容撑开，而空说明确实会遇到（浏览器内上传的图没有 manifest 条目、也就没有 caption；2026-10-10 起馆藏 18 件已全部写完策展说明）—— 空值若用 `display: none`（或干脆不占位），切到无说明的图时上方画框会被挤得**整块跳一下**。空值一律 `visibility: hidden` + `min-height: 1lh`（红态实证：改成 `display: none` 后题名区高度差 26.8px）。护栏是 e2e「题名区高度恒定」那条 —— 只断言「元素不可见」抓不住它。该用例的空说明样本由**页面 JS 层拦 `photos/manifest.json` 自造**（馆藏补齐后清单里已无空样本；该请求归 SW 的 `isManifest` 分支接管，`page.route` 拦不到，故包 `window.fetch`）。取值归 `util.captionText()`（trim 后为空即视为没有，**不**做《无题》式降级）。
@@ -217,7 +219,7 @@ CSP 的**单一来源**是 `tools/csp.mjs`：主页由 vite 插件注入 `dist/i
 - 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
 - **序厅是策展精选，不是陈列序前 8**（F-3）：`meta.json` 的 `featured` 经 sync 归一进 manifest（排名校验与顶层 `hero` 指针在 `photos_lib`）；序厅取 `selectHeroPhotos()`（有精选按 rank 全序、无精选回落陈列序前 `HERO_MAX`）。预载自 C 组（2026-10-17）起是**构建期静态注入**：`tools/hero-preload.mjs` 按 `hero` 指针把 `<link rel="preload">`（含 `imagesrcset`/`imagesizes`/`type`）写进 `dist/index.html`，解析器扫到即发起、零脚本依赖（dev 形态不跑构建收尾，占位注释原样保留、由 app.js 兜底）；`app.js` 的 `preloadImage` 只在「清单降级 / 直服源码」时兜底（去重按 href 比较，静态标签在场即跳过）。口径一致性由 `util.test.mjs` 真清单契约 + `tests/unit/hero-preload.test.mjs` 对拍。**别**把精选逻辑写回数组截断，也别在 `photos[]` 上重排（会连带动展厅/筛选/逐图页序）。
 - **序厅行为收在 `src/hero.js`**（D7，2026-10-17）：渲染 / 自动轮播（六闸门纯函数 `heroAutoAllowed`）/ 三种暂停（用户 / hover / 观画室会话——`modalPause` **刻意独立于** hover 暂停）/ 手势与邻张解锁 / 灯箱过渡配对源（`sourceFor`）全在 `createHeroCarousel` 工厂闭包；`app.js` 只剩装配（DOM + 端口）与 `hero.render()`、`hero.modalPause()` 两个调用点。横滑 / 悬停暂停 / reduced-motion 三块**尚无 e2e 覆盖**（迁移时手工核对过）——动它们要手动验证；改自动轮播判据先跑 `tests/unit/hero.test.mjs`。
-- **低分辨率母版不放大**（D-1）：母版短边 ≤ `LOW_RES_MAX_EDGE`(640) 的条目，卡片画心盒宽钳到源宽（`.card-media.is-lowres` + 行内 `--card-maxw`，见 `lowResCapWidth()`），重点陈列行也居中小尺幅；灯箱 1× 本就是原生尺寸封顶（`lightboxNeed` 的 min(scale,1)），缩放倍率**不**按图降级。
+- **低分辨率母版不放大**（D-1）：母版短边 ≤ `LOW_RES_MAX_EDGE`(640) 的条目，卡片画心盒宽钳到源宽（`.card-media.is-lowres` + 行内 `--card-maxw`，见 `lowResCapWidth()`），重点陈列行也居中小尺幅；灯箱 1× 以母版原生尺寸为上限（不放大），缩放倍率**不**按图降级。
 - 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。顶栏**不设馆内导航**（2026-10-17 起）：只剩馆名与右侧动作（安装 / 主题），「展厅 / 前言 / 库房」跳链已按站主反馈移除 —— 栏目按滚动顺序陈列，逐图页同构（`gen_work_pages.mjs` 同步改），别再把 `.site-nav-links` 加回来。
 
 ### 网格与比例（正名）

@@ -40,9 +40,9 @@ npm run preview    # http://127.0.0.1:4173
 
 ### 页面底部「选择图片」
 
-1. 本机自动压缩（最长边 ≤2048px WebP）后写入 IndexedDB 预览（默认）
+1. 本机原文件写入 IndexedDB 预览（不压缩，原图直出）
 2. 展开「同步到 GitHub」：填写仓库、分支和有 `Contents: Read and write` 权限的 Token 并保存
-3. 之后上传会把压缩图写入仓库的 `photos/` 并更新 `manifest.json`，Pages 构建后线上可见
+3. 之后上传会把原文件写入仓库的 `photos/`（CI 仍会做 2560 上限与去 GPS 治理）并更新 `manifest.json`，Pages 构建后线上可见
 
 Token 只保存在当前浏览器的 localStorage，不会提交到仓库。
 
@@ -73,7 +73,7 @@ public/                    原样拷贝：sw.js / manifest.webmanifest / robots.
 vite.config.js             Vite 构建（固定产物名不带 hash、相对 base、photos 拷入 dist）
 photos/                    原图 + meta.json + manifest.json
 photos/thumbs/             列表缩略图（WebP + AVIF，400/800/1200 三档）
-photos/medium/             灯箱用中尺寸（WebP + AVIF ≤1280px；原图 ≤1280 时不生成）
+photos/medium/             派生中尺寸（WebP + AVIF ≤1280px；原图 ≤1280 时不生成；灯箱已原图直出，序厅仍在用）
 tools/sync_photos.py       生成 manifest + 缩略图 + 中尺寸 + AVIF（CI 权威跑）
 tests/e2e/                 Playwright 冒烟（70 项）
 .github/workflows/         sync-photos（清单回写）+ ci（lint → e2e → Lighthouse）+ deploy（构建并发布 Pages）

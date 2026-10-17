@@ -36,12 +36,11 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // CSP 与主页共用一份指令集合与 hash 规则（见 tools/csp.mjs 的说明）
 import { withCsp } from "./csp.mjs";
 
-// 与 src/util.js 同源：标题降级（《无题 · NN》）、墙号、中图宽度反推都只有一份实现，
+// 与 src/util.js 同源：标题降级（《无题 · NN》）与墙号只有一份实现，
 // 生成器**不重写一遍**——漂移会让展签页与观画室显示不同的标题。
 import {
   captionText,
   displayTitle,
-  mediumWidth,
   wallNumber,
 } from "../src/util.js";
 
@@ -50,9 +49,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** 站点根 URL（末尾必须带 /）：canonical / og:* / sitemap 的唯一来源 */
 export const SITE_URL = "https://iloat20.github.io/milan-photos/";
 export const SITE_NAME = "米兰美术馆";
-
-/** 展签页的画心列宽，与 styles.css 的 `.work-frame` max-width 同值 */
-export const WORK_SIZES = "min(92vw, 860px)";
 
 /* ────────────────────────── slug ────────────────────────── */
 
@@ -157,83 +153,29 @@ export function formatDateCN(iso) {
   return `${m[1]}年${Number(m[2])}月${Number(m[3])}日`;
 }
 
-/** 中图的像素尺寸（长边 1280）；无中图返回 null */
-export function mediumSize(photo) {
-  const width = mediumWidth(photo);
-  if (!width || !(photo?.width > 0) || !(photo?.height > 0)) return null;
-  return { width, height: Math.round((photo.height * width) / photo.width) };
-}
-
-/** srcset 里宽度最大的候选（url + 描述符宽度）；无描述符 / 空 → null */
-function largestCandidate(srcset) {
-  let best = null;
-  for (const part of String(srcset || "").split(",")) {
-    const [url, desc] = part.trim().split(/\s+/);
-    if (!url) continue;
-    const m = /^(\d+)w$/.exec(desc || "");
-    if (!m) continue;
-    const width = Number(m[1]);
-    if (!best || width > best.width) best = { url, width };
-  }
-  return best;
-}
-
 /**
- * 分享卡与结构化数据的代表图：**现存最大的派生图**，连同它的像素尺寸。
+ * 分享卡与结构化数据的代表图：**母版本体**（原图直出，2026-10-17）。
  *
- * 序：`mediumSrcset` 最大档（2048）> `medium` 标量（1280）> `thumb` 最大档。
- * **绝不回落 `src`** —— 母版已移出产物（P-1），回落即指向线上不存在的文件：
- * 症状是分享卡空白、Google 结构化数据报错，而页面本身完全正常（没有任何用例会红）。
- *
- * 为什么「取最大」而不是像观画室那样按画框选档：爬虫与 IM 抓图器不执行 JS、
- * 也不报告画框尺寸，只能按 URL 抓一回；给它们最清晰的那档，抓一张 16–341 KB 的
- * 派生图远比抓 218–971 KB 的母版更可能成功（微信对超大图会直接放弃）。
+ * 此前取「现存最大派生图」（P-1 时代母版不在产物里，回落即 404）；原图直出后
+ * 母版随产物全量发布（tools/photo-assets.mjs），og:image / JSON-LD 的 image 与
+ * contentUrl / sitemap 一律指向 `photos/<file>` —— 与观画室、展签页 `<img>` 同一
+ * 取值，同一张画全站同源。尺寸取 manifest 的真实像素（width/height），缺失时
+ * 只给 url、不虚报尺寸（消费方按 > 0 判定）。
  */
 export function shareImageInfo(photo) {
-  const w0 = photo?.width;
-  const h0 = photo?.height;
-  const aspect = (width) => (w0 > 0 && h0 > 0 ? { height: Math.round((h0 * width) / w0) } : {});
-
-  const large = largestCandidate(photo?.mediumSrcset);
-  if (large) return { url: large.url, width: large.width, ...aspect(large.width) };
-
-  const width1280 = mediumWidth(photo);
-  if (photo?.medium && width1280) {
-    return { url: photo.medium, width: width1280, ...aspect(width1280) };
+  const width = Number(photo?.width) || 0;
+  const height = Number(photo?.height) || 0;
+  const info = { url: photo?.src || "" };
+  if (width > 0 && height > 0) {
+    info.width = width;
+    info.height = height;
   }
-
-  const thumb = largestCandidate(photo?.thumbSrcset);
-  if (thumb) return { url: thumb.url, width: thumb.width, ...aspect(thumb.width) };
-
-  // 理论不可达的兜底（无任何派生图的条目）——注意它与 P-1 的保留规则自洽：
-  // 「无 thumb」正是 needsMasterSource() 判真的条件，那种条目的母版会被留在产物里。
-  return { url: photo?.thumb || photo?.src || "", ...aspect(w0) };
+  return info;
 }
 
 /** 分享图 URL：逐图页的 `og:image` 与 JSON-LD 的 `image` / `contentUrl` 三者同值。 */
 export function shareImage(photo) {
   return shareImageInfo(photo).url;
-}
-
-/**
- * <picture> 的两组候选串：缩略图各档 + 中图（大屏兜底）。
- * 与 src/util.js 的 `heroSrcset` / `heroAvifSrcset` 同构——同一张画在序厅、观画室、
- * 展签页三处取到同一套档位，才不会各自下一张不同尺寸的图。
- */
-export function pictureSrcsets(photo) {
-  const avif = [];
-  const webp = [];
-  if (photo?.thumbAvifSrcset) avif.push(prefixSrcset(photo.thumbAvifSrcset));
-  if (photo?.thumbSrcset) webp.push(prefixSrcset(photo.thumbSrcset));
-  // 中图档：清单带 `mediumSrcset`（1280 + 2048，P-2）时整体纳入，交给浏览器按
-  // WORK_SIZES × DPR 原生协商；老/降级清单只有标量 `medium` 时按反推宽度补一条。
-  const medium = mediumSize(photo);
-  if (photo?.mediumAvifSrcset) avif.push(prefixSrcset(photo.mediumAvifSrcset));
-  else if (medium && photo?.mediumAvif)
-    avif.push(`${workPath(photo.mediumAvif)} ${medium.width}w`);
-  if (photo?.mediumSrcset) webp.push(prefixSrcset(photo.mediumSrcset));
-  else if (medium && photo?.medium) webp.push(`${workPath(photo.medium)} ${medium.width}w`);
-  return { avif: avif.join(", "), webp: webp.join(", ") };
 }
 
 /** 站点绝对 URL（`photos/a.jpg` → `https://…/milan-photos/photos/a.jpg`） */
@@ -251,33 +193,12 @@ function workPath(rel) {
 }
 
 /**
- * manifest 里的 srcset 是**站点根相对**路径（`photos/thumbs/x.webp 800w, …`）——
- * 那是主页视角。展签页在 `/p/<slug>/` 下，直接用会解析成
- * `/p/<slug>/photos/…` 而 404，且 `<picture>` 的 404 会静默回落到 `<img src>`
- * （原图 2.6MB），肉眼与页面结构都看不出问题。故逐候选加 `../../` 前缀。
- */
-export function prefixSrcset(srcset) {
-  return String(srcset || "")
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const [url, ...descriptor] = part.split(/\s+/);
-      return [workPath(url), ...descriptor].join(" ");
-    })
-    .join(", ");
-}
-
-/**
  * 结构化数据。
  *
- * `image` 与 `contentUrl` 都用**同一张派生图**（shareImageInfo）：此前 `image` 指向
- * `photo.src`（母版），母版移出产物后那是个 404 —— Google 会把它记成抓取失败，
- * 而页面渲染完全正常，肉眼与既有用例都发现不了。两者同值是通行做法
- * （`contentUrl` = 该作品的媒体文件、`image` = 代表图，取同一张不影响语义）。
- *
- * width/height 也必须跟着同一个 url 走：报 medium 标量的尺寸、却指向 2048 档，
- * 会让抓图器按错误比例预留版面。
+ * `image` 与 `contentUrl` 都用**母版本体**（shareImageInfo，原图直出）：两者同值
+ * 是通行做法（`contentUrl` = 该作品的媒体文件、`image` = 代表图，取同一张不影响
+ * 语义），且与观画室、展签页 `<img>` 同源。width/height 取自 manifest 的真实像素，
+ * 永远与 url 是同一张图 —— 抓图器按正确比例预留版面。
  */
 function renderJsonLd({ photo, index, slug, siteUrl, share }) {
   const data = {
@@ -324,10 +245,9 @@ export function renderWorkPage({
   const canonical = absoluteUrl(`p/${slug}/`, siteUrl);
   const shareTitle = `${plain} · ${SITE_NAME}`;
   // 分享图只算一次，og:image 与 JSON-LD 的 image/contentUrl 共用（三者必须同值，
-  // 否则抓图器与结构化数据会各自抓一张；此前 image 走 src，母版移出后即 404）
+  // 否则抓图器与结构化数据会各自抓一张）。原图直出后 `share.url` 就是母版本体。
   const share = shareImageInfo(photo);
   const shareUrl = absoluteUrl(share.url, siteUrl);
-  const { avif, webp } = pictureSrcsets(photo);
   const dateText = formatDateCN(photo.date);
   const description = caption || `${bracketed}（${SITE_NAME}馆藏摄影作品）`;
 
@@ -386,8 +306,8 @@ export function renderWorkPage({
   <link rel="icon" type="image/png" sizes="192x192" href="${workPath("assets/icon-192.png")}" />
   <link rel="apple-touch-icon" href="${workPath("assets/apple-touch-icon.png")}" />
 
-  <!-- 分享预览：og:image 指向**本体现存最大的派生图**（有 2048 档就用它，否则 1280 /
-       缩略最大档）—— 此前指向母版，母版移出产物后即 404（P-1） -->
+  <!-- 分享预览：og:image 就是**母版本体**（原图直出，2026-10-17）——
+       与逐图页 <img>、JSON-LD、sitemap 同一取值，别改回派生档 -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="${escapeHtml(SITE_NAME)}" />
   <meta property="og:locale" content="zh_CN" />
@@ -422,9 +342,7 @@ ${renderJsonLd({ photo, index, slug, siteUrl, share })}
       </nav>
 
       <figure class="work-frame">
-        <picture>${avif ? `\n          <source type="image/avif" srcset="${escapeHtml(avif)}" sizes="${WORK_SIZES}" />` : ""}${webp ? `\n          <source type="image/webp" srcset="${escapeHtml(webp)}" sizes="${WORK_SIZES}" />` : ""}
-          <img src="${escapeHtml(workPath(share.url))}" alt="${escapeHtml(bracketed)}"${sizeAttrs} decoding="async" fetchpriority="high" />
-        </picture>
+        <img src="${escapeHtml(workPath(share.url))}" alt="${escapeHtml(bracketed)}"${sizeAttrs} decoding="async" fetchpriority="high" />
       </figure>
 
       <div class="work-label">
@@ -531,7 +449,7 @@ export function buildWorkPages({ manifest, meta = {}, siteUrl = SITE_URL }) {
       loc: absoluteUrl(`p/${slugs[index]}/`, siteUrl),
       lastmod: photo.date || "",
       // 与逐图页 og:image / JSON-LD contentUrl 同一取值机器（shareImageInfo，
-      // 现存最大派生图，绝不母版）：同一件作品在抓图器眼里全站同值。
+      // 母版本体）：同一件作品在抓图器眼里全站同值。
       image: absoluteUrl(shareImage(photo), siteUrl),
     })),
   ];
@@ -550,8 +468,8 @@ const HOME_IMAGE_SLOT = '"image": []';
  * plainTitle / captionText 都只有一份实现），同一件作品在全站被抓图器与结构化
  * 数据描述为同一张图、同一个名字。
  *
- * `contentUrl` 取现存最大派生图（与逐图页 og:image 同源）：**绝不回落母版** ——
- * 母版不在产物里（P-1），指向它就是线上 404，且富结果校验器会记成抓取失败。
+ * `contentUrl` 取母版本体（与逐图页 og:image 同源，原图直出）：母版随产物全量
+ * 发布（tools/photo-assets.mjs），指向它线上可达；富结果校验器按真实像素校验。
  */
 export function buildHomeImages({ manifest, meta = {}, siteUrl = SITE_URL }) {
   const photos = manifest?.photos || [];

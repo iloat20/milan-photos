@@ -1,6 +1,7 @@
 """把 photos/ 下的母版限制在长边上限内（默认 2560），避免手机原图（6000–8000px）
-以数十 MB 的体积进入公开仓库与 Pages 产物——而站内展示用的 medium 只有 1280px，
-原图从不被访客请求（见 src/util.js 的 heroSrc / lightboxSrc）。
+以数十 MB 的体积进入公开仓库与 Pages 产物——母版自原图直出（2026-10-17）起
+就是访客可见的交付物（观画室 / 逐图页 / 分享卡取的就是它），上限是压体积的手段；
+「≤2560 + 无 GPS」两条线则因直出公开而更不能破。
 
 用法：
   python tools/downscale_photos.py            # 就地降采样超限的母版
@@ -8,7 +9,8 @@
   python tools/downscale_photos.py --max 3200 # 覆盖上限
 
 ⚠️ 上限必须 > photos_lib.MEDIUM_MAX_EDGE(=1280)。低于或等于该值时
-   ensure_medium() 会直接不生成 medium，灯箱将回落原文件、反而更糊。
+   ensure_medium() 直接不生成中图档（8 张 1024 的图即此情况）——观画室不受
+   影响（走母版），但序厅与档位候选串会少一档。
 
 副作用（有意为之）：JPEG 重新编码会丢弃全部 EXIF，包括 GPS。
 因此本脚本同时承担「去定位」职责；对不超限的文件请改用

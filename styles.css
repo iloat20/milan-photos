@@ -1385,8 +1385,8 @@
   }
 
   /* 画作容器：图不得大于框。无框「抬起」（2026-10-17 去金框）：盒子即画心，
-     只有圆角与投影 —— 金边 / 内衬 / 金底不要加回来（`frameCaps` 读的是
-     .lightbox-img 的计算 max-width/height，与这里的 --frame-max-* 同源）。 */
+     只有圆角与投影 —— 金边 / 内衬 / 金底不要加回来（`.lightbox-img` 上限
+     直接取这里的 --frame-max-*；P-2 的 frameCaps 随原图直出退役）。 */
   .lightbox-frame {
     /* 观画室放足画面：上限取 72vh，竖构图才撑得开（横构图先触 940px 宽度限） */
     --frame-max-w: min(86vw, 940px);

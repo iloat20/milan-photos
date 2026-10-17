@@ -65,7 +65,7 @@ test.describe("画廊冒烟", () => {
     expect(list.filter((p) => p.thumbAvifSrcset)).toHaveLength(18);
   });
 
-  test("主页图库结构化数据：ImageGallery 的 image 数组 18 项全指派生图与逐图页（S-2）", async ({
+  test("主页图库结构化数据：ImageGallery 的 image 数组 18 项全指原图与逐图页（S-2）", async ({
     page,
   }) => {
     await page.goto("/");
@@ -75,8 +75,9 @@ test.describe("画廊冒烟", () => {
     expect(Array.isArray(data.image)).toBe(true);
     expect(data.image).toHaveLength(18);
     for (const item of data.image) {
-      // 抓图器拿到的必须是**派生图**（母版不在产物里，指向母版即线上 404）
-      expect(item.contentUrl).toMatch(/\/photos\/(thumbs|medium)\//);
+      // 原图直出：抓图器拿到的就是**母版本体**（photos/<file>）
+      expect(item.contentUrl).toMatch(/\/photos\/[^/]+\.\w+$/);
+      expect(item.contentUrl).not.toMatch(/\/(?:thumbs|medium)\//);
       expect(item.contentUrl.startsWith("https://iloat20.github.io/milan-photos/")).toBe(true);
       // 每项都指回它的逐图展签页（#p= 是哈希，爬虫与抓取器看不见）
       expect(item.url).toMatch(/^https:\/\/iloat20\.github\.io\/milan-photos\/p\/[a-z0-9-]+\/$/);
@@ -94,14 +95,15 @@ test.describe("画廊冒烟", () => {
     const lightbox = page.locator("#lightbox");
     await cards.first().click();
     await expect(lightbox).toBeVisible();
-    // 灯箱图走 AVIF 派生图（有中图 → medium.avif；无中图 → thumb 顶层 .avif）。
-    // 契约收口后已无「回退 jpg 原图」这条路径，档位回归锁见下一条用例。src 异步设置，等它落地
+    // 原图直出（2026-10-17）：灯箱 <img> 就是母版本体（photos/<file>），
+    // 不再有 AVIF 派生档协商；直出回归锁见下一条用例。src 异步设置，等它落地
     await page.waitForFunction(() => {
       const img = document.getElementById("lbImg");
       return img && img.currentSrc;
     }, null, { timeout: 10_000 });
     const src = await page.locator("#lbImg").evaluate((img) => img.currentSrc);
-    expect(src).toBeTruthy();
+    expect(src).toMatch(/\/photos\/[^/]+\.\w+$/);
+    expect(src).not.toMatch(/\/(?:thumbs|medium)\//);
     await page.locator("#close").click();
     await expect(lightbox).toBeHidden();
   });
@@ -324,7 +326,7 @@ test.describe("画廊冒烟", () => {
     });
   });
 
-  test("灯箱档位回退：无中图作品也走派生图，不再回落 jpg 原图（P-3 回归锁）", async ({
+  test("灯箱原图直出：有中图的作品也加载母版本体，不再走派生档（原图直出回归锁）", async ({
     page,
     request,
   }) => {
@@ -332,9 +334,11 @@ test.describe("画廊冒烟", () => {
        下标从清单现算，不写死 —— 换图/换序不会让这条悄悄测错对象。 */
     const res = await request.get("/photos/manifest.json");
     const list = (await res.json()).photos;
-    const idx = list.findIndex((p) => !p.medium && !p.animated);
-    expect(idx, "清单里得有无中图的作品，否则这条测不到 P-3").toBeGreaterThanOrEqual(0);
-    expect(list[idx].thumbAvifSrcset, "样本得带 AVIF 变体").toBeTruthy();
+    // 样本选「有中图」的：旧实现这里必然落到 medium 派生档，直出后必须仍是母版
+    const idx = list.findIndex((p) => p.medium && !p.animated);
+    expect(idx, "清单里得有带中图的作品，否则这条测不出直出与选档的区别").toBeGreaterThanOrEqual(0);
+    // 反向自证：清单里确实有无中图的条目（旧实现落到 thumb 的那批），样本面才完整
+    expect(list.some((p) => !p.medium && !p.animated)).toBe(true);
 
     await page.goto("/");
     const cards = page.locator(".card");
@@ -352,32 +356,28 @@ test.describe("画廊冒烟", () => {
     );
 
     const src = await page.locator("#lbImg").evaluate((img) => img.currentSrc);
-    const srcset = await page
-      .locator("#lbSource")
-      .evaluate((s) => s.getAttribute("srcset") || "");
-    // 核心：落到 AVIF 派生图（旧实现此处是 photos/<name>.jpg 原图）
-    expect(src).toMatch(/\.avif$/);
-    expect(src).toContain("/photos/thumbs/");
-    // <picture> 的 AVIF source 必须非空且与预载同源，否则「预载 avif、渲染 webp」下两次
-    expect(srcset).toContain(".avif");
+    // 核心：src 就是母版本体（photos/<file>），不是 /thumbs/ 也不是 /medium/
+    expect(src).toContain(`/photos/${encodeURIComponent(list[idx].file)}`);
+    expect(src).not.toMatch(/\/(?:thumbs|medium)\//);
+    // <picture> 的 AVIF source 已随直出退役：灯箱里不得再有 <source> 覆盖 <img>
+    await expect(page.locator("#lbSource")).toHaveCount(0);
 
     await page.locator("#close").click();
     await expect(page.locator("#lightbox")).toBeHidden();
   });
 
-  /* —— P-2：观画室按需求选档（2048 高清档）——
-     加了 2048 档之后，「按需求选档」本身就是产品行为，两条互为反向：
-     一条证明高分屏不再欠采样，一条证明没有退化成「永远取最大档」。
-     样本座位号从清单现算（横图 + 确有 -2048 档），不写死下标。 */
+  /* —— 原图直出后，DPR 不再影响灯箱取图（P-2 按需选档整机退役）——
+     旧实现刻意「移动端不取 2048 档」；直出后任何 DPR 都取同一个母版，
+     这两条钉住「没有人把 DPR 选档偷偷加回来」。 */
 
-  /** 打开清单里第一个「有 -2048 档」的作品，返回灯箱实际加载的 URL */
+  /** 打开清单里第一个「够格上 -2048 档」的作品（旧 P-2 的目标样本），返回灯箱实际加载的 URL */
   async function openLargeTierSample(page, request, want) {
     const res = await request.get("/photos/manifest.json");
     const list = (await res.json()).photos;
     const idx = list.findIndex(
       (p) => (p.mediumSrcset || "").includes("-2048.") && (p.width > p.height) === want
     );
-    expect(idx, "清单里得有带 -2048 档的样本，否则这条测不到 P-2").toBeGreaterThanOrEqual(0);
+    expect(idx, "清单里得有带 -2048 档的样本，否则这条测不到「不再选档」").toBeGreaterThanOrEqual(0);
 
     await page.goto("/");
     const cards = page.locator(".card");
@@ -391,35 +391,31 @@ test.describe("画廊冒烟", () => {
     return page.locator("#lbImg").evaluate((img) => img.currentSrc);
   }
 
-  test.describe("高清档 · 桌面 DPR2", () => {
+  test.describe("直出 · 桌面 DPR2", () => {
     test.use({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
 
-    test("桌面 DPR2 打开横图 → 灯箱取 -2048 档（P-2 主判据：修好欠采样）", async ({
+    test("桌面 DPR2 打开横图 → 仍直出母版（旧实现此处取 -2048 档）", async ({
       page,
       request,
     }) => {
-      // 1280×900 DPR2 下 2560×1920 的需求宽是 1675，1280 档不够 → 必须落到 2048
+      // 旧实现：1280×900 DPR2 下 2560×1920 的需求宽 1675，1280 档不够 → 会落到 2048
       const src = await openLargeTierSample(page, request, true);
-      expect(src).toContain("-2048");
-      const srcset = await page
-        .locator("#lbSource")
-        .evaluate((s) => s.getAttribute("srcset") || "");
-      expect(srcset, "预载/选择必须与 <picture> 同源").toContain("-2048");
+      expect(src).toMatch(/\/photos\/[^/]+\.\w+$/);
+      expect(src, "2048 档随原图直出退役，不该再被选中").not.toContain("-2048");
+      expect(src).not.toMatch(/\/(?:thumbs|medium)\//);
     });
   });
 
-  test.describe("高清档 · 移动 DPR3", () => {
+  test.describe("直出 · 移动 DPR3", () => {
     test.use({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
 
-    test("移动 DPR3 打开同一张 → 取 1200 缩略档而非 2048（反退化：不是永远取最大档）", async ({
+    test("移动 DPR3 打开同一张 → 同样直出母版（DPR 不再影响取图）", async ({
       page,
       request,
     }) => {
       const src = await openLargeTierSample(page, request, true);
-      // 需求宽 1052 → 最小够用的是 1200 缩略档（无 -400 / -800 后缀的那个）
-      expect(src).toMatch(/\/photos\/thumbs\/[^/]+\.(?:avif|webp)$/);
-      expect(src, "移动端不该下 2048 档（弱网白付 2 倍字节）").not.toContain("-2048");
-      expect(src).not.toContain("/medium/");
+      expect(src).toMatch(/\/photos\/[^/]+\.\w+$/);
+      expect(src).not.toMatch(/\/(?:thumbs|medium)\//);
     });
   });
 
@@ -2388,7 +2384,7 @@ test.describe("逐图展签页", () => {
       expect(page.headers()["content-type"]).toContain("text/html");
     }
 
-    // S-3 图片扩展：每件作品恰好一条 image:loc，全指派生图且逐条可达 ——
+    // S-3 图片扩展：每件作品恰好一条 image:loc，全指母版本体且逐条可达 ——
     // 图片搜索直接从 sitemap 取图，这里死了等于该入口整个失效。
     const xml = await res.text();
 
@@ -2407,9 +2403,14 @@ test.describe("逐图展签页", () => {
     expect(imageLocs.length, "每件作品一条 image:loc").toBe(photos.length);
     expect((xml.match(/xmlns:image=/g) || []).length, "图片命名空间恰好一次").toBe(1);
     for (const loc of imageLocs) {
-      expect(loc, `母版 .jpg 不得进 sitemap（P-1 后不在产物）：${loc}`).not.toMatch(/\.jpe?g$/i);
+      expect(loc, `分享图应是母版本体（原图直出）：${loc}`).toMatch(/\/photos\/[^/]+\.\w+$/);
+      expect(loc, `不得再指向派生档：${loc}`).not.toMatch(/\/(?:thumbs|medium)\//);
       const img = await request.get(pagePath(loc));
       expect(img.status(), `${loc} 应 200`).toBe(200);
+      expect(
+        img.headers()["content-type"],
+        `${loc} 不是图片（404 页或 SPA 兜底会以 text/html 混过 200）`
+      ).toMatch(/^image\//);
     }
   });
 
@@ -2447,23 +2448,15 @@ test.describe("逐图展签页", () => {
         /<img\s[^>]*width="\d+"\s+height="\d+"/
       );
 
-      // <picture> 的每个候选 + <img src> + 样式表都必须能落到产物文件上
-      const candidates = [
-        ...html.matchAll(/srcset="([^"]+)"/g),
-      ].flatMap((m) =>
-        m[1]
-          .split(",")
-          .map((part) => part.trim().split(/\s+/)[0])
-          .filter(Boolean)
+      // 画心就是母版本体（原图直出）：<img src> 必须能落到产物文件上，
+      // 且不得回落到 /thumbs/ /medium/ 派生档（<picture> 已随直出退役）
+      expect(
+        fs.existsSync(path.resolve(dir, img[1])),
+        `${slug} 的画心在产物中不存在：${img[1]}（相对深度写错？）`
+      ).toBeTruthy();
+      expect(img[1], `${slug} 的画心应是母版，不是派生档`).not.toMatch(
+        /\/photos\/(?:thumbs|medium)\//
       );
-      candidates.push(img[1]);
-      expect(candidates.length, `${slug} 应至少有一组响应式候选`).toBeGreaterThan(0);
-      for (const rel of candidates) {
-        expect(
-          fs.existsSync(path.resolve(dir, rel)),
-          `${slug} 引用的图片在产物中不存在：${rel}（相对深度写错？）`
-        ).toBeTruthy();
-      }
       const css = /<link rel="stylesheet" href="([^"]+)"/.exec(html);
       expect(css, `${slug} 缺样式表引用`).not.toBeNull();
       expect(fs.existsSync(path.resolve(dir, css[1])), `${slug} 的样式表不存在`).toBeTruthy();
@@ -2482,11 +2475,11 @@ test.describe("逐图展签页", () => {
     expect(duplicated, `标题重复：${JSON.stringify(duplicated)}`).toEqual([]);
   });
 
-  test("逐图页的分享图 HTTP 可达，且不再指向母版（爬虫视角）", async ({ request }) => {
+  test("逐图页的分享图 HTTP 可达，且就是母版本体（爬虫视角）", async ({ request }) => {
     /* 上一条查的是**磁盘**存在性，而这三个 URL 的唯一消费者是爬虫与 IM 抓图器 ——
        它们走 HTTP、不执行 JS，所以判据必须是 HTTP（磁盘有文件 ≠ 线上可达）。
-       此前三处全部指向母版（og:image / JSON-LD 的 image 与 contentUrl），母版移出
-       产物后即 404，而页面渲染完全正常：没有任何用户可见的症状，只有爬虫默默记一笔。 */
+       原图直出（2026-10-17）后三处（og:image / JSON-LD 的 image 与 contentUrl）
+       全部指向母版本体：母版随产物全量发布，必须逐条 200 + image/*。 */
     const pages = readPages();
     const urls = new Map(); // url → 首个引用它的 slug（失败时能定位到页）
     for (const { slug, html } of pages) {
@@ -2501,21 +2494,15 @@ test.describe("逐图展签页", () => {
       }
     }
 
-    // 非空自证：18 页应覆盖到「有 -2048 档」与「只有缩略图」两端，否则下面查的是空集
-    expect(urls.size, "分享图去重后数量异常，抽取逻辑可能失效").toBeGreaterThanOrEqual(
-      pages.length
-    );
-    const keys = [...urls.keys()];
-    expect(keys.some((u) => u.includes("-2048.")), "没有样本走 2048 档").toBe(true);
-    expect(
-      keys.some((u) => u.includes("/photos/thumbs/")),
-      "没有样本走缩略图档（无中图的 9 件应落在这里）"
-    ).toBe(true);
+    // 非空自证：三处同值 → 去重后应恰好每页一张；抽取逻辑若失效（正则错、字段缺）
+    // 或退化成「全站共用同一张兜底图」，这里会立刻偏小
+    expect(urls.size, "分享图去重后应每页恰好一张，数量异常说明抽取失效").toBe(pages.length);
 
     for (const [url, slug] of urls) {
       const rel = url.slice(SITE.length);
-      expect(rel, `${slug} 的分享图仍是母版：${rel}（P-1 已把它移出产物）`).not.toMatch(
-        /^photos\/[^/]+\.(?:jpe?g|png)$/i
+      expect(rel, `${slug} 的分享图应是母版本体：${rel}`).toMatch(/^photos\/[^/]+\.\w+$/);
+      expect(rel, `${slug} 的分享图不得再指向派生档：${rel}`).not.toMatch(
+        /\/(?:thumbs|medium)\//
       );
       const res = await request.get(pagePath(url));
       expect(res.status(), `${slug} 的分享图不可达：${url}`).toBe(200);

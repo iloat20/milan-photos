@@ -9,7 +9,7 @@
 //    绝对路径在子路径站点上会打头 404；相对路径同时兼容子路径部署与本地 preview。
 // 3. **photos/ 不进 public/**：它是 bot（sync-photos workflow）管理的大目录，且 sync 脚本
 //    按仓库根路径书写；移动它会连坐 tools 与 CI。改由 copyStaticPlugin 按清单拷贝
-//    （母版不进产物 —— 见 tools/photo-assets.mjs）。
+//    （母版自原图直出起全量进产物 —— 见 tools/photo-assets.mjs）。
 const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -31,9 +31,10 @@ const ROOT = __dirname;
  * sitemap.xml 原先也在这里拷，现交由 workPagesPlugin 生成（逐图页要进 sitemap，
  * 静态那份只有 1 条 URL）。仓库根的 sitemap.xml 因此已删除——它的唯一消费者就是本函数。
  *
- * photos/ 不再是整棵拷贝（P-1）：只拷 `manifest.json` + `thumbs/` + `medium/`，
- * 母版按 tools/photo-assets.mjs 的规则**按需**保留（本仓 0 个）。`meta.json` 是
- * 策展源（sync 的输入、前端不读），同样不再发布。
+ * photos/ 的拷贝范围由 tools/photo-assets.mjs 的规则给出：`manifest.json` +
+ * `thumbs/` + `medium/` 整目录，加**全部母版**（原图直出：观画室 / 逐图页 /
+ * 分享卡 / JSON-LD / sitemap 的交付物）。`meta.json` 是策展源（sync 的输入、
+ * 前端不读），不发布。
  */
 function copyStaticPlugin() {
   return {
@@ -59,7 +60,7 @@ function copyStaticPlugin() {
           recursive: true,
         });
       }
-      // 只有「会被触达的 src」才留母版（本仓 0 个）。**必须自己读仓库源**：
+      // 母版（原图直出的交付物）逐个按清单拷。**必须自己读仓库源**：
       // closeBundle 是并行钩子，此刻 dist/photos 才刚建好。
       const manifest = JSON.parse(
         fs.readFileSync(path.join(photosSrc, "manifest.json"), "utf8")

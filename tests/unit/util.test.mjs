@@ -6,8 +6,8 @@
  * 这也是 P2-2 拆分的第一份收益：这些函数此前埋在 app.js 的 IIFE 里，
  * 任何一行改动都只能靠 e2e 冒烟间接观察。
  *
- * 唯一读取真实文件的是末尾那几组「真清单契约」—— 灯箱取图链路必须对**真实 18 件**
- * 成立，纯函数自身的用例（含空值）覆盖不到「真实数据里到底有没有落到原图」。
+ * 唯一读取真实文件的是末尾那几组「真清单契约」—— 灯箱直出母版这条链路必须对
+ * **真实 18 件**成立，纯函数自身的用例（含空值）覆盖不到「真实数据里取的那张在不在仓库」。
  *
  * 注意：本文件是 .mjs（强制 ESM），而 src/util.js 的 ESM 身份由
  * src/package.json 的 {"type":"module"} 声明 —— 仓库根 package.json
@@ -44,16 +44,8 @@ import {
   HERO_MAX,
   lowResCapWidth,
   LOW_RES_MAX_EDGE,
-  largestSrcsetUrl,
   largestStill,
-  largestAvif,
   lightboxSrc,
-  lightboxAvifOrFallback,
-  frameCaps,
-  lightboxNeed,
-  lightboxTiers,
-  lightboxAvifTiers,
-  pickTier,
   emptyState,
   EMPTY_FAILURE_TEXT,
   EMPTY_EMPTY_TEXT,
@@ -183,42 +175,12 @@ test("safeFileName：时间戳前缀 + 清掉非 \\w 字符（含 Date.now，只
   assert.match(safeFileName({ name: "###" }), /^[0-9a-z]+-photo\.jpg$/);
 });
 
-test("largestSrcsetUrl：取 w 描述符最大的候选；无描述符取首个非空项；空/缺失 → \"\"", () => {
-  // 真实形状（photos_lib 按宽度升序写出三档）
-  assert.equal(
-    largestSrcsetUrl(
-      "photos/thumbs/a-400.avif 400w, photos/thumbs/a-800.avif 800w, photos/thumbs/a.avif 1024w"
-    ),
-    "photos/thumbs/a.avif"
-  );
-  // 乱序：仍取 w 最大，与书写顺序无关
-  assert.equal(largestSrcsetUrl("a.avif 800w, b.avif 1024w, c.avif 400w"), "b.avif");
-  // 单档（360×360 那张只有 -400）
-  assert.equal(largestSrcsetUrl("photos/thumbs/t-400.avif 360w"), "photos/thumbs/t-400.avif");
-  // 全部无 w 描述符：首个非空项胜出（结果确定，不依赖遍历顺序的偶然）
-  assert.equal(largestSrcsetUrl("x.avif, y.avif"), "x.avif");
-  // 空 / 缺失 / 纯空白 / 只有逗号
-  assert.equal(largestSrcsetUrl(""), "");
-  assert.equal(largestSrcsetUrl(null), "");
-  assert.equal(largestSrcsetUrl(undefined), "");
-  assert.equal(largestSrcsetUrl("  ,  "), "");
-});
-
-test("largestStill / largestAvif：档位优先级，且无 AVIF 变体时返回空串（交调用方回落）", () => {
+test("largestStill：档位优先级 medium > thumb > src；缺失一律空串（现役消费者 = 序厅）", () => {
   assert.equal(largestStill({ medium: "m", thumb: "t", src: "s" }), "m");
   assert.equal(largestStill({ thumb: "t", src: "s" }), "t");
   assert.equal(largestStill({ src: "s" }), "s");
   assert.equal(largestStill({}), "");
   assert.equal(largestStill(null), "");
-
-  assert.equal(
-    largestAvif({ mediumAvif: "ma.avif", thumbAvifSrcset: "t-400.avif 400w, t.avif 1024w" }),
-    "ma.avif"
-  );
-  assert.equal(largestAvif({ thumbAvifSrcset: "t-400.avif 400w, t.avif 1024w" }), "t.avif");
-  // 无 AVIF 变体 → 空串（不是回落 WebP，那是调用方的事）
-  assert.equal(largestAvif({ thumb: "t" }), "");
-  assert.equal(largestAvif({}), "");
 });
 
 test("heroSrc：动图只用静态缩略图，避免首屏拉原文件", () => {
@@ -243,34 +205,19 @@ test("preloadType：取首个候选的 URL 判格式（整串正则的 $ 锚点�
   assert.equal(preloadType("", ""), "");
 });
 
-test("lightboxSrc：动图走原文件保证能播；静态图取最大可用档 medium → thumb → src", () => {
-  assert.equal(lightboxSrc({ animated: true, medium: "m", src: "s" }), "s");
-  assert.equal(lightboxSrc({ medium: "m", thumb: "t", src: "s" }), "m");
-  // 回归锁（P-3）：无中图的 9/18 张必须落到 thumb —— 旧实现此处返回 src（原图）
-  assert.equal(lightboxSrc({ thumb: "t", src: "s" }), "t");
+test("lightboxSrc：原图直出 —— 一律母版 src；派生档在场也不选（反退化）", () => {
+  // 回归锁（原图直出，2026-10-17）：旧实现此处选 medium，有派生档也必须仍是母版
+  assert.equal(lightboxSrc({ medium: "m", thumb: "t", src: "photos/a.jpg" }), "photos/a.jpg");
+  assert.equal(lightboxSrc({ animated: true, medium: "m", src: "photos/a.gif" }), "photos/a.gif");
   assert.equal(lightboxSrc({ src: "s" }), "s");
+  assert.equal(lightboxSrc({ medium: "m" }), "", "无 src 时不回落派生档");
   assert.equal(lightboxSrc({}), "");
+  assert.equal(lightboxSrc(null), "");
 });
 
-test("lightboxAvifOrFallback：AVIF 优先；无 AVIF 现算顶层；动图仍走原文件", () => {
-  assert.equal(lightboxAvifOrFallback({ mediumAvif: "a.avif", medium: "m" }), "a.avif");
-  // 回归锁（P-3）：无 mediumAvif 时从 thumbAvifSrcset 取顶层，而非直接回落 WebP
-  assert.equal(
-    lightboxAvifOrFallback({
-      thumbAvifSrcset: "t-400.avif 400w, t.avif 1024w",
-      thumb: "t.webp",
-    }),
-    "t.avif"
-  );
-  assert.equal(lightboxAvifOrFallback({ medium: "m" }), "m");
-  // 动图即使有 AVIF 变体也不能用（会丢帧）
-  assert.equal(lightboxAvifOrFallback({ animated: true, src: "s", mediumAvif: "a.avif" }), "s");
-  assert.equal(lightboxAvifOrFallback({}), "");
-});
-
-/* ───────────────── 真清单契约：灯箱永不请求原图（P-3 主护栏） ─────────────────
-   纯函数用例用的是合成对象，覆盖不到「真实 18 件里到底有没有落到 .jpg」。
-   这条读真实 manifest，对全部条目断言灯箱取图来自派生目录 ——
+/* ───────────────── 真清单契约：灯箱直出母版（原图直出主护栏） ─────────────────
+   纯函数用例用的是合成对象，覆盖不到「真实 18 件里取的那张在不在仓库」。
+   这条读真实 manifest，对全部条目断言灯箱取图等于 `src` 且文件真实存在 ——
    毫秒级、覆盖全量、不可能同义反复。 */
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -278,147 +225,26 @@ const MANIFEST = JSON.parse(
   fs.readFileSync(path.join(ROOT, "photos", "manifest.json"), "utf8")
 );
 
-test("真清单契约：全部静态作品的灯箱取图都来自派生图，无一落到 jpg/png 原图", () => {
+test("真清单契约：全部作品的灯箱取图都等于母版本体，且母版真实存在", () => {
   const photos = MANIFEST.photos;
   assert.equal(photos.length, 18, "样本量变了就得重新审视这条断言");
-  const originRe = /\.(?:jpe?g|png)$/i;
-  const derivedRe = /^photos\/(?:medium|thumbs)\//;
   for (const p of photos) {
-    if (p.animated) continue;
-    assert.match(lightboxSrc(p), derivedRe, `${p.file} 的灯箱落到了 ${lightboxSrc(p)}`);
-    assert.doesNotMatch(
-      lightboxSrc(p),
-      originRe,
-      `${p.file} 的灯箱仍加载原图：${lightboxSrc(p)}`
-    );
-    assert.doesNotMatch(
-      lightboxAvifOrFallback(p),
-      originRe,
-      `${p.file} 的 AVIF 侧回落到原图：${lightboxAvifOrFallback(p)}`
-    );
+    assert.equal(lightboxSrc(p), p.src, `${p.file} 的灯箱取图必须直出母版`);
+    assert.match(p.src, /^photos\/[^/]+\.\w+$/, `${p.file} 的 src 形状不对：${p.src}`);
+    assert.ok(fs.existsSync(path.join(ROOT, p.src)), `${p.file} 的母版不存在：${p.src}`);
   }
-  // 反向自证：样本里确实有无 medium 的条目，否则上面「不落原图」是空架子
-  assert.ok(
-    photos.some((p) => !p.medium),
-    "没有无 medium 的样本，这条契约就测不到 P-3"
-  );
+  // 反向自证：样本里确实有带派生档的条目，否则「有档也不选」测不到任何对比面
+  assert.ok(photos.some((p) => p.medium), "没有带 medium 的样本，这条契约区分不了「直出」与「选档」");
 });
 
-/* ───────────────── P-2：观画室按需求选档（纯函数） ─────────────────
-   加 2048 档之后，选档公式本身就是产品行为（移动端取 1200 而不是 2048）。
-   这些边界（画框双约束、恰好相等、小图不放大）都是只差一像素就翻转的，
-   埋在 IIFE 里只能靠 e2e 撞；抽成纯函数后毫秒级钉死。 */
-
-test("frameCaps：解析 max-width / max-height；非数值与信息缺失一律回退 0", () => {
-  const desktop = () => ({ maxWidth: "920px", maxHeight: "628px" });
-  assert.deepEqual(frameCaps({}, desktop), { w: 920, h: 628 });
-  // 窄屏覆盖后是小数（styles.css 的 min(94vw, 900px) 在 390px 视口下 ≈ 350.6）
-  assert.deepEqual(
-    frameCaps({}, () => ({ maxWidth: "350.6px", maxHeight: "574.8px" })),
-    { w: 350.6, h: 574.8 }
-  );
-  // max-width: none / 空值 → 0（调用方据此走 P-3 的兜底最大档，而不是误判成「需求 0」）
-  assert.deepEqual(frameCaps({}, () => ({ maxWidth: "none", maxHeight: "" })), { w: 0, h: 0 });
-  assert.deepEqual(frameCaps(null, desktop), { w: 0, h: 0 });
-  // 取样式函数缺失：Node 端没有 getComputedStyle。import 期不报错、调用期静默回退
-  assert.deepEqual(frameCaps({}), { w: 0, h: 0 });
-});
-
-test("lightboxNeed：画框宽高双约束 + DPR；小图不放大；信息不足 → 0", () => {
-  const DESK = { w: 920, h: 628 };
-  const MOB = { w: 350.6, h: 574.8 };
-  // 桌面 DPR2：2560×1920 受**高度**约束（628/1920 比 920/2560 更紧）→ ceil(2560·0.327083·2)
-  assert.equal(lightboxNeed({ width: 2560, height: 1920 }, DESK, 2), 1675);
-  // 移动 DPR3：同一张改为受**宽度**约束 → 1052
-  assert.equal(lightboxNeed({ width: 2560, height: 1920 }, MOB, 3), 1052);
-  // 竖图桌面 DPR2 也是受高度约束 → 942
-  assert.equal(lightboxNeed({ width: 1920, height: 2560 }, DESK, 2), 942);
-  // 竖图移动 DPR3 与横图同值 1052（瓶颈都是 350.6 的画框宽）
-  assert.equal(lightboxNeed({ width: 1536, height: 2048 }, MOB, 3), 1052);
-  assert.equal(lightboxNeed({ width: 1920, height: 2560 }, MOB, 3), 1052);
-  // 取整是**整式** ceil(w·s·dpr)：350.6×3 = 1051.8 → 1052。
-  // 若先 ceil(350.6)=351 再 ×3 会得 1053 —— 差这 1px 正是选 1200 与选 1280 的边界
-  assert.equal(lightboxNeed({ width: 1536, height: 2048 }, MOB, 3), 1052);
-  // 小图不放大（min(…,1)）：360×360 按原尺寸显示 → need = 360·dpr，而不是画框宽
-  assert.equal(lightboxNeed({ width: 360, height: 360 }, DESK, 3), 1080);
-  // dpr 非法按 1 处理，不产出 NaN / Infinity
-  assert.equal(lightboxNeed({ width: 100, height: 100 }, DESK, 0), 100);
-  // 信息不足 → 0（0 是「不知道」而非「需求为 0」：正常取值恒 ≥ 1）
-  assert.equal(lightboxNeed({ width: 0, height: 100 }, DESK, 2), 0);
-  assert.equal(lightboxNeed({ width: 100 }, DESK, 2), 0);
-  assert.equal(lightboxNeed({ width: 100, height: 100 }, { w: 0, h: 0 }, 2), 0);
-  assert.equal(lightboxNeed(null, DESK, 2), 0);
-});
-
-test('pickTier：选 ≥ need 的最小档；全都偏小取最大档；空候选 → ""；边界取等号', () => {
-  const tiers = [
-    { url: "t400", w: 400 },
-    { url: "t800", w: 800 },
-    { url: "t1200", w: 1200 },
-    { url: "m2048", w: 2048 },
-  ];
-  assert.equal(pickTier(tiers, 100), "t400"); // 需求小于全部 → 最小档
-  assert.equal(pickTier(tiers, 401), "t800");
-  assert.equal(pickTier(tiers, 1200), "t1200"); // **恰好等于**取该档（>= 而非 >）
-  assert.equal(pickTier(tiers, 1201), "m2048");
-  assert.equal(pickTier(tiers, 99999), "m2048"); // 全都偏小 → 最大档
-  assert.equal(pickTier([], 500), "");
-  assert.equal(pickTier(null, 500), "");
-});
-
-test("lightboxTiers：medium + thumb 合并、按 w 升序、按 url 去重；动图 → []", () => {
-  assert.deepEqual(
-    lightboxTiers({
-      mediumSrcset: "photos/medium/a.webp 1280w, photos/medium/a-2048.webp 2048w",
-      thumbSrcset: "photos/thumbs/a-400.webp 400w, photos/thumbs/a.webp 1200w",
-    }),
-    [
-      { url: "photos/thumbs/a-400.webp", w: 400 },
-      { url: "photos/thumbs/a.webp", w: 1200 },
-      { url: "photos/medium/a.webp", w: 1280 },
-      { url: "photos/medium/a-2048.webp", w: 2048 },
-    ]
-  );
-  // 同一个 url 出现两次 → 只留一条，w 取较大者
-  assert.deepEqual(lightboxTiers({ mediumSrcset: "m.webp 800w, m.webp 1280w" }), [
-    { url: "m.webp", w: 1280 },
-  ]);
-  // 老/降级清单没有 mediumSrcset：用标量 medium + 反推宽度补齐（不至于选不出档）
-  assert.deepEqual(lightboxTiers({ medium: "photos/medium/a.webp", width: 2560, height: 1920 }), [
-    { url: "photos/medium/a.webp", w: 1280 },
-  ]);
-  // 动图不进选档（会冻成静帧），交给 lightboxSrc 走原文件
-  assert.deepEqual(lightboxTiers({ animated: true, thumbSrcset: "t.webp 400w" }), []);
-  assert.deepEqual(lightboxTiers({}), []);
-  assert.deepEqual(lightboxTiers(null), []);
-});
-
-test("lightboxAvifTiers：与 WebP 侧同构，只换 AVIF 变体", () => {
-  assert.deepEqual(
-    lightboxAvifTiers({
-      mediumAvifSrcset: "photos/medium/a.avif 1280w, photos/medium/a-2048.avif 2048w",
-      thumbAvifSrcset: "photos/thumbs/a-400.avif 400w, photos/thumbs/a.avif 1200w",
-    }),
-    [
-      { url: "photos/thumbs/a-400.avif", w: 400 },
-      { url: "photos/thumbs/a.avif", w: 1200 },
-      { url: "photos/medium/a.avif", w: 1280 },
-      { url: "photos/medium/a-2048.avif", w: 2048 },
-    ]
-  );
-  // 无 AVIF 变体的降级清单 → 空候选（调用方回落 lightboxAvifOrFallback）
-  assert.deepEqual(lightboxAvifTiers({ medium: "m.webp", width: 2560, height: 1920 }), []);
-  assert.deepEqual(lightboxAvifTiers({ animated: true, mediumAvif: "a.avif" }), []);
-  assert.deepEqual(lightboxAvifTiers({}), []);
-});
-
-/* ───────────── 真清单契约（P-2）：候选串须与磁盘文件、命名、序数自洽 ─────────────
+/* ───────────── 真清单契约：候选串须与磁盘文件、描述符自洽 ─────────────
    合成的对象测不出「线上真的生成了 5 张 -2048、且描述符与文件名相符」。
-   这两条读真 manifest + 摸真文件系统，把「生成侧产出」与「消费侧解析」钉在一起。 */
+   两条都读真 manifest + 摸真文件系统，钉住 sync 的产出质量：-2048 档随原图直出
+   暂别灯箱消费，但仍在生成与发布，数据自洽先钉住（停生成时再一起撤）。 */
 
 const PHOTOS_DIR = path.join(ROOT, "photos");
 
-test("真清单契约：候选每档都真实存在、w 描述符严格升序、无重复 URL；有中图必能选出档", () => {
+test("真清单契约：候选每档都真实存在、w 描述符严格升序、无重复 URL", () => {
   let withLarge = 0;
   for (const p of MANIFEST.photos) {
     for (const key of ["mediumSrcset", "mediumAvifSrcset"]) {
@@ -440,19 +266,10 @@ test("真清单契约：候选每档都真实存在、w 描述符严格升序、
         );
       }
     }
-    const tiers = lightboxTiers(p);
-    if (tiers.some((t) => /-2048\.\w+$/.test(t.url))) withLarge += 1;
-    if (p.medium || p.mediumAvif) {
-      assert.ok(tiers.length > 0, `${p.file} 有中图却没有 WebP 候选`);
-      assert.ok(
-        tiers.some((t) => t.url.startsWith("photos/medium/")),
-        `${p.file} 的 WebP 候选里没有中图档`
-      );
-      assert.ok(lightboxAvifTiers(p).length > 0, `${p.file} 有中图却没有 AVIF 候选`);
-    }
+    if ((p.mediumSrcset || "").includes("-2048.")) withLarge += 1;
   }
-  // 反向自证（防空架子）：真有长边 > 2048 的样本，否则「选档」根本无从被测
-  assert.equal(withLarge, 5, "有 -2048 档的样本数变了，选档断言的对象要重新审视");
+  // 反向自证（防空架子）：真有长边 > 2048 的样本，否则「2048 档」断言无从被测
+  assert.equal(withLarge, 5, "有 -2048 档的样本数变了，断言的对象要重新审视");
 });
 
 test("真清单契约：-2048 档的宽度描述符 = 按长边 2048 反推的实际宽（竖图是 1536）", () => {

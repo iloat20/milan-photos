@@ -237,57 +237,6 @@ test("真清单契约：全部作品的灯箱取图都等于母版本体，且�
   assert.ok(photos.some((p) => p.medium), "没有带 medium 的样本，这条契约区分不了「直出」与「选档」");
 });
 
-/* ───────────── 真清单契约：候选串须与磁盘文件、描述符自洽 ─────────────
-   合成的对象测不出「线上真的生成了 5 张 -2048、且描述符与文件名相符」。
-   两条都读真 manifest + 摸真文件系统，钉住 sync 的产出质量：-2048 档随原图直出
-   暂别灯箱消费，但仍在生成与发布，数据自洽先钉住（停生成时再一起撤）。 */
-
-const PHOTOS_DIR = path.join(ROOT, "photos");
-
-test("真清单契约：候选每档都真实存在、w 描述符严格升序、无重复 URL", () => {
-  let withLarge = 0;
-  for (const p of MANIFEST.photos) {
-    for (const key of ["mediumSrcset", "mediumAvifSrcset"]) {
-      const raw = p[key];
-      if (raw === undefined) continue;
-      const seen = new Set();
-      let prevW = -1;
-      for (const part of raw.split(",")) {
-        const [url, descriptor] = part.trim().split(/\s+/);
-        const w = Number(/^(\d+)w$/.exec(descriptor || "")?.[1]);
-        assert.ok(Number.isFinite(w) && w > 0, `${p.file} 的 ${key} 有非法描述符：${part}`);
-        assert.ok(w > prevW, `${p.file} 的 ${key} 描述符非严格升序：${raw}`);
-        prevW = w;
-        assert.ok(!seen.has(url), `${p.file} 的 ${key} 有重复 URL：${url}`);
-        seen.add(url);
-        assert.ok(
-          fs.existsSync(path.join(PHOTOS_DIR, url.replace(/^photos\//, ""))),
-          `${p.file} 的 ${key} 指向不存在的文件：${url}`
-        );
-      }
-    }
-    if ((p.mediumSrcset || "").includes("-2048.")) withLarge += 1;
-  }
-  // 反向自证（防空架子）：真有长边 > 2048 的样本，否则「2048 档」断言无从被测
-  assert.equal(withLarge, 5, "有 -2048 档的样本数变了，断言的对象要重新审视");
-});
-
-test("真清单契约：-2048 档的宽度描述符 = 按长边 2048 反推的实际宽（竖图是 1536）", () => {
-  const large = MANIFEST.photos.filter((p) => (p.mediumSrcset || "").includes("-2048."));
-  assert.equal(large.length, 5);
-  for (const p of large) {
-    // 竖图的 2048 档长边是 2048、实际**像素宽** 1536；描述符必须写实际宽，
-    // 否则浏览器/选档会以为拿到一张比实际更大的图（大两档、白下 60% 字节）
-    const expected = Math.round((p.width * 2048) / Math.max(p.width, p.height));
-    const m = /photos\/medium\/[^ ]+-2048\.webp (\d+)w/.exec(p.mediumSrcset);
-    assert.ok(m, `${p.file} 的 mediumSrcset 里找不到 -2048 档：${p.mediumSrcset}`);
-    assert.equal(Number(m[1]), expected, `${p.file} 的 -2048 档宽度描述符`);
-  }
-  // 竖图与横图都得有样本，否则「按长边反推」只测了一半
-  assert.ok(large.some((p) => p.height > p.width), "样本里得有竖图");
-  assert.ok(large.some((p) => p.width > p.height), "样本里得有横图");
-});
-
 /* —— 空状态判据（F-9）——
    二分模型的真值全表：只有「就绪 + 0 件 + 取清单失败」才给重试入口。
    文案的差异也一并钉住（D-5）：两句必须互不相同，且都不含面向站主的实现细节

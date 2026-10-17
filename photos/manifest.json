@@ -15,8 +15,6 @@
       "mediumAvif": "photos/medium/mmexport1788447848472.avif",
       "width": 1279,
       "height": 1706,
-      "mediumSrcset": "photos/medium/mmexport1788447848472.webp 960w",
-      "mediumAvifSrcset": "photos/medium/mmexport1788447848472.avif 960w",
       "heroSrcset": "photos/thumbs/mmexport1788447848472-400.webp 300w, photos/thumbs/mmexport1788447848472-800.webp 600w, photos/thumbs/mmexport1788447848472.webp 900w, photos/medium/mmexport1788447848472.webp 960w",
       "heroAvifSrcset": "photos/thumbs/mmexport1788447848472-400.avif 300w, photos/thumbs/mmexport1788447848472-800.avif 600w, photos/thumbs/mmexport1788447848472.avif 900w, photos/medium/mmexport1788447848472.avif 960w",
       "palette": {
@@ -41,8 +39,6 @@
       "mediumAvif": "photos/medium/IMG20260817164949_01.avif",
       "width": 1536,
       "height": 2048,
-      "mediumSrcset": "photos/medium/IMG20260817164949_01.webp 960w",
-      "mediumAvifSrcset": "photos/medium/IMG20260817164949_01.avif 960w",
       "heroSrcset": "photos/thumbs/IMG20260817164949_01-400.webp 300w, photos/thumbs/IMG20260817164949_01-800.webp 600w, photos/thumbs/IMG20260817164949_01.webp 900w, photos/medium/IMG20260817164949_01.webp 960w",
       "heroAvifSrcset": "photos/thumbs/IMG20260817164949_01-400.avif 300w, photos/thumbs/IMG20260817164949_01-800.avif 600w, photos/thumbs/IMG20260817164949_01.avif 900w, photos/medium/IMG20260817164949_01.avif 960w",
       "palette": {
@@ -67,8 +63,6 @@
       "mediumAvif": "photos/medium/IMG20260817164045.avif",
       "width": 1536,
       "height": 2048,
-      "mediumSrcset": "photos/medium/IMG20260817164045.webp 960w",
-      "mediumAvifSrcset": "photos/medium/IMG20260817164045.avif 960w",
       "heroSrcset": "photos/thumbs/IMG20260817164045-400.webp 300w, photos/thumbs/IMG20260817164045-800.webp 600w, photos/thumbs/IMG20260817164045.webp 900w, photos/medium/IMG20260817164045.webp 960w",
       "heroAvifSrcset": "photos/thumbs/IMG20260817164045-400.avif 300w, photos/thumbs/IMG20260817164045-800.avif 600w, photos/thumbs/IMG20260817164045.avif 900w, photos/medium/IMG20260817164045.avif 960w",
       "palette": {
@@ -93,8 +87,6 @@
       "mediumAvif": "photos/medium/IMG20260817155446.avif",
       "width": 1536,
       "height": 2048,
-      "mediumSrcset": "photos/medium/IMG20260817155446.webp 960w",
-      "mediumAvifSrcset": "photos/medium/IMG20260817155446.avif 960w",
       "heroSrcset": "photos/thumbs/IMG20260817155446-400.webp 300w, photos/thumbs/IMG20260817155446-800.webp 600w, photos/thumbs/IMG20260817155446.webp 900w, photos/medium/IMG20260817155446.webp 960w",
       "heroAvifSrcset": "photos/thumbs/IMG20260817155446-400.avif 300w, photos/thumbs/IMG20260817155446-800.avif 600w, photos/thumbs/IMG20260817155446.avif 900w, photos/medium/IMG20260817155446.avif 960w",
       "palette": {
@@ -308,8 +300,6 @@
       "mediumAvif": "photos/medium/IMG20260916193852.avif",
       "width": 2560,
       "height": 1920,
-      "mediumSrcset": "photos/medium/IMG20260916193852.webp 1280w, photos/medium/IMG20260916193852-2048.webp 2048w",
-      "mediumAvifSrcset": "photos/medium/IMG20260916193852.avif 1280w, photos/medium/IMG20260916193852-2048.avif 2048w",
       "heroSrcset": "photos/thumbs/IMG20260916193852-400.webp 400w, photos/thumbs/IMG20260916193852-800.webp 800w, photos/thumbs/IMG20260916193852.webp 1200w, photos/medium/IMG20260916193852.webp 1280w",
       "heroAvifSrcset": "photos/thumbs/IMG20260916193852-400.avif 400w, photos/thumbs/IMG20260916193852-800.avif 800w, photos/thumbs/IMG20260916193852.avif 1200w, photos/medium/IMG20260916193852.avif 1280w",
       "palette": {
@@ -334,8 +324,6 @@
       "mediumAvif": "photos/medium/IMG20260916193836.avif",
       "width": 2560,
       "height": 1920,
-      "mediumSrcset": "photos/medium/IMG20260916193836.webp 1280w, photos/medium/IMG20260916193836-2048.webp 2048w",
-      "mediumAvifSrcset": "photos/medium/IMG20260916193836.avif 1280w, photos/medium/IMG20260916193836-2048.avif 2048w",
       "heroSrcset": "photos/thumbs/IMG20260916193836-400.webp 400w, photos/thumbs/IMG20260916193836-800.webp 800w, photos/thumbs/IMG20260916193836.webp 1200w, photos/medium/IMG20260916193836.webp 1280w",
       "heroAvifSrcset": "photos/thumbs/IMG20260916193836-400.avif 400w, photos/thumbs/IMG20260916193836-800.avif 800w, photos/thumbs/IMG20260916193836.avif 1200w, photos/medium/IMG20260916193836.avif 1280w",
       "palette": {
@@ -360,8 +348,6 @@
       "mediumAvif": "photos/medium/IMG20260916193647.avif",
       "width": 1920,
       "height": 2560,
-      "mediumSrcset": "photos/medium/IMG20260916193647.webp 960w, photos/medium/IMG20260916193647-2048.webp 1536w",
-      "mediumAvifSrcset": "photos/medium/IMG20260916193647.avif 960w, photos/medium/IMG20260916193647-2048.avif 1536w",
       "heroSrcset": "photos/thumbs/IMG20260916193647-400.webp 300w, photos/thumbs/IMG20260916193647-800.webp 600w, photos/thumbs/IMG20260916193647.webp 900w, photos/medium/IMG20260916193647.webp 960w",
       "heroAvifSrcset": "photos/thumbs/IMG20260916193647-400.avif 300w, photos/thumbs/IMG20260916193647-800.avif 600w, photos/thumbs/IMG20260916193647.avif 900w, photos/medium/IMG20260916193647.avif 960w",
       "palette": {
@@ -385,8 +371,6 @@
       "mediumAvif": "photos/medium/IMG20260817155358.avif",
       "width": 1920,
       "height": 2560,
-      "mediumSrcset": "photos/medium/IMG20260817155358.webp 960w, photos/medium/IMG20260817155358-2048.webp 1536w",
-      "mediumAvifSrcset": "photos/medium/IMG20260817155358.avif 960w, photos/medium/IMG20260817155358-2048.avif 1536w",
       "heroSrcset": "photos/thumbs/IMG20260817155358-400.webp 300w, photos/thumbs/IMG20260817155358-800.webp 600w, photos/thumbs/IMG20260817155358.webp 900w, photos/medium/IMG20260817155358.webp 960w",
       "heroAvifSrcset": "photos/thumbs/IMG20260817155358-400.avif 300w, photos/thumbs/IMG20260817155358-800.avif 600w, photos/thumbs/IMG20260817155358.avif 900w, photos/medium/IMG20260817155358.avif 960w",
       "palette": {
@@ -410,8 +394,6 @@
       "mediumAvif": "photos/medium/IMG20260817155311.avif",
       "width": 1920,
       "height": 2560,
-      "mediumSrcset": "photos/medium/IMG20260817155311.webp 960w, photos/medium/IMG20260817155311-2048.webp 1536w",
-      "mediumAvifSrcset": "photos/medium/IMG20260817155311.avif 960w, photos/medium/IMG20260817155311-2048.avif 1536w",
       "heroSrcset": "photos/thumbs/IMG20260817155311-400.webp 300w, photos/thumbs/IMG20260817155311-800.webp 600w, photos/thumbs/IMG20260817155311.webp 900w, photos/medium/IMG20260817155311.webp 960w",
       "heroAvifSrcset": "photos/thumbs/IMG20260817155311-400.avif 300w, photos/thumbs/IMG20260817155311-800.avif 600w, photos/thumbs/IMG20260817155311.avif 900w, photos/medium/IMG20260817155311.avif 960w",
       "palette": {

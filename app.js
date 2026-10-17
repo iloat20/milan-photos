@@ -26,7 +26,7 @@ import { createHeroCarousel } from "./src/hero.js";
 import { createInstallPrompt } from "./src/install.js";
 
 (() => {
-  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,mediumSrcset?:string,mediumAvifSrcset?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,slug?:string,fileName?:string,custom?:boolean,width?:number,height?:number,featured?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
+  /** @type {{src:string,thumb?:string,thumbSrcset?:string,thumbAvifSrcset?:string,medium?:string,mediumAvif?:string,animated?:boolean,title:string,caption:string,date?:string,id:string,file?:string,slug?:string,fileName?:string,custom?:boolean,width?:number,height?:number,featured?:number,palette?:{wall:string,deep:string,glow:string,accent:string}}[]} */
   let folderPhotos = [];
   /** @type {typeof folderPhotos} */
   let customPhotos = [];
@@ -639,10 +639,6 @@ import { createInstallPrompt } from "./src/install.js";
           thumbAvifSrcset: item.thumbAvifSrcset || "",
           medium: item.medium || "",
           mediumAvif: item.mediumAvif || "",
-          // 中图候选串（P-2）：1280 + 2048 档。这里是逐字段白名单拷贝，漏接管不会报错、
-          // 只会静默退回标量 medium（永远选不到 2048 档），故新字段**必须**在此显式登记。
-          mediumSrcset: item.mediumSrcset || "",
-          mediumAvifSrcset: item.mediumAvifSrcset || "",
           animated: Boolean(item.animated),
           title: item.title || "未命名",
           caption: item.caption || "",
@@ -986,8 +982,8 @@ import { createInstallPrompt } from "./src/install.js";
 
       card.appendChild(media);
       card.addEventListener("click", () => lb.open(i, card));
-      // hover/聚焦即预载灯箱用图，点开「瞬出」。经 lb.prefetchUrl 走灯箱同一个选档函数，
-      // 连同 `<picture>` 一起同源 —— 否则会预载 2048 档、渲染 1200 档（或反之）白下一次
+      // hover/聚焦即预载灯箱用图，点开「瞬出」。经 lb.prefetchUrl 取灯箱将要加载的
+      // 同一个 URL（原图直出后恒为母版）——预热与实载各拉一张才是白下一次的那类坑
       const prefetchLightbox = () => preloadImage(lb.prefetchUrl(photo), "auto");
       card.addEventListener("pointerenter", prefetchLightbox, { once: true });
       card.addEventListener("focus", prefetchLightbox, { once: true });

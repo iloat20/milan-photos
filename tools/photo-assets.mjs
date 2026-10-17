@@ -41,8 +41,8 @@ function srcsetUrls(srcset) {
 /**
  * 站点会去请求的 `photos/` 路径全集（相对仓库根）。
  *
- * 刻意**遍历字段**而不是白名单字段名：manifest 的字段还会长（P-2 刚加了
- * `mediumSrcset` / `mediumAvifSrcset`），白名单漏一个，新档位就在守卫里隐形 ——
+ * 刻意**遍历字段**而不是白名单字段名：manifest 的字段还会长（`thumbAvifSrcset`、
+ * `heroSrcset` 都是后加的），白名单漏一个，新档位就在守卫里隐形 ——
  * 而「守卫看不见的东西」正是这类改动最容易丢的。
  * 规则：任何以 `photos/` 开头的字符串字段都算引用（srcset 拆项）；
  * `src` 自原图直出起也直接计入（此前只在 needsMasterSource 为真时才计）。

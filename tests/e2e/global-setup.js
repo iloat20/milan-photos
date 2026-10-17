@@ -286,37 +286,6 @@ module.exports = async function globalSetup(config) {
         ].join("\n")
       );
     }
-
-    // ── 对策 4b：中图候选串的蕴含式检查（sync 产出形状）──
-    // **不能**把 mediumSrcset 塞进上面的 required：那是 `every()` 语义，而 9 张
-    // 无中图的条目必然缺该字段，自检会整片误报。这里改成「有中图 ⇒ 必须有候选串」。
-    // 候选串自原图直出起**暂无消费方**（观画室直出母版）：这条从「防观画室退化」
-    // 转为钉住 sync 的产出形状——将来决定停生成 -2048 派生档时连同此检查一起撤。
-    const missingLarge = items.filter(
-      (it) => (it.medium || it.mediumAvif) && !(it.mediumSrcset && it.mediumAvifSrcset)
-    );
-    if (missingLarge.length > 0) {
-      const names = missingLarge
-        .slice(0, 3)
-        .map((it) => it.file)
-        .join(", ");
-      throw new Error(
-        [
-          "",
-          "",
-          `[产物能力自检失败] ${baseURL} 的 manifest 里有中图却没有中图候选串的条目：` +
-            `${names}${missingLarge.length > 3 ? ` 等 ${missingLarge.length} 条` : ""}`,
-          `  （缺 mediumSrcset / mediumAvifSrcset；条目总数 ${items.length}）`,
-          "",
-          "这是 sync 的产出契约：有中图就必须带候选串。候选串目前无客户端消费方",
-          "（观画室已原图直出）——若正在有意停生成派生档，请连同本检查一起撤。",
-          "",
-          "处置：python tools/sync_photos.py 重新生成并提交 photos/manifest.json",
-          "",
-          "",
-        ].join("\n")
-      );
-    }
   } catch (err) {
     if (err && err.message && err.message.startsWith("\n\n[产物能力自检失败]")) throw err;
     // 挂 cause 而非只把 message 拼进文本：保留原始堆栈（网络/TLS/JSON 解析都可能在这）

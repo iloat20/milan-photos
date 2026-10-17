@@ -385,14 +385,14 @@ test("真清单一致性：manifest.slug 与「meta 覆盖 ?? 文件名 stem」�
 /* ───────────────────── 分享图与产物清单（原图直出） ───────────────────── */
 
 test("shareImageInfo：取母版本体，尺寸即母版真实像素（原图直出）", () => {
-  // 回归锁（原图直出，2026-10-17）：旧实现此处选 -2048 派生档；有档也必须指母版
+  // 回归锁（原图直出，2026-10-17）：旧实现此处选派生档（含已退役的 -2048）；有档也必须指母版
   assert.deepEqual(
     shareImageInfo({
       width: 2560,
       height: 1920,
       src: "photos/a.jpg",
       medium: "photos/medium/a.webp",
-      mediumSrcset: "photos/medium/a.webp 1280w, photos/medium/a-2048.webp 2048w",
+      mediumAvif: "photos/medium/a.avif",
       thumbSrcset: "photos/thumbs/a.webp 1920w",
     }),
     { url: "photos/a.jpg", width: 2560, height: 1920 }

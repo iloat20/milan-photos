@@ -367,17 +367,15 @@ test.describe("画廊冒烟", () => {
   });
 
   /* —— 原图直出后，DPR 不再影响灯箱取图（P-2 按需选档整机退役）——
-     旧实现刻意「移动端不取 2048 档」；直出后任何 DPR 都取同一个母版，
+     旧实现按 DPR 选 1280 /（已退役的）2048 档；直出后任何 DPR 都取同一个母版，
      这两条钉住「没有人把 DPR 选档偷偷加回来」。 */
 
-  /** 打开清单里第一个「够格上 -2048 档」的作品（旧 P-2 的目标样本），返回灯箱实际加载的 URL */
-  async function openLargeTierSample(page, request, want) {
+  /** 打开清单里第一张「有中图的横图静图」（若选档还在，这类正是会触发它的样本），返回灯箱实际加载的 URL */
+  async function openStillSample(page, request) {
     const res = await request.get("/photos/manifest.json");
     const list = (await res.json()).photos;
-    const idx = list.findIndex(
-      (p) => (p.mediumSrcset || "").includes("-2048.") && (p.width > p.height) === want
-    );
-    expect(idx, "清单里得有带 -2048 档的样本，否则这条测不到「不再选档」").toBeGreaterThanOrEqual(0);
+    const idx = list.findIndex((p) => !p.animated && p.medium && p.width > p.height);
+    expect(idx, "清单里得有带中图的横图静图样本，否则这条测不到「不再选档」").toBeGreaterThanOrEqual(0);
 
     await page.goto("/");
     const cards = page.locator(".card");
@@ -394,15 +392,16 @@ test.describe("画廊冒烟", () => {
   test.describe("直出 · 桌面 DPR2", () => {
     test.use({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
 
-    test("桌面 DPR2 打开横图 → 仍直出母版（旧实现此处取 -2048 档）", async ({
+    test("桌面 DPR2 打开横图 → 仍直出母版（旧实现此处取 2048 档）", async ({
       page,
       request,
     }) => {
       // 旧实现：1280×900 DPR2 下 2560×1920 的需求宽 1675，1280 档不够 → 会落到 2048
-      const src = await openLargeTierSample(page, request, true);
+      const src = await openStillSample(page, request);
       expect(src).toMatch(/\/photos\/[^/]+\.\w+$/);
-      expect(src, "2048 档随原图直出退役，不该再被选中").not.toContain("-2048");
-      expect(src).not.toMatch(/\/(?:thumbs|medium)\//);
+      expect(src, "任何派生档（含已退役的 -2048）都不该再被选中").not.toMatch(
+        /\/(?:thumbs|medium)\//
+      );
     });
   });
 
@@ -413,7 +412,7 @@ test.describe("画廊冒烟", () => {
       page,
       request,
     }) => {
-      const src = await openLargeTierSample(page, request, true);
+      const src = await openStillSample(page, request);
       expect(src).toMatch(/\/photos\/[^/]+\.\w+$/);
       expect(src).not.toMatch(/\/(?:thumbs|medium)\//);
     });

@@ -56,7 +56,7 @@ test("referencedPhotoPaths：src 与 srcset 拆项都计入，非 photos/ 字段
       src: "photos/a.jpg",
       thumb: "photos/thumbs/a.webp",
       thumbSrcset: "photos/thumbs/a-400.webp 400w, photos/thumbs/a.webp 1024w",
-      mediumSrcset: "photos/medium/a.webp 1280w",
+      medium: "photos/medium/a.webp",
       date: "2026-01-01",
       palette: { wall: "#fff" },
     },

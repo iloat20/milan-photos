@@ -13,7 +13,7 @@ python tools/downscale_photos.py [--check]  # 母版长边上限 2560（超限�
 python tools/sanitize_photos.py  [--check]  # 字节级剥离 JPEG GPS EXIF（零像素改动；--check 只检）
 npm run lint                # ESLint + Stylelint
 npm run test:unit           # 纯函数单测（node --test，零新依赖，毫秒级）
-npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，69 项）
+npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，70 项）
 npm run lhci                # Lighthouse CI（先 build 再审，a11y/BP/SEO 满分断言）
 node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / dev 5173——dev 用 BASE 指端口；产物 tools/preview-apple-*.png，已 gitignore）
 ```
@@ -33,7 +33,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | `photos/meta.json` | **策展源**：按**文件名**写 `title` / `caption` / `date`；**日期已全部固化在此**。另有可选的 `slug`（逐图页 URL），缺省回退文件名 stem；可选的 `featured`（F-3 序厅精选排名：**唯一正整数、越小越靠前**；非正整数与重复排名都由 sync 报错拦截）。改了 `title`/`caption`/`slug`/`featured` 必须跑 `npm run sync` 才会落到 manifest（`slug` 自 F-4 起**进 manifest**：`photo_item()` 归一写入，是逐图页生成器与分享按钮共用的唯一来源；两处归一实现的一致性由单测「真清单一致性」钉住） |
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` / `featured` 字段与顶层 `hero` 指针（F-3） |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
-| `photos/medium/` | **生成物** — WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成）。原图直出后仍被序厅消费（`heroSrc` 标量档与 `heroSrcset` 候选串）；灯箱不再取它 |
+| `photos/medium/` | **生成物** — WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成）。原图直出后仍被序厅消费（`heroSrc` 标量档与 `heroSrcset` 候选串）；灯箱不再取它。**`-2048` 派生档已退役**（2026-10-17 清理：原图直出后无消费方即停生成，`mediumSrcset`/`mediumAvifSrcset` 字段一并撤；research 里的 P-2 设计稿是历史记录，勿照搬重加） |
 | `tools/gen_work_pages.mjs` | 逐图展签页 `/p/<slug>/` + `sitemap.xml` 的生成器（构建期 `closeBundle` 里跑；规则可被单测直接调用；sitemap 主页条目带 `lastmod` = 馆藏最新 `date`，无日期省略） |
 | `tools/hero-preload.mjs` | 序厅首图预载的构建期注入器（C 组，2026-10-17）：读 manifest 的 `hero` 指针与候选串，把静态 `<link rel="preload" as="image" imagesrcset …>` 替换进 `dist/index.html` 的 `<!--HERO_PRELOAD-->` 占位（`injectHeroPreload`；占位恰一处、替换后不得残留；降级清单给说明注释）。规则可被单测直接调用 |
 | `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 按清单拷入（`manifest.json` + `thumbs/` + `medium/` 整目录 + **全部母版**，`meta.json` 不发布），另补拷 `assets/`（见 `copyStaticPlugin` 注释）。`dist/p/<slug>/index.html`（逐图页）与 `dist/sitemap.xml` 由 `workPagesPlugin` 生成——**仓库根曾有一份 `sitemap.xml`，已删除**（它只有 1 条 URL，且唯一消费者就是那段拷贝） |
@@ -60,7 +60,7 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 
 - **上限必须 > `photos_lib.MEDIUM_MAX_EDGE`（当前 1280，全局只此一处定义）**。低于或等于该值时 `ensure_medium()`
   直接不生成 medium（那 8 张 1024 的图即此情况）——原图直出后观画室不受影响（走母版），
-  但序厅与档位候选串会少一档。工具自身对此有断言（`--max` 小于等于该值报错退出），
+  但序厅候选串会少一档。工具自身对此有断言（`--max` 小于等于该值报错退出），
   阈值的唯一来源是 `photos_lib`：`downscale_photos.py` 就地 `from photos_lib import MEDIUM_MAX_EDGE`
   （它曾自带第三份拷贝 `= 1600`，在 medium 降到 1280 后没跟着改，导致 `--max 1400` 这种合法上限被拒——
   别再复制这个常量）。

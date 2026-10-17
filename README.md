@@ -102,10 +102,10 @@ npm run lhci      # Lighthouse CI（构建后审计，a11y / best-practices / SE
 - 灯箱为**原生 `<dialog>` + `showModal()`**：Esc/焦点圈闭由 UA 承担、`::backdrop` 遮罩（APG Dialog）；支持双指捏合 / 双击 / 滚轮缩放、单击切图
 - 年月筛选 chip（`aria-pressed` + View Transitions 卡片配对动画）
 - **URL 深链**：`#f=<年月>` 直达筛选、`#p=<文件名>` 直达某张画的灯箱（可分享、刷新不丢状态）；纯锚点导航不受影响
-- AVIF + WebP `<picture>` 协商（缩略图三档 400/800/1200 srcset + 灯箱 ~1280px 中图）+ 懒加载 + View Transitions
+- AVIF + WebP `<picture>` 协商（缩略图三档 400/800/1200 srcset）+ 懒加载 + View Transitions；观画室 / 逐图展签页 / 分享卡**原图直出**（文件本体，不再选派生档）
 - Service Worker 离线缓存（壳层 SWR、媒体 LRU 上限、清单 Network First + install 快照）+ Priority Hints；`VERSION` 由构建期按内容指纹自动注入，无需人工抬版本
 - `photos/` 自动上墙（本地 `npm run sync` / GitHub Actions，日期优先取 EXIF）
 - 支持 GIF / 动图：列表显示静帧 + 角标，灯箱播放原文件
-- 页面内本地上传（上传前客户端压缩为 ≤2048px WebP；GIF 保留原文件）
+- 页面内本地上传（原文件直传 `photos/`，仅挡 25MB 以上的超大文件；入库后的限长 / 去 GPS 由 CI 治理）
 - 支持 `prefers-reduced-motion`（关闭自动轮播与非必要动效）
 - 展厅墙面：sync 阶段用同一算法预计算 `palette` 写进 manifest，客户端只做样式赋值并按对比度压暗；仅浏览器内上传的图（无 manifest 条目）回退到 `sampleRoomColor()` 采样

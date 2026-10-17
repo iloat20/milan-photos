@@ -18,10 +18,6 @@ THUMB_STEPS = (400, 800, 1200)
 THUMB_MAX_EDGE = 1200
 THUMB_QUALITY = 78
 MEDIUM_MAX_EDGE = 1280
-# 高清档（P-2）：**仅当原图长边 > 此值**才另存（与 ensure_medium 同谓词形状）。
-# 守卫取 `> 2048` 而非「有 medium 就加档」：实测把 1536×2048 与 1706 那 4 张也加档
-# 要多付 1.9 MB，而它们桌面 DPR2 已达标（覆盖率 1.02），性价比不成立。
-MEDIUM_LARGE_MAX_EDGE = 2048
 MEDIUM_QUALITY = 78
 # AVIF 同主观质量体积约为 WebP 的 60-70%，质量参数独立调
 AVIF_THUMB_QUALITY = 55
@@ -227,21 +223,17 @@ def _try_save_avif(im, out: Path, quality: int) -> bool:
 
 
 def _write_webp_variant(
-    src: Path, out_dir: Path, max_edge: int, quality: int, name_suffix: str = ""
+    src: Path, out_dir: Path, max_edge: int, quality: int
 ) -> tuple[str, str | None] | None:
-    """生成 out_dir/<stem><name_suffix>.webp + 同尺寸 .avif（尽力）；返回 (webp, avif|None)。
-
-    ``name_suffix`` 默认空串 → 产出名 `<stem>.webp`，现有调用逐字节不变；
-    高清档传 `-2048` 以与 1280 档并存于同一目录而不互相覆盖。
-    """
+    """生成 out_dir/<stem>.webp + 同尺寸 .avif（尽力）；返回 (webp, avif|None)。"""
     try:
         from PIL import Image, ImageOps
     except ImportError:
         return None
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"{src.stem}{name_suffix}.webp"
-    out_avif = out_dir / f"{src.stem}{name_suffix}.avif"
+    out = out_dir / f"{src.stem}.webp"
+    out_avif = out_dir / f"{src.stem}.avif"
     webp_rel = out.relative_to(ROOT).as_posix()
     avif_rel = out_avif.relative_to(ROOT).as_posix()
     try:
@@ -329,36 +321,11 @@ def ensure_medium(src: Path) -> tuple[str, str | None] | None:
     return _write_webp_variant(src, MEDIUM, MEDIUM_MAX_EDGE, MEDIUM_QUALITY)
 
 
-def ensure_medium_large(src: Path) -> tuple[str, str | None] | None:
-    """生成 photos/medium/<stem>-2048.webp + .avif（长边 ~2048px）；原图不大于上限时不另存。
-
-    与 ensure_medium 同谓词形状（都是「长边超过上限才出档」），只是上限更高、
-    产出名带 `-2048` 后缀，故 1280 档完全不动（序厅 heroSrcset 零变化）。
-    自原图直出（2026-10-17）起没有任何客户端引用它——观画室走母版、逐图页也走母版；
-    保留生成是数据一致性决策，停生成时须同步撤 manifest 字段与 global-setup 对策 4b。
-    """
-    try:
-        from PIL import Image
-    except ImportError:
-        return None
-
-    try:
-        # 只读 header 判尺寸，不解码像素（exif 转置只交换宽高，max(size) 不变）
-        with Image.open(src) as im:
-            if max(im.size) <= MEDIUM_LARGE_MAX_EDGE:
-                return None
-    except Exception:
-        return None
-    return _write_webp_variant(
-        src, MEDIUM, MEDIUM_LARGE_MAX_EDGE, MEDIUM_QUALITY, name_suffix="-2048"
-    )
-
-
 def medium_width_at(item: dict, max_edge: int) -> int:
     """按给定长边上限反推中图的像素宽（中图尺寸本身不进 manifest）。
 
     与 ``src/util.js`` 的 ``mediumWidth()`` 是**同一条规则的两份实现**——前者给
-    Python 侧用（组 heroSrcset / mediumSrcset），后者给无 manifest 条目的本机上传图兜底。
+    Python 侧用（组 heroSrcset），后者给无 manifest 条目的本机上传图兜底。
     两份漂移会让预载选中与 ``<picture>`` 不同的候选（白下一次图），
     由 ``tests/unit/medium-width.test.mjs`` 拿提交的 manifest 逐条钉住。
 
@@ -377,15 +344,6 @@ def medium_width_at(item: dict, max_edge: int) -> int:
 def medium_width(item: dict) -> int:
     """1280 档的像素宽（``medium_width_at`` 在上限 1280 上的特例）。"""
     return medium_width_at(item, MEDIUM_MAX_EDGE)
-
-
-def _srcset_string(entries: list[tuple[str, int]]) -> str:
-    """[(相对路径, 实际像素宽)] → "a.webp 800w, b.webp 1200w"：宽度升序、同宽去重（保留先到者）。"""
-    seen: dict[int, str] = {}
-    for rel, width in entries:
-        if width > 0 and width not in seen:
-            seen[width] = rel
-    return ", ".join(f"{rel} {width}w" for width, rel in sorted(seen.items()))
 
 
 def hero_srcsets(item: dict) -> dict:
@@ -467,7 +425,6 @@ def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None)
     thumbs = ensure_thumb_set(path)
     # 动图不生成 medium：灯箱直接用原文件，避免冻成静帧
     medium = None if animated else ensure_medium(path)
-    medium_large = None if animated else ensure_medium_large(path)
     item = {
         "src": f"photos/{name}",
         "file": name,
@@ -519,28 +476,6 @@ def photo_item(path: Path, meta: dict, prev_dates: dict[str, str] | None = None)
             item["mediumAvif"] = medium[1]
     if size:
         item["width"], item["height"] = size
-    # 高清候选（P-2）：1280 档 + 2048 档，宽度各按自身上限反推
-    # ——竖图的 2048 档实际像素宽是 1536（长边 2048），描述符必须写实际宽，
-    # 否则浏览器（与 JS 选档）会以为拿到一张比实际更大的图。
-    # 标量 medium / mediumAvif 仍指 1280：序厅 heroSrcset 与逐图页 og:image 不受影响。
-    still_tiers: list[tuple[str, int]] = []
-    avif_tiers: list[tuple[str, int]] = []
-    if medium:
-        mw = medium_width_at(item, MEDIUM_MAX_EDGE)
-        if mw:
-            still_tiers.append((medium[0], mw))
-            if medium[1]:
-                avif_tiers.append((medium[1], mw))
-    if medium_large:
-        lw = medium_width_at(item, MEDIUM_LARGE_MAX_EDGE)
-        if lw:
-            still_tiers.append((medium_large[0], lw))
-            if medium_large[1]:
-                avif_tiers.append((medium_large[1], lw))
-    if still_tiers:
-        item["mediumSrcset"] = _srcset_string(still_tiers)
-    if avif_tiers:
-        item["mediumAvifSrcset"] = _srcset_string(avif_tiers)
     # 序厅首图的预载候选：必须在 width/height 之后组（中图宽度由原图宽高反推）
     item.update(hero_srcsets(item))
     palette = photo_palette(path)

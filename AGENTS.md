@@ -209,20 +209,20 @@ CSP 的**单一来源**是 `tools/csp.mjs`：主页由 vite 插件注入 `dist/i
 历史记录：旧版曾用一份 `display: none !important` 清单（藏 `.hero-kicker` / `.chapter-sub` / `.card-meta` / `.lb-index` / `.upload-sub` / `.footer-note` 等）做「无字」，其中多数选择器早已无节点（no-op 声明）。2026-09-30 重绘时**清单连同这些死选择器整体删除**——这些名字**不要**再写成样式定义（写了就是新的死 CSS）。
 
 - 环境光取色：**在 sync 阶段预计算**（`photos_lib.photo_palette()` → manifest 的 `palette` 字段，四值 `wall` / `deep` / `glow` / `accent`），客户端只做样式赋值——卡片写 `--card-wall/--card-glow/--card-accent`（`applyCardPalette`），序厅与灯箱写 `--room-adapt*`（`@property` 注册、过渡平滑，见 `styles.css:27` 附近）。同一张画在卡片／序厅／灯箱共用一套色（P1-6 之前三处各采各的，同画三色）。`app.js` 的 `sampleRoomColor()` 退居**回退**，只服务浏览器内上传的图（`photo.custom`，没有 manifest 条目）。取色会按与前景文字的对比度**压暗**，避免亮画把 chrome 冲没。
-- 画框是**金色实体画框**（2026-10-06 `2ba2824` 起）：卡片 = `4px solid #d4af37` + `--frame-inset: 4px` 内衬（照片不贴边）+ `--r-lg`（手机端降为 1px 边 / 16px 圆角 / 3px 内衬），hover / 聚焦时边框转 `--hairline` 并抬升；灯箱同构（`--frame-pad: 6px` / `--frame-border: 4px` / radius 18px，外加半透明金底与内嵌光晕）。规格以 `.card-media` / `.lightbox-frame` 两处为准，**不要**在框面上叠新装饰（会压过画心）。
+- 画框是**无框「抬起」**（2026-10-17 起）：照片贴边、圆角 `--r-md` + 分层投影 —— 与序厅/逐图页本来就是一套语言。卡片 = `.card-media` 无边框无内衬（`--shadow-1` 起，hover/聚焦抬升换 `--shadow-2`）；灯箱同构（`.lightbox-frame` 无 padding / 边框，`.lightbox-img` 上限直接取 `--frame-max-w/h` —— `frameCaps` 读的就是它）。2026-10-06～10-17 期间的「金色实体画框」（4px `#d4af37` + `--frame-inset` 内衬 / `--frame-pad`+`--frame-border`）已按站主反馈退役，**不要**把 `#d4af37` 或这些变量加回来；`tools/gen_assets.py` 的品牌资产随去金化重绘（纯字形图标 + 无框分享图），别再引用金色。
 - 环境光晕落在画框**之外**的四周（`.card-media::before`：径向 `--card-accent`、`opacity .45`、`inset: -28px -20px`、`z-index: -1`），**不要**打在画心上；为此 `.card-media` 自身 `overflow: visible` 不裁切，裁切只交给 `.card-media-glass`（管 hover 缩放不出框）。
 - 画作标题：文件名像相机默认名时显示 `《无题 · NN》`，否则 `《title》`。
 - 观画室的**题下策展说明**（`.lb-caption`，取 `meta.json` 的 `caption`）必须**恒占一行**：`.lightbox-meta` 是 `flex-shrink: 0` 且高度由内容撑开，而空说明确实会遇到（浏览器内上传的图没有 manifest 条目、也就没有 caption；2026-10-10 起馆藏 18 件已全部写完策展说明）—— 空值若用 `display: none`（或干脆不占位），切到无说明的图时上方画框会被挤得**整块跳一下**。空值一律 `visibility: hidden` + `min-height: 1lh`（红态实证：改成 `display: none` 后题名区高度差 26.8px）。护栏是 e2e「题名区高度恒定」那条 —— 只断言「元素不可见」抓不住它。该用例的空说明样本由**页面 JS 层拦 `photos/manifest.json` 自造**（馆藏补齐后清单里已无空样本；该请求归 SW 的 `isManifest` 分支接管，`page.route` 拦不到，故包 `window.fetch`）。取值归 `util.captionText()`（trim 后为空即视为没有，**不**做《无题》式降级）。
 - 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
-- 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2` + 边框提亮到 `--hairline`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
+- 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
 - **序厅是策展精选，不是陈列序前 8**（F-3）：`meta.json` 的 `featured` 经 sync 归一进 manifest（排名校验与顶层 `hero` 指针在 `photos_lib`）；序厅取 `selectHeroPhotos()`（有精选按 rank 全序、无精选回落陈列序前 `HERO_MAX`）。预载自 C 组（2026-10-17）起是**构建期静态注入**：`tools/hero-preload.mjs` 按 `hero` 指针把 `<link rel="preload">`（含 `imagesrcset`/`imagesizes`/`type`）写进 `dist/index.html`，解析器扫到即发起、零脚本依赖（dev 形态不跑构建收尾，占位注释原样保留、由 app.js 兜底）；`app.js` 的 `preloadImage` 只在「清单降级 / 直服源码」时兜底（去重按 href 比较，静态标签在场即跳过）。口径一致性由 `util.test.mjs` 真清单契约 + `tests/unit/hero-preload.test.mjs` 对拍。**别**把精选逻辑写回数组截断，也别在 `photos[]` 上重排（会连带动展厅/筛选/逐图页序）。
 - **序厅行为收在 `src/hero.js`**（D7，2026-10-17）：渲染 / 自动轮播（六闸门纯函数 `heroAutoAllowed`）/ 三种暂停（用户 / hover / 观画室会话——`modalPause` **刻意独立于** hover 暂停）/ 手势与邻张解锁 / 灯箱过渡配对源（`sourceFor`）全在 `createHeroCarousel` 工厂闭包；`app.js` 只剩装配（DOM + 端口）与 `hero.render()`、`hero.modalPause()` 两个调用点。横滑 / 悬停暂停 / reduced-motion 三块**尚无 e2e 覆盖**（迁移时手工核对过）——动它们要手动验证；改自动轮播判据先跑 `tests/unit/hero.test.mjs`。
 - **低分辨率母版不放大**（D-1）：母版短边 ≤ `LOW_RES_MAX_EDGE`(640) 的条目，卡片画心盒宽钳到源宽（`.card-media.is-lowres` + 行内 `--card-maxw`，见 `lowResCapWidth()`），重点陈列行也居中小尺幅；灯箱 1× 本就是原生尺寸封顶（`lightboxNeed` 的 min(scale,1)），缩放倍率**不**按图降级。
-- 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。
+- 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。顶栏**不设馆内导航**（2026-10-17 起）：只剩馆名与右侧动作（安装 / 主题），「展厅 / 前言 / 库房」跳链已按站主反馈移除 —— 栏目按滚动顺序陈列，逐图页同构（`gen_work_pages.mjs` 同步改），别再把 `.site-nav-links` 加回来。
 
 ### 网格与比例（正名）
 
-- 展厅是 **CSS Grid 规则格 + 细边画心**（`repeat(auto-fill, minmax(260px,1fr))`，见 `.gallery`/`:1271`），**不是** Flickr justified（等高行、不裁切凑满宽），也**不是** CSS masonry/grid-lanes。
+- 展厅是 **CSS Grid 规则格 + 无框画心**（圆角 + 投影，`repeat(auto-fill, minmax(260px,1fr))`，见 `.gallery`/`:1271`），**不是** Flickr justified（等高行、不裁切凑满宽），也**不是** CSS masonry/grid-lanes。
 - 画框 `aspect-ratio` 由 `applyRowFit()` 按画心宽高设定，钳制在约 0.55–1.9；未知尺寸时 CSS 默认 4:3。
 - 列表 `.card-media img` 与灯箱均为 `object-fit: contain`：比例与画框不一致时完整显示画心，框内以墙面色信箱化，避免 cover 裁切。
 - `README.md` 若再写「justified」即过时，以本节与代码为准。

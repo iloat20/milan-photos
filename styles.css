@@ -290,24 +290,6 @@
     text-decoration: none;
   }
 
-  .site-nav-links {
-    display: flex;
-    gap: 26px;
-  }
-
-  .site-nav-links a {
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    color: var(--text-2);
-    transition: color 0.25s var(--ease);
-  }
-
-  .site-nav-links a:hover {
-    color: var(--text);
-    text-decoration: none;
-  }
-
   /* 主题切换按钮 */
   .theme-toggle {
     appearance: none;
@@ -957,25 +939,21 @@
 
     /* 本盒不裁切：::before 的环境光必须能溢出到卡片之外。
        裁切职责交给 .card-media-glass（只包画心），否则 overflow:hidden
-       会把环境光一并裁掉，只剩框内 4px 可见。 */
+       会把环境光一并裁掉。 */
     overflow: visible;
 
     --card-wall: #1c1c1e;
     --card-glow: rgba(255, 255, 255, 0.08);
     --card-accent: rgba(255, 255, 255, 0.1);
 
-    /* 画心内衬：留出细边，照片不贴边 */
-    --frame-inset: 4px;
-
+    /* 无框画心（2026-10-17 去金框）：照片贴边、圆角 + 分层投影 —— 与序厅/逐图页
+       同一「抬起」语言。金边与内衬（`--frame-inset`）不要加回来。 */
     width: 100%;
     aspect-ratio: 4 / 3;
-    padding: var(--frame-inset);
-    border: 4px solid #d4af37;
-    border-radius: var(--r-lg);
+    border-radius: var(--r-md);
     background: var(--surface);
     box-shadow: var(--shadow-1);
-    transition: box-shadow 0.45s var(--ease), border-color 0.45s var(--ease),
-      transform 0.45s var(--ease);
+    transition: box-shadow 0.45s var(--ease), transform 0.45s var(--ease);
   }
 
   /* D-1：低分辨率母版（短边 ≤ 640 的源，如《夜泊》360×360）画心盒宽钳到源宽 ——
@@ -1005,12 +983,12 @@
     transition: opacity 0.45s var(--ease), transform 0.45s var(--ease);
   }
 
-  /* 画心裁切盒：只承担「hover 缩放不出框」的裁剪 */
+  /* 画心裁切盒：只承担「hover 缩放不出框」的裁剪；贴边，圆角继承画心盒 */
   .card-media-glass {
     position: absolute;
-    inset: var(--frame-inset);
+    inset: 0;
     overflow: hidden;
-    border-radius: calc(var(--r-lg) - var(--frame-inset) - 2px);
+    border-radius: inherit;
   }
 
   .card-media img {
@@ -1030,7 +1008,6 @@
   /* hover / 键盘聚焦 = 抬起 + 环境光变亮 */
   .card:hover .card-media,
   .card:focus-visible .card-media {
-    border-color: var(--hairline);
     box-shadow: var(--shadow-2);
     transform: translateY(-3px);
   }
@@ -1407,11 +1384,10 @@
     -webkit-user-select: none;
   }
 
-  /* 画作容器：图不得大于框 */
+  /* 画作容器：图不得大于框。无框「抬起」（2026-10-17 去金框）：盒子即画心，
+     只有圆角与投影 —— 金边 / 内衬 / 金底不要加回来（`frameCaps` 读的是
+     .lightbox-img 的计算 max-width/height，与这里的 --frame-max-* 同源）。 */
   .lightbox-frame {
-    --frame-pad: 6px;
-    --frame-border: 4px;
-
     /* 观画室放足画面：上限取 72vh，竖构图才撑得开（横构图先触 940px 宽度限） */
     --frame-max-w: min(86vw, 940px);
     --frame-max-h: min(72vh, 760px);
@@ -1425,16 +1401,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--frame-pad);
-    border: var(--frame-border) solid #d4af37;
-    border-radius: 18px;
-    background: color-mix(in oklab, #d4af37 15%, transparent);
-    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5), inset 0 0 20px rgba(212, 175, 55, 0.25);
+    border-radius: var(--r-md);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
     overflow: hidden;
   }
 
-  /* 观画室：无框反光，只有墙面的环境光。
-     但 .lightbox-frame.is-lit img 的 animation:none 是**生效**的
+  /* 观画室：无框反光，只有墙面的环境光；去金框后这层同时是「画心贴边」的裁剪盒。
+     其中 .lightbox-frame.is-lit img 的 animation:none 是**生效**的
      ——它关掉 .lightbox-img 的 lb-in 入场动画，故保留。 */
   .lightbox-frame.is-lit img {
     animation: none;
@@ -1445,10 +1418,10 @@
     display: block;
     width: auto;
     height: auto;
-    max-width: calc(var(--frame-max-w, 940px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 4px));
-    max-height: calc(var(--frame-max-h, 760px) - 2 * var(--frame-pad, 6px) - 2 * var(--frame-border, 4px));
+    max-width: var(--frame-max-w, 940px);
+    max-height: var(--frame-max-h, 760px);
     object-fit: contain;
-    border-radius: 12px;
+    border-radius: var(--r-md);
     animation: lb-in 0.4s var(--ease) both;
     transform: translate(var(--lb-tx, 0), var(--lb-ty, 0)) scale(var(--lb-zoom, 1));
     transition: transform 0.35s var(--ease);
@@ -1911,15 +1884,6 @@
       letter-spacing: 0.06em;
     }
 
-    .site-nav-links {
-      gap: 16px;
-    }
-
-    .site-nav-links a {
-      font-size: 12px;
-      letter-spacing: 0.02em;
-    }
-
     /* 展签页：窄屏收边距、题名降一档；两侧占位同步收窄，否则中缝被挤出
        （320px 下 3 段宽度和会超过内容宽导致换行） */
     .work {
@@ -1995,17 +1959,6 @@
       padding: 20px 18px 8px;
     }
 
-    .card-media {
-      border-width: 1px;
-      border-radius: 16px;
-
-      --frame-inset: 3px;
-    }
-
-    .card-media-glass {
-      border-radius: 12px;
-    }
-
     .filter-bar {
       margin: 0 auto 24px;
       padding: 0 16px;
@@ -2040,7 +1993,6 @@
     }
 
     .lightbox-frame {
-      --frame-pad: 4px;
       --frame-max-w: min(94vw, 900px);
       --frame-max-h: min(70vh, 640px);
     }

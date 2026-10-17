@@ -1018,17 +1018,23 @@ test.describe("画廊冒烟", () => {
       const media = document.querySelector(".card-media");
       const glass = media.querySelector(".card-media-glass");
       const img = glass.querySelector("img");
-      const border = parseFloat(getComputedStyle(media).borderLeftWidth);
+      const cs = getComputedStyle(media);
       const mediaBox = media.getBoundingClientRect();
+      const glassBox = glass.getBoundingClientRect();
       return {
-        mediaOverflow: getComputedStyle(media).overflow,
+        mediaOverflow: cs.overflow,
         glassOverflow: getComputedStyle(glass).overflow,
         // content-visibility:auto 隐含 paint containment，会把 ::before 溢出的墙面光裁掉；
         // 该 containment 在 getComputedStyle().contain 上不可见，只能锁 content-visibility 本身
         cardContentVisibility: getComputedStyle(media.closest(".card"))
           .contentVisibility,
-        gutter: mediaBox.width - img.getBoundingClientRect().width,
-        expected: border * 2 + 4 * 2,
+        // 去金框后画心贴边（2026-10-17）：画心盒无边框、无内衬，照片与盒同宽
+        mediaBorder: cs.borderLeftWidth,
+        glassInset: { l: glassBox.x - mediaBox.x, t: glassBox.y - mediaBox.y },
+        glassRadius: getComputedStyle(glass).borderRadius,
+        mediaRadius: cs.borderRadius,
+        imgWidth: img.getBoundingClientRect().width,
+        mediaWidth: mediaBox.width,
       };
     });
 
@@ -1037,8 +1043,51 @@ test.describe("画廊冒烟", () => {
     expect(geom.glassOverflow).toBe("hidden");
     // 卡片不得开启会被动裁剪子盒的渲染跳过
     expect(geom.cardContentVisibility).toBe("visible");
-    // 画心几何与拆分前一致：border 2px + --frame-inset 4px，两侧共 12px
-    expect(Math.abs(geom.gutter - geom.expected)).toBeLessThan(0.5);
+    // 无框化：边框为 0、玻璃盒贴边（无内衬）、照片占满画心盒、圆角继承同一值
+    expect(parseFloat(geom.mediaBorder)).toBe(0);
+    expect(Math.abs(geom.glassInset.l)).toBeLessThan(0.5);
+    expect(Math.abs(geom.glassInset.t)).toBeLessThan(0.5);
+    expect(Math.abs(geom.imgWidth - geom.mediaWidth)).toBeLessThan(0.5);
+    expect(geom.glassRadius).toBe(geom.mediaRadius);
+  });
+
+  test("观画室同构无框：灯箱画框无边框无内衬，盒子即画心（去金框回归）", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".card")).toHaveCount(18);
+    await page.locator(".card").first().click();
+    await expect(page.locator("#lightbox")).toBeVisible();
+    // 尺寸由真实位图决定：等解码完成再量盒子，否则量到的是加载前的塌缩盒（0×0）
+    await page.waitForFunction(() => {
+      const img = document.getElementById("lbImg");
+      return Boolean(img && img.complete && img.naturalWidth > 0);
+    });
+
+    const geom = await page.evaluate(() => {
+      const frame = document.querySelector(".lightbox-frame");
+      const img = document.getElementById("lbImg");
+      const cs = getComputedStyle(frame);
+      return {
+        border: cs.borderLeftWidth,
+        padding: cs.paddingLeft,
+        background: cs.backgroundColor,
+        // 无内衬后画框盒 = 画心盒：偏移 0、尺寸相等。
+        // 用 offset*（布局量）而非 getBoundingClientRect——后者含 lb-enter 入场
+        // 动画的 scale(0.96→1)「视觉」变换，动画中途量到的矩形必然小于布局盒。
+        offset: { l: img.offsetLeft, t: img.offsetTop },
+        fw: frame.offsetWidth,
+        fh: frame.offsetHeight,
+        iw: img.offsetWidth,
+        ih: img.offsetHeight,
+      };
+    });
+
+    expect(parseFloat(geom.border)).toBe(0);
+    expect(parseFloat(geom.padding)).toBe(0);
+    expect(geom.background).toBe("rgba(0, 0, 0, 0)");
+    expect(geom.offset).toEqual({ l: 0, t: 0 });
+    expect(geom.iw).toBe(geom.fw);
+    expect(geom.ih).toBe(geom.fh);
   });
 
   test("窄屏箭头隐藏且不覆盖画心，翻页交回手势", async ({ page }) => {

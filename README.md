@@ -2,9 +2,9 @@
 
 纯静态照片墙，可 GitHub Pages。图片放进 `photos/` 即可，无需改数据文件。
 
-当前视觉是**无字油画馆陈列**（艺术指导），不是浅色机构馆藏站：深墙 + 金框 + 极简导航；墙签与说明在 CSS 中刻意隐藏，DOM 仍保留标题/alt 供辅助技术读取。
+当前视觉是**无字照片墙**（艺术指导）：亮/暗双主题跟随系统、系统字体栈、中性表面，画心无框（圆角 + 投影的「抬起」语言），顶栏为毛玻璃 chrome 且不设馆内导航；墙签与说明在 CSS 中刻意隐藏，DOM 仍保留标题/alt 供辅助技术读取。
 
-展厅布局是**规则网格上的金框画心**（CSS Grid + 随画比例的画框），**不是** Flickr 式 justified（等高行、按宽缩放、不裁切）；也**不**依赖 CSS masonry（2026 仍非 Baseline）。列表与灯箱均用 `contain` 完整呈现画心，极端比例时画框内侧以墙面色信箱化。
+展厅布局是**规则网格上的无框画心**（CSS Grid + 随画比例的画心盒，圆角 + 投影），**不是** Flickr 式 justified（等高行、按宽缩放、不裁切）；也**不**依赖 CSS masonry（2026 仍非 Baseline）。列表与灯箱均用 `contain` 完整呈现画心，极端比例时画心盒内以墙面色信箱化。
 
 ## 本地预览
 
@@ -66,7 +66,7 @@ push 到 `main` 时执行 `npm run build` 并把 `dist/` 作为 Pages 产物发�
 
 ```text
 index.html                 入口（head 含 og/twitter 卡片与 JSON-LD；Vite 构建入口）
-styles.css                 深墙金框设计系统
+styles.css                 设计系统（token / 画心 / 灯箱 / 响应式）
 app.js                     轮播 / 展厅 / 灯箱 / 筛选 / 上传（构建时与 src/*.js 打成单文件）
 src/                       ESM 模块（纯函数 / 灯箱域；单测直接 import）
 public/                    原样拷贝：sw.js / manifest.webmanifest / robots.txt
@@ -75,7 +75,7 @@ photos/                    原图 + meta.json + manifest.json
 photos/thumbs/             列表缩略图（WebP + AVIF，400/800/1200 三档）
 photos/medium/             灯箱用中尺寸（WebP + AVIF ≤1280px；原图 ≤1280 时不生成）
 tools/sync_photos.py       生成 manifest + 缩略图 + 中尺寸 + AVIF（CI 权威跑）
-tests/e2e/                 Playwright 冒烟（34 项）
+tests/e2e/                 Playwright 冒烟（70 项）
 .github/workflows/         sync-photos（清单回写）+ ci（lint → e2e → Lighthouse）+ deploy（构建并发布 Pages）
 .github/dependabot.yml     npm + GitHub Actions 每周依赖巡检
 AGENTS.md                  项目约定（命令 / 生成物 / 无障碍契约）
@@ -97,13 +97,13 @@ npm run lhci      # Lighthouse CI（构建后审计，a11y / best-practices / SE
 
 所有 push 都会触发 CI（lint → e2e → Lighthouse）；Dependabot 每周检查依赖与 Actions 版本。
 
-- 单行 sticky 顶栏 + 章节锚点导航（展厅 / 关于 / 库房）
-- 半屏重点陈列轮播（pause/play、pointer/focus/hover 暂停、APG Carousel）+ **金框规则网格展厅**（非 justified）+ 沉浸灯箱
+- 单行固定毛玻璃顶栏：馆名滚动浮现，不设馆内导航
+- 半屏重点陈列轮播（pause/play、pointer/focus/hover 暂停、APG Carousel）+ **规则网格展厅**（无框画心，非 justified）+ 沉浸灯箱
 - 灯箱为**原生 `<dialog>` + `showModal()`**：Esc/焦点圈闭由 UA 承担、`::backdrop` 遮罩（APG Dialog）；支持双指捏合 / 双击 / 滚轮缩放、单击切图
 - 年月筛选 chip（`aria-pressed` + View Transitions 卡片配对动画）
 - **URL 深链**：`#f=<年月>` 直达筛选、`#p=<文件名>` 直达某张画的灯箱（可分享、刷新不丢状态）；纯锚点导航不受影响
 - AVIF + WebP `<picture>` 协商（缩略图三档 400/800/1200 srcset + 灯箱 ~1280px 中图）+ 懒加载 + View Transitions
-- Service Worker 离线缓存（壳层 SWR、媒体 LRU 上限、清单 Network First + install 快照）+ Priority Hints；改前端后须抬 `public/sw.js` 的 `VERSION`
+- Service Worker 离线缓存（壳层 SWR、媒体 LRU 上限、清单 Network First + install 快照）+ Priority Hints；`VERSION` 由构建期按内容指纹自动注入，无需人工抬版本
 - `photos/` 自动上墙（本地 `npm run sync` / GitHub Actions，日期优先取 EXIF）
 - 支持 GIF / 动图：列表显示静帧 + 角标，灯箱播放原文件
 - 页面内本地上传（上传前客户端压缩为 ≤2048px WebP；GIF 保留原文件）

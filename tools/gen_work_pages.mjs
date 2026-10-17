@@ -408,12 +408,8 @@ ${renderJsonLd({ photo, index, slug, siteUrl, share })}
 <body class="work-page">
   <header class="site-nav">
     <div class="site-nav-inner">
+      <!-- 顶栏不设馆内导航（2026-10-17 起，与主页同构）：馆名即回主页的入口 -->
       <a class="site-nav-logo" href="${ROOT_PREFIX}">${escapeHtml(SITE_NAME)}</a>
-      <nav class="site-nav-links" aria-label="馆内导航">
-        <a href="${ROOT_PREFIX}#gallery">展厅</a>
-        <a href="${ROOT_PREFIX}#about">前言</a>
-        <a href="${ROOT_PREFIX}#archive">库房</a>
-      </nav>
     </div>
   </header>
 

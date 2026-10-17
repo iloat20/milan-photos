@@ -13,7 +13,7 @@ python tools/downscale_photos.py [--check]  # 母版长边上限 2560（超限�
 python tools/sanitize_photos.py  [--check]  # 字节级剥离 JPEG GPS EXIF（零像素改动；--check 只检）
 npm run lint                # ESLint + Stylelint
 npm run test:unit           # 纯函数单测（node --test，零新依赖，毫秒级）
-npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，34 项）
+npm run test:e2e            # Playwright 冒烟（自动 build + vite preview 起服，69 项）
 npm run lhci                # Lighthouse CI（先 build 再审，a11y/BP/SEO 满分断言）
 node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / dev 5173——dev 用 BASE 指端口；产物 tools/preview-apple-*.png，已 gitignore）
 ```
@@ -34,7 +34,8 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 | `photos/manifest.json` | **生成物** — 不要手改；改图后跑 sync 或等 CI。含 `thumbAvifSrcset` / `mediumAvif` / `palette` / `featured` 字段与顶层 `hero` 指针（F-3） |
 | `photos/thumbs/` | **生成物** — 列表 WebP + AVIF，档位 400 / 800 / 1200 |
 | `photos/medium/` | **生成物** — 灯箱 WebP + AVIF，最长边 ≤1280（原图 ≤1280 时不生成，灯箱改用最大缩略档 `thumbs/`） |
-| `tools/gen_work_pages.mjs` | 逐图展签页 `/p/<slug>/` + `sitemap.xml` 的生成器（构建期 `closeBundle` 里跑；规则可被单测直接调用） |
+| `tools/gen_work_pages.mjs` | 逐图展签页 `/p/<slug>/` + `sitemap.xml` 的生成器（构建期 `closeBundle` 里跑；规则可被单测直接调用；sitemap 主页条目带 `lastmod` = 馆藏最新 `date`，无日期省略） |
+| `tools/hero-preload.mjs` | 序厅首图预载的构建期注入器（C 组，2026-10-17）：读 manifest 的 `hero` 指针与候选串，把静态 `<link rel="preload" as="image" imagesrcset …>` 替换进 `dist/index.html` 的 `<!--HERO_PRELOAD-->` 占位（`injectHeroPreload`；占位恰一处、替换后不得残留；降级清单给说明注释）。规则可被单测直接调用 |
 | `dist/` | **生成物（gitignore）** — Vite 构建产物，e2e/lhci 的被测对象、`deploy.yml` 的发布物；`photos/` 整棵拷入，另补拷 `assets/`（见 `copyStaticPlugin` 注释）。`dist/p/<slug>/index.html`（逐图页）与 `dist/sitemap.xml` 由 `workPagesPlugin` 生成——**仓库根曾有一份 `sitemap.xml`，已删除**（它只有 1 条 URL，且唯一消费者就是那段拷贝） |
 
 - 动图（GIF 等）**不生成 medium**；灯箱直接播原文件，列表用静帧 + 角标。
@@ -72,9 +73,9 @@ node tools/preview-shots.mjs   # 视觉核对截图（需先起 preview 4173 / d
 `src/*.js` 是**原生 ESM**（dev 下 Vite 按模块直服，构建时打包进 `app.js` 单文件），`tests/unit/*.test.mjs` 直接 import 它们做单测。往 `src/` 加模块或搬函数时：
 
 1. **零副作用**：import 时不得触碰 DOM / `window` / `localStorage` / `matchMedia`。碰了的话 Node 端 `import` 会抛错，单测根本加载不起来 —— 这是 `util.js` 只装纯函数的**唯一**原因。
-   依赖 DOM 的域要拆出去，就得先解决状态注入 —— **`lightbox.js` 给出的既有范式：工厂 + 端口注入**。
-   `createLightbox(ports)` 在 import 期不碰任何 DOM，只有被调用时才开始用宿主传进来的引用；状态全收进工厂闭包，`app.js` 侧不再有该域的任何 `let`。
-   做法：① 纯计算抽成**具名导出**（`clampPan` / `anchorZoom` / `resolveVtSource` …），单测直接 import；② DOM 引用与跨域能力（墙色 / 深链 / 视图过渡 / 预载 / 卡片反查 / 导航序列 / 序厅轮播暂停）走 `ports` 注入，**不**反向 import `app.js`；③ 装配点放在宿主顶部（工厂调用即绑事件，放晚了会撞 `const` 的 TDZ）。
+   依赖 DOM 的域要拆出去，就得先解决状态注入 —— **既有范式：工厂 + 端口注入**（`lightbox.js` 拆于 P2-2，`hero.js` 拆于 D7，`app.js` 因此少了 453 行）。
+   `createLightbox(ports)` / `createHeroCarousel(ports)` 在 import 期不碰任何 DOM，只有被调用时才开始用宿主传进来的引用；状态全收进工厂闭包，`app.js` 侧不再有该域的任何 `let`。
+   做法：① 纯计算抽成**具名导出**（`clampPan` / `anchorZoom` / `resolveVtSource` / `heroAutoAllowed` …），单测直接 import；② DOM 引用与跨域能力（墙色 / 深链 / 视图过渡 / 预载 / 卡片反查 / 导航序列 / 序厅轮播暂停与打开灯箱）走 `ports` 注入，**不**反向 import `app.js`；③ 装配点放在宿主顶部（工厂调用即绑事件，放晚了会撞 `const` 的 TDZ）；两个工厂**互相依赖**时（灯箱的 `pauseHero` ↔ 序厅的 `openLightbox`）必有一侧用箭头函数**懒求值** —— 对象字面量求值即撞 TDZ。
    **按会话注入的能力走 `open()` 的参数，不要做成端口**：视图过渡的「显式源」只对一次序厅点击有效，若做成端口（只能按 photoId 查），从展厅卡片打开灯箱而该画恰好也是序厅当前那张时，卡片源会被序厅画面覆盖。同理，跨 open/close 存活的会话态（如该提供者）留在工厂闭包内。
    仍留在 `app.js` 的 `sampleRoomColor` / `applyRowFit` / `renderGallery` 尚未拆，原因是没有独立状态域或收益不足 —— 拆之前先确认能划出「自成一域 + 有回归网」的边界。
 2. **SW 清单只列壳层，且不能多列**：Vite 把 `src/*.js` 打进 `app.js`，旧契约「清单要覆盖 src/ 全部文件」随打包**消失**（新模块自动进包，离线骨架屏那类坑不再可能，**不用**改清单）。现行契约反过来：`SHELL_ASSETS` 必须**恰好**等于构建产物的壳层（`./` `./index.html` `./styles.css` `./app.js` `./manifest.webmanifest`）——**多列**一条产物里不存在的条目（如忘删的 `./src/…`），install 的 `cache.addAll` 会整组 reject，表现为**全站悄悄失去 SW**（页面照常跑，只是不再离线可服务，不炸不报错）。`tests/unit/sw-assets.test.mjs` 钉清单形状（毫秒级、不依赖构建），`tests/e2e/global-setup.js` 对 `dist/` 核对每项真实存在。`isShellRequest()` 曾为 dev 期保留的 `path.includes("/src/")` 分支**已删**——dev 形态现在根本不注册 SW（见上「dev 与产物是两种形态」），产物里也没有 `/src/` 请求，两边都无人走。
@@ -147,6 +148,21 @@ done
   ③ 定位类新断言先跑一次**红态**——这条 bug 当时正好是活的，断言一加就是 `Received: 209.99…`（恰好半个
   面板宽），修完转绿。
 
+## 必做：CSP 内联 hash（脚本与样式，扫描前先剔除注释）
+
+CSP 的**单一来源**是 `tools/csp.mjs`：主页由 vite 插件注入 `dist/index.html`，逐图页由
+`gen_work_pages.mjs` 生成时自带（两个 `closeBundle` 并行、顺序无保证，故不能让插件代劳）。
+不预置 `'unsafe-inline'` —— 内联 `<script>` 与 `<style>`（唯一 markup 内联样式是主页
+`<noscript>` 的无 JS 兜底块）**逐块算 sha256 放行**；改内联块无需任何人工动作（构建期重算），
+两条边界要记牢：
+
+1. **扫描前剔除 HTML 注释**（`stripComments`）：注释里的 `<style>` 字面量会被正则当真元素，
+   hash 算成「注释 + 样式」混合体 → 无 JS 兜底样式被 CSP 拦下，而有 JS 时页面完全正常
+   （只有 e2e「禁用 JavaScript」那条能抓住）。**注释里别再写字面量 `<style>` / `<script>`**；
+   脚本内容里的 `<!--` 会被一并削掉，故 JSON-LD 保持 `<` → `\u003c` 的转义纪律。
+2. **CRLF 归一成 LF 再算**：HTML 解析器在 tokenize 阶段先归一换行（工作区 CRLF / git index LF），
+   不归一会线上静默失配 —— 内联脚本被拦、主题闪烁回归，页面照常可用。
+
 ## 必做：三处易复发点（整组重建 / 一次性测量 / 串内格式判定）
 
 2026-10-02 审查确认并修复，三条都由 e2e 护栏钉住（先做红态验证，确认断言真能抓住）：
@@ -155,16 +171,17 @@ done
    chip，键盘 Enter 激活后焦点回落 `<body>`，Tab 位置全丢（APG 要求激活后焦点留在原 chip）。
    现按 `btn.dataset.filterId` 记住重建前焦点归属，重建后用 `focus({ preventScroll: true })` 还回。
    **凡是 `innerHTML = ""` 重建交互控件的函数，都要先问一句「焦点怎么办」。**
-2. **序厅高度会变，`heroEnd` 必须重量**：空馆藏/清单失败时 `renderHeroCarousel` 给序厅挂
+2. **序厅高度会变，`heroEnd` 必须重量**：空馆藏/清单失败时 `hero.render()`（src/hero.js）给序厅挂
    `is-empty`（display:none），而 `heroEnd` 只在启动期与 resize 被测 —— `scrollY(0) < 旧值
    （整屏高）` 恒真，`is-at-hero` 常驻，顶栏馆名与序厅大字**同时**从首屏消失（红态实证）。
    现 `measureHeroEnd()` 对 `is-empty` 显式取 0（display:none 的 offset 也是 0，无法与
-   「未测量」区分，必须显式判），`renderHeroCarousel()` 收尾调 `syncNavToHero()`，resize 同用。
+   「未测量」区分，必须显式判），`hero.render()` 收尾经 `syncNav` 端口调 `syncNavToHero()`，resize 同用。
    **任何「启动期只量一次」的布局常量，先确认它不会随后续 DOM 变化而变。**
 3. **preload 的 `type` 判定要拆候选**：srcset 串以宽度描述符结尾（`…-400.avif 300w, …900w`），
    拿整串 `/\.avif$/` 匹配永远不命中 → `type` 从未写上，注释里「不支持该格式的浏览器跳过
    预载」形同虚设。现取**首个候选的 URL** 判扩展名（同一 srcset 由 `photos_lib` 按同一格式
-   整体产出）。**凡对 srcset 字符串做正则，先想清楚 `$` 锚在哪个 token 后面。**
+   整体产出），规则归 `util.preloadType()`（单测钉住；C 组起产物里那条预载是构建期静态注入，
+   此函数守的是清单降级 / 直服源码形态的兜底）。**凡对 srcset 字符串做正则，先想清楚 `$` 锚在哪个 token 后面。**
 
 ## 设计意图（勿当 bug「修好」）
 
@@ -179,7 +196,9 @@ done
   而底纹仍是 `rgb(10,10,10)→rgb(0,0,0)` 的黑房间。现两处都用 `light-dark()` 内联进 `background`，
   顺带摆脱了「必须放在 @layer 末尾压住基础值」的源序陷阱。护栏：e2e「手动亮色压过系统暗色…」。
   基线：`light-dark()`（Chrome 123 / Safari 17.5 / Firefox 120）**早于**本站已在用的 `color-mix()`
-  与 `content-visibility: auto`，故可硬依赖；装饰性特性仍按惯例包 `@supports`。
+  与 `content-visibility: auto`，故可硬依赖；装饰性特性仍按惯例包 `@supports`。theme-color 同一纪律：
+  手动主题时由解析期脚本 / `syncThemeColorMeta()` 插一条带 `data-milan-theme-color` 标记的 override meta，
+  **必须插在两条 media 版之前**（浏览器取树序第一条匹配项）；护栏：e2e「theme-color 跟随手动主题」。
 - **库房的 GitHub 设置面板是 `<div popover>` + 带 `popovertarget` 的按钮**（2026-10-01 起，不再是 `<details>`）：
   top layer 不受祖先 overflow / stacking 影响，light dismiss 与 Esc 关闭都是 UA 行为 —— **不要**为它写
   keydown。`.gh-panel { display: none }` 是**刻意兜底**：不支持 popover 的浏览器只是打不开它，不能退化成
@@ -196,7 +215,8 @@ done
 - 观画室的**题下策展说明**（`.lb-caption`，取 `meta.json` 的 `caption`）必须**恒占一行**：`.lightbox-meta` 是 `flex-shrink: 0` 且高度由内容撑开，而空说明确实会遇到（浏览器内上传的图没有 manifest 条目、也就没有 caption；2026-10-10 起馆藏 18 件已全部写完策展说明）—— 空值若用 `display: none`（或干脆不占位），切到无说明的图时上方画框会被挤得**整块跳一下**。空值一律 `visibility: hidden` + `min-height: 1lh`（红态实证：改成 `display: none` 后题名区高度差 26.8px）。护栏是 e2e「题名区高度恒定」那条 —— 只断言「元素不可见」抓不住它。该用例的空说明样本由**页面 JS 层拦 `photos/manifest.json` 自造**（馆藏补齐后清单里已无空样本；该请求归 SW 的 `isManifest` 分支接管，`page.route` 拦不到，故包 `window.fetch`）。取值归 `util.captionText()`（trim 后为空即视为没有，**不**做《无题》式降级）。
 - 展厅按「策展」陈列而非均匀网格：每 7 张末张 `.card.is-feature` 独占整行成为一面墙，宽度由 `--fit`（`applyRowFit()` 写入）反算成 `min(100%, 64vh × --fit)`，保证框与画同比例不出卡纸空洞——**不要**为了网格对齐把它改回普通卡。
 - 卡片的反馈是「抬升 + 光晕变亮」：hover / 键盘聚焦时 `translateY(-3px)` + `--shadow-2` + 边框提亮到 `--hairline`，光晕同步加压（`.card:hover .card-media::before`）；**不要**加回「轨道射灯」式的顶边受光/锥形投影。字体一律走系统栈 `--font`，**不要**再引入 `--display` / `Milan Serif` / woff2 这类字段。
-- **序厅是策展精选，不是陈列序前 8**（F-3）：`meta.json` 的 `featured` 经 sync 归一进 manifest（排名校验与顶层 `hero` 指针在 `photos_lib`）；序厅取 `selectHeroPhotos()`（有精选按 rank 全序、无精选回落陈列序前 `HERO_MAX`）；`index.html` 解析期预载只查 `hero` 指针，`app.js` 兜底取 `selectHeroPhotos()[0]` —— 两处口径一致性由 `util.test.mjs` 的真清单契约对拍。**别**把精选逻辑写回数组截断，也别在 `photos[]` 上重排（会连带动展厅/筛选/逐图页序）。
+- **序厅是策展精选，不是陈列序前 8**（F-3）：`meta.json` 的 `featured` 经 sync 归一进 manifest（排名校验与顶层 `hero` 指针在 `photos_lib`）；序厅取 `selectHeroPhotos()`（有精选按 rank 全序、无精选回落陈列序前 `HERO_MAX`）。预载自 C 组（2026-10-17）起是**构建期静态注入**：`tools/hero-preload.mjs` 按 `hero` 指针把 `<link rel="preload">`（含 `imagesrcset`/`imagesizes`/`type`）写进 `dist/index.html`，解析器扫到即发起、零脚本依赖（dev 形态不跑构建收尾，占位注释原样保留、由 app.js 兜底）；`app.js` 的 `preloadImage` 只在「清单降级 / 直服源码」时兜底（去重按 href 比较，静态标签在场即跳过）。口径一致性由 `util.test.mjs` 真清单契约 + `tests/unit/hero-preload.test.mjs` 对拍。**别**把精选逻辑写回数组截断，也别在 `photos[]` 上重排（会连带动展厅/筛选/逐图页序）。
+- **序厅行为收在 `src/hero.js`**（D7，2026-10-17）：渲染 / 自动轮播（六闸门纯函数 `heroAutoAllowed`）/ 三种暂停（用户 / hover / 观画室会话——`modalPause` **刻意独立于** hover 暂停）/ 手势与邻张解锁 / 灯箱过渡配对源（`sourceFor`）全在 `createHeroCarousel` 工厂闭包；`app.js` 只剩装配（DOM + 端口）与 `hero.render()`、`hero.modalPause()` 两个调用点。横滑 / 悬停暂停 / reduced-motion 三块**尚无 e2e 覆盖**（迁移时手工核对过）——动它们要手动验证；改自动轮播判据先跑 `tests/unit/hero.test.mjs`。
 - **低分辨率母版不放大**（D-1）：母版短边 ≤ `LOW_RES_MAX_EDGE`(640) 的条目，卡片画心盒宽钳到源宽（`.card-media.is-lowres` + 行内 `--card-maxw`，见 `lowResCapWidth()`），重点陈列行也居中小尺幅；灯箱 1× 本就是原生尺寸封顶（`lightboxNeed` 的 min(scale,1)），缩放倍率**不**按图降级。
 - 序厅门厅大字在场时顶栏馆名由 `.site-nav.is-at-hero` 隐去、滚入展厅浮现（避免同屏两次馆名）；隐藏用 `visibility` 是为了退出 Tab 顺序，**别**改成 `opacity: 0`。
 

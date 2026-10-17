@@ -290,8 +290,20 @@
     text-decoration: none;
   }
 
-  /* 主题切换按钮 */
-  .theme-toggle {
+  /* 顶栏动作区（安装引导 + 主题切换）：两枚同款圆形图标按钮并排。
+     安装按钮只在 beforeinstallprompt 到来时去掉 hidden（见 src/install.js），
+     gap 管住去掉 hidden 后的间距，别改回行内空隙。 */
+  .site-nav-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* 图标按钮（主题 / 安装同款：32px 圆形、无边框、hover 出底色）。
+     安装按钮在 2026-10-17 前缺这份样式：可安装浏览器上是一枚 16×21 的原生
+     灰按钮、内联 SVG 因无尺寸塌成 0×0（图标完全不显示，实测取证）。 */
+  .theme-toggle,
+  .install-toggle {
     appearance: none;
     border: 0;
     width: 32px;
@@ -308,12 +320,14 @@
     transition: color 0.25s var(--ease), background 0.25s var(--ease);
   }
 
-  .theme-toggle:hover {
+  .theme-toggle:hover,
+  .install-toggle:hover {
     color: var(--text);
     background: var(--fill);
   }
 
-  .theme-toggle svg {
+  .theme-toggle svg,
+  .install-toggle svg {
     width: 18px;
     height: 18px;
   }
@@ -352,6 +366,34 @@
     :root:not([data-theme]) .theme-icon-moon {
       display: none;
     }
+  }
+
+  /* 离线提示（U-6）：文本由 app.js 写入（在线时空串）。
+     元素**始终留在渲染树**：display:none 的 live region 不进无障碍树，
+     role=status 的文本变化就不会被读屏播报 —— 那是本元素存在的首要意义。
+     因此「不可见」靠基础态零装饰实现（无内边距 / 底色 / 边框），装饰只在
+     body.is-offline 下补上。指针穿透：它是状态播报，不该拦截页脚处的点击。 */
+  .offline-note {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 40;
+    margin: 0;
+    max-width: calc(100vw - 32px);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-align: center;
+    border-radius: var(--r-pill);
+    pointer-events: none;
+  }
+
+  body.is-offline .offline-note {
+    padding: 8px 16px;
+    background: var(--bg-1);
+    border: 1px solid var(--hairline-soft);
+    box-shadow: var(--shadow-1);
+    color: var(--text-2);
   }
 
   /* —— 序厅：全屏重点陈列 —— */

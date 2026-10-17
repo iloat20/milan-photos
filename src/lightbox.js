@@ -118,7 +118,8 @@ export function resolveVtSource({ explicit, allowCard, cardAtIndex }) {
  * @param {(photo:object) => number} ports.catalogIndex
  *        该画在**全量馆藏**中的序号（0 起）；不在时返回 -1。序号语义必须与墙号
  *        `MIL · 003` / 逐图页 pager 一致（全量），不能传当前筛选序列的序号 ——
- *        那会让同一幅画在站内出现两套互相矛盾的编号。
+ *        那会让同一幅画在站内出现两套互相矛盾的编号。位置指示（F-5）与题名降级
+ *        《无题 · NN》都取它（同一幅画在题名与计数上不得用两套编号）。
  * @param {() => number} ports.catalogTotal   全量馆藏总数。
  * @param {HTMLElement|null} ports.prevBtn / nextBtn / closeBtn
  * @param {(el:any,type:string,fn:Function,opts?:any)=>void} ports.on
@@ -449,7 +450,12 @@ export function createLightbox({
     if (!photo) return;
     // 换图复位缩放/平移
     resetZoom(false);
-    const titleText = displayTitle(photo, pos);
+    // 全量馆藏序号（与墙号 / 位置指示同一体系）：题名降级《无题 · NN》也取它 ——
+    // pos 是当前序列下标，从序厅全量兜底打开时与馆藏序号不同，同画两号即由此而来。
+    // 端口缺失 / 不在全量（理论不可达）时回退当前序列序号。
+    let gIdx = typeof catalogIndex === "function" ? catalogIndex(photo) : -1;
+    if (gIdx < 0) gIdx = pos;
+    const titleText = displayTitle(photo, gIdx);
     // 原图直出：<img> 就是母版本身（lightboxSrc），hover 预热与邻居预载同源
     img.src = lightboxSrc(photo);
     img.alt = titleText;
@@ -468,8 +474,6 @@ export function createLightbox({
     // live region 的首次播报无需另发。端口缺失按绑定守卫同款静默降级。
     if (countEl || countLive) {
       const total = (typeof catalogTotal === "function" ? catalogTotal() : 0) || arr.length;
-      let gIdx = typeof catalogIndex === "function" ? catalogIndex(photo) : -1;
-      if (gIdx < 0) gIdx = pos; // 不在全量（理论不可达）：回退当前序列序号
       if (countEl) countEl.textContent = positionLabel(gIdx, total);
       if (countLive) countLive.textContent = positionAnnouncement(gIdx, total);
     }

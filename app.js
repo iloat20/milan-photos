@@ -120,6 +120,11 @@ import { createInstallPrompt } from "./src/install.js";
     }
   }
 
+  /** 全量馆藏序号（0 起；找不到返回 -1）：墙号、观画室位置指示（F-5）、《无题 · NN》
+   *  题名降级与序厅替代文本共用**同一口径** —— 偏离它，同一张画会在站内出现两套
+   *  互相矛盾的编号（筛选 / 序厅生效时，序列下标 ≠ 馆藏序号）。 */
+  const catalogIndexOf = (p) => photos.findIndex((q) => q.id === p.id);
+
   /* —— 观画室域装配（P2-2 第二步）——
      src/lightbox.js 自带状态机、缩放平移、指针手势与全部灯箱事件监听；
      这里只把 DOM 引用和六类跨域能力按端口注入。装配点必须留在文件顶部：
@@ -141,7 +146,7 @@ import { createInstallPrompt } from "./src/install.js";
     // F-4 单件分享：按钮 + 分享能力（URL 构造 / Web Share / 剪贴板都留在宿主）
     shareEl: document.getElementById("lbShare"),
     share: shareCurrentPhoto,
-    catalogIndex: (p) => photos.findIndex((q) => q.id === p.id),
+    catalogIndex: catalogIndexOf,
     catalogTotal: () => photos.length,
     prevBtn: document.getElementById("prev"),
     nextBtn: document.getElementById("next"),
@@ -191,6 +196,7 @@ import { createInstallPrompt } from "./src/install.js";
     on,
     getPhotos: () => photos,
     getVisible: () => visible,
+    catalogIndex: catalogIndexOf,
     openLightbox: (index, el, list, source) => lb.open(index, el, list, source),
     sampleRoom: sampleRoomColor,
     syncNav: syncNavToHero,
@@ -352,7 +358,7 @@ import { createInstallPrompt } from "./src/install.js";
     lightbox.style.setProperty("--room-adapt-glow", palette.glow);
   }
 
-  // 画心随原作比例，金框只是外沿
+  // 画心随原作比例（无框「抬起」：画心盒即画作本体，投影在框外沿）
   function applyRowFit(card, media, width, height) {
     const ar = width > 0 && height > 0 ? width / height : 4 / 3;
     const clamped = Math.max(0.55, Math.min(ar, 1.9));
@@ -875,9 +881,11 @@ import { createInstallPrompt } from "./src/install.js";
       // 策展节奏：每 7 张的末张做「重点陈列」，独占一行成为一面墙
       if ((i + 1) % 7 === 0) card.classList.add("is-feature");
 
-      const titleText = displayTitle(photo, i);
       const wallIdx = wallIndexes.get(photo) ?? 0;
       const wallNo = wallNumber(wallIdx);
+      // 《无题 · NN》与墙号同取**全量馆藏序号**（wallIdx）：i 是可见序列下标，
+      // 筛选生效时会与墙号错位 —— 同一张卡上出现两个互相矛盾的编号
+      const titleText = displayTitle(photo, wallIdx);
       // accessible name 需覆盖卡片内全部可见文本（图注编号 + 标题），否则 axe label-content-name-mismatch
       card.setAttribute("aria-label", `观展：${wallNo} ${titleText}`);
       // 筛选 View Transitions：按馆藏序号稳定命名，跨渲染配对（未命名元素走根 cross-fade）
@@ -1377,7 +1385,8 @@ import { createInstallPrompt } from "./src/install.js";
   }
   function onScrollNav() {
     if (!siteNav) return;
-    siteNav.classList.toggle("is-scrolled", window.scrollY > 40);
+    // 这里曾有 is-scrolled（scrollY > 40）—— 从未有 CSS 消费者，2026-10-17 审查删除；
+    // 顶栏的滚动态视觉只有 is-at-hero 一处
     siteNav.classList.toggle("is-at-hero", window.scrollY < heroEnd);
   }
   /**

@@ -84,7 +84,10 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.max <= MEDIUM_MAX_EDGE:
-        print(f"--max 必须 > {MEDIUM_MAX_EDGE}（medium 生成阈值），否则灯箱会回落原文件")
+        print(
+            f"--max 必须 > {MEDIUM_MAX_EDGE}（medium 生成阈值），"
+            "否则这批图不再生成 medium、序厅候选串少一档"
+        )
         return 2
 
     targets = jpeg_masters()

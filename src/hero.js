@@ -76,6 +76,9 @@ const HERO_INTERVAL = 4200;
  *        绑定守卫：元素缺失时静默降级，而不是抛 TypeError 中断整个启动。
  * @param {() => object[]} ports.getPhotos 全量馆藏（`app.js` 的 `photos`；数据到达前为空）
  * @param {() => object[]} ports.getVisible 当前筛选序列（`app.js` 的 `visible`）
+ * @param {(photo: object) => number} ports.catalogIndex
+ *        该画在**全量馆藏**中的序号（0 起；不在时 -1）。《无题 · NN》替代文本
+ *        与墙号 / 观画室位置指示同一体系 —— 精选排名序（i）不是馆藏序，不能代替。
  * @param {(index: number, invoker: Element, list: object[] | null, source: (photoId: string | null) => Element | null) => void} ports.openLightbox
  *        打开观画室（转发给 `lb.open`）。**第 3/4 参数由本域决定、须原样透传**：
  *        第 3 参数 null = 跟当前筛选，全量数组 = 筛选不含该画时的兜底序列；
@@ -101,6 +104,7 @@ export function createHeroCarousel({
   on,
   getPhotos,
   getVisible,
+  catalogIndex,
   openLightbox,
   sampleRoom,
   syncNav,
@@ -383,7 +387,10 @@ export function createHeroCarousel({
       slide.tabIndex = -1;
 
       const img = document.createElement("img");
-      img.alt = displayTitle(photo, i);
+      // 替代文本的《无题 · NN》取**全量馆藏序号**：i 是精选排名序，与站内其它
+      // 入口的口径不同；端口缺失时退回 i（替代文本宁可不完美也不能缺序号）
+      const altIdx = catalogIndex ? catalogIndex(photo) : -1;
+      img.alt = displayTitle(photo, altIdx < 0 ? i : altIdx);
       img.decoding = "async";
       img.loading = "lazy";
       img.fetchPriority = "low";

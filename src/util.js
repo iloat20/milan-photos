@@ -116,7 +116,7 @@ export function baseFileName(p) {
   return "";
 }
 
-/** 按年月收集筛选键并倒序（新→旧）。保留既有「首次出现顺序 → 再整体倒序」的行为 */
+/** 按年月收集筛选键（去重）并倒序 —— YYYY-MM 零填充，字典序倒序即时间新→旧 */
 export function collectFilters(list) {
   const keys = [];
   list.forEach((p) => {

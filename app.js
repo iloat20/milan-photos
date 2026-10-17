@@ -22,6 +22,7 @@ import {
   emptyState,
 } from "./src/util.js";
 import { createLightbox } from "./src/lightbox.js";
+import { createHeroCarousel } from "./src/hero.js";
 import { createInstallPrompt } from "./src/install.js";
 
 (() => {
@@ -151,7 +152,8 @@ import { createInstallPrompt } from "./src/install.js";
     // 视图过渡配对：把展厅第 index 张卡片的 <img> 与灯箱画心连成同一个 name
     cardImageAt: (index) =>
       gallery?.querySelectorAll(".card")[index]?.querySelector("img") || null,
-    pauseHero: setHeroModalPaused,
+    // 懒求值：hero 的装配点在下方（createLightbox 先于它调用，直接引用会撞 TDZ）
+    pauseHero: (paused) => hero.modalPause(paused),
     preload: preloadImage,
     applyRoom: applyRoomToLightbox,
     sampleRoom: sampleRoomColor,
@@ -170,6 +172,29 @@ import { createInstallPrompt } from "./src/install.js";
     win: window,
     matchMedia: (q) => window.matchMedia(q),
     on,
+  });
+
+  /* —— 序厅域装配（D7）——
+     src/hero.js 自带状态与全部序厅事件监听（渲染 / 自动轮播 / 手势 / 邻张解锁 /
+     与灯箱的过渡配对源）；这里只注入 DOM 引用与跨域能力。装配点必须留在文件顶部：
+     createHeroCarousel 调用即绑事件（与 createLightbox 同），且下方 rebuildPhotos
+     与灯箱的 pauseHero 端口都引用这个句柄 —— 放晚了会撞 const 的 TDZ。
+     openLightbox 的第 3/4 参数由 hero 域决定（null / 全量 / sourceFor），这里只转发。 */
+  const hero = createHeroCarousel({
+    carousel: heroCarousel,
+    track: heroTrack,
+    dots: heroDots,
+    prevBtn: heroPrev,
+    nextBtn: heroNext,
+    pauseBtn: heroPauseBtn,
+    progressBar: document.getElementById("heroProgressBar"),
+    matchMedia: (q) => window.matchMedia(q),
+    on,
+    getPhotos: () => photos,
+    getVisible: () => visible,
+    openLightbox: (index, el, list, source) => lb.open(index, el, list, source),
+    sampleRoom: sampleRoomColor,
+    syncNav: syncNavToHero,
   });
 
   /** 从画作采样，生成可用于展厅的低饱和墙色。
@@ -313,19 +338,8 @@ import { createInstallPrompt } from "./src/install.js";
     queueRoomFlush();
   }
 
-  function applyRoomToHero(palette) {
-    if (!heroCarousel) return;
-    if (!palette) {
-      heroCarousel.style.removeProperty("--room-adapt");
-      heroCarousel.style.removeProperty("--room-adapt-deep");
-      heroCarousel.style.removeProperty("--room-adapt-glow");
-      return;
-    }
-    heroCarousel.style.setProperty("--room-adapt", palette.wall);
-    heroCarousel.style.setProperty("--room-adapt-deep", palette.deep);
-    heroCarousel.style.setProperty("--room-adapt-glow", palette.glow);
-  }
-
+  /* applyRoomToHero 已随序厅域迁入 src/hero.js（内部函数 applyRoom）；灯箱侧的
+     applyRoomToLightbox 留在宿主：<dialog> 的墙色注入与 hashchange 同属本文件职责。 */
   function applyRoomToLightbox(palette) {
     if (!lightbox) return;
     if (!palette) {
@@ -372,7 +386,7 @@ import { createInstallPrompt } from "./src/install.js";
       return !folderKeys.has(key);
     });
     photos = folderPhotos.concat(extras);
-    renderHeroCarousel();
+    hero.render();
     // 后台标签页 rAF 不派发：没有兜底的话骨架屏会永久不退场（展厅空转）。
     // go 幂等，谁先到谁生效。
     let gallerySettled = false;
@@ -516,449 +530,19 @@ import { createInstallPrompt } from "./src/install.js";
     }
   }
 
-  /* —— 顶栏下方半屏轮播 —— */
-  let heroPos = 0;
-  let heroTimer = 0;
-  let heroSlides = [];
-  let heroList = [];
-  let heroSwiped = false;
-  let heroUserPaused = false;
-  let heroTempPaused = false;
-  /** 观画室会话期间暂停。**独立于** heroTempPaused（后者由 hover / 拖拽持有），见 setHeroModalPaused */
-  let heroModalPaused = false;
+  /* —— 序厅轮播域已迁往 src/hero.js（D7）——
+     渲染 / 自动轮播 / 手势 / 邻张解锁 / 与灯箱的过渡配对源（sourceFor）全部内聚在
+     createHeroCarousel 工厂闭包里（装配见文件顶部）；本文件不再持有任何序厅态与
+     序厅事件监听，只保留 hero 句柄与 heroTrack 的启动期 LCP 收尾查询。观画室的
+     导航序列 / 焦点回归 / 缩放平移状态与全部手势则自 P2-2 第二步起已在
+     src/lightbox.js —— 本文件同样不持有灯箱态。 */
 
-  /* 观画室的导航序列 / 焦点回归 / 缩放平移状态与全部手势，已迁往 src/lightbox.js —— 
-     本文件自 P2-2 第二步起不再持有任何灯箱态。 */
-
-  function syncHeroPauseButton() {
-    if (!heroPauseBtn) return;
-    const canAuto = !reduceMotion && heroSlides.length >= 2;
-    heroPauseBtn.hidden = !canAuto;
-    heroPauseBtn.setAttribute("aria-pressed", heroUserPaused ? "true" : "false");
-    heroPauseBtn.setAttribute(
-      "aria-label",
-      heroUserPaused ? "继续自动轮播" : "暂停自动轮播"
-    );
-    // 图标切换交给 CSS（[aria-pressed="true"] 显播放、否则显暂停），
-    // 不再用 ‖ / ▶ 文本字形——字形渲染依赖字体，图标不该依赖字体
-  }
-
-  /* —— 序厅邻张解锁（LCP 友好）—— */
-  let heroNeighborsReady = false;
-  function unlockHeroNeighbors() {
-    if (heroNeighborsReady) return;
-    heroNeighborsReady = true;
-    if (heroSlides.length) applyHeroSources();
-  }
-  // 解锁 = 观察到带 url 的 LCP entry（序厅图已结算、离开 lantern 截止线）
-  // 或 800ms 兜底（不支持该 entry 类型 / 图迟迟不来）。此后切换照常一次挂三张
-  //（自动轮播 4.2s 远晚于解锁；手动秒切换时目标张本身必有 src）。
-  try {
-    const lcpObs = new PerformanceObserver((list) => {
-      for (const e of list.getEntries()) {
-        if (e.url) {
-          lcpObs.disconnect();
-          unlockHeroNeighbors();
-          break;
-        }
-      }
-    });
-    lcpObs.observe({ type: "largest-contentful-paint", buffered: true });
-  } catch {
-    /* 老浏览器没有该 entry 类型：只靠下面的超时兜底 */
-  }
-  setTimeout(unlockHeroNeighbors, 800);
-
-  /**
-   * 只给「已解锁的 near 集合」挂 src——绝对定位会让 loading=lazy 全部失效。
-   *
-   * 邻张（前后各一）**延后到首图 LCP 结算后再挂**：这两张首访合计 ~184KB，
-   * 发起时间落在观察 LCP 之前，simulate 的 LCP 图会把它们算进 Load/Render Delay。
-   * A/B 实测摘掉它们：Load Delay 302→221、Render Delay 1751→1526、
-   * LCP 2562→2247（过 2500 断言线）。解锁条件见 unlockHeroNeighbors。
-   */
-  function applyHeroSources() {
-    const n = heroSlides.length;
-    if (!n) return;
-    const near = new Set([heroPos]);
-    if (heroNeighborsReady) {
-      near.add((heroPos + 1) % n);
-      near.add((heroPos - 1 + n) % n);
-    }
-    heroSlides.forEach((slide, i) => {
-      const img = slide.querySelector("img");
-      const source = slide.querySelector("source");
-      const photo = heroList[i];
-      if (!img || !photo) return;
-      const src = heroSrc(photo);
-      const avif = heroAvifSrcset(photo);
-      const webpSrcset = heroSrcset(photo);
-      if (near.has(i)) {
-        const srcChanged = img.getAttribute("src") !== src;
-        if (srcChanged) {
-          // 响应式候选：序厅画心只显示 min(86vw,880px)，喂中图（960w）在手机上
-          // 是 40% 的体积浪费；候选由缩略图各档 + 中图（大屏兜底）组成
-          if (source) source.srcset = avif;
-          img.srcset = webpSrcset;
-          img.src = src;
-        }
-        if (i === heroPos) {
-          img.loading = "eager";
-          img.fetchPriority = "high";
-          if (photo.palette) {
-            // 预计算调色板：不必等中图解码，切到本张时墙色立刻即终点色，
-            // 省掉「先默认深绿 → 解码后再变」的一次色跳（P1-6）
-            applyRoomToHero(photo.palette);
-          } else {
-            // 上传图无预计算值：等解码后采样，与 P1-6 前行为一致
-            const syncRoom = () => {
-              if (heroPos !== i) return;
-              applyRoomToHero(sampleRoomColor(img));
-            };
-            // src 被摘掉再挂回时 complete 会短暂为 false，必须重新绑 load
-            if (srcChanged || !img.dataset.roomBound) {
-              img.dataset.roomBound = "1";
-              if (img.complete) syncRoom();
-              else img.addEventListener("load", syncRoom, { once: true });
-            } else if (img.complete) {
-              applyRoomToHero(sampleRoomColor(img));
-            }
-          }
-        } else {
-          img.loading = "lazy";
-          img.fetchPriority = "low";
-        }
-      } else if (img.getAttribute("src")) {
-        // 摘 src 才能让 lazy 失效省流——source 同步摘，否则浏览器仍会从 source 取
-        if (source) source.srcset = "";
-        img.removeAttribute("srcset");
-        img.removeAttribute("src");
-      }
-    });
-  }
-
-  function stopHeroAuto() {
-    if (heroTimer) {
-      clearInterval(heroTimer);
-      heroTimer = 0;
-    }
-    stopHeroProgress();
-  }
-
-  function heroAutoAllowed() {
-    return (
-      !reduceMotion &&
-      !heroUserPaused &&
-      !heroTempPaused &&
-      !heroModalPaused &&
-      !document.hidden &&
-      heroSlides.length >= 2
-    );
-  }
-
-  const HERO_INTERVAL = 4200;
-
-  function startHeroProgress() {
-    stopHeroProgress();
-    const bar = document.getElementById("heroProgressBar");
-    if (!bar) return;
-    bar.style.transition = "none";
-    bar.style.transform = "scaleX(0)";
-    void bar.offsetWidth;
-    bar.style.transition = `transform ${HERO_INTERVAL}ms linear`;
-    bar.style.transform = "scaleX(1)";
-  }
-
-  function stopHeroProgress() {
-    // 这里曾有一份 heroProgressTimer（clearTimeout 后置 0）。它从来没有被赋过值：
-    // 进度条走的是 CSS transform 过渡（startHeroProgress 里重置 + 触发），
-    // 不需要 JS 计时器。保留它只会让下一位读者以为存在一条计时器生命周期。
-    const bar = document.getElementById("heroProgressBar");
-    if (bar) {
-      bar.style.transition = "none";
-      bar.style.transform = "scaleX(0)";
-    }
-  }
-
-  function startHeroAuto() {
-    stopHeroAuto();
-    if (!heroAutoAllowed()) return;
-    startHeroProgress();
-    heroTimer = setInterval(() => {
-      if (!heroAutoAllowed()) {
-        stopHeroAuto();
-        return;
-      }
-      setHeroIndex(heroPos + 1);
-      startHeroProgress();
-    }, HERO_INTERVAL);
-  }
-
-  function setHeroTempPaused(on) {
-    heroTempPaused = !!on;
-    startHeroAuto();
-  }
-
-  /**
-   * 观画室会话期间暂停序厅轮播（由 src/lightbox.js 的 `pauseHero` 端口驱动）。
-   *
-   * ⚠️ 刻意**不复用** `heroTempPaused`：那个标志由 hover / 拖拽持有，共用会在关灯箱时
-   * 把用户当时正持有的 hover 暂停一并清掉。
-   *
-   * 为什么必须暂停：序厅轮播没有任何模态门控（`heroAutoAllowed` 只看 reduceMotion /
-   * 用户暂停 / `document.hidden`），灯箱开着时它仍每 4.2s 转走。而灯箱关闭时的视图过渡
-   * 要缩回「用户点的那幅序厅画面」—— 转走后该 slide 变成 `opacity:0 / visibility:hidden`，
-   * 配对到隐形状比不配对更糟。顺带省掉模态框背后毫无意义的轮播与图片预载。
-   */
-  function setHeroModalPaused(on) {
-    heroModalPaused = !!on;
-    startHeroAuto();
-  }
-
-  /**
-   * 本会话的显式视图过渡源提供者（作为 `lb.open()` 的第 4 参数传入）。
-   * 回答「photoId 此刻是否正由序厅某个**可见**画面承载」：是则返回该 `<img>`，
-   * 灯箱便以它作 `view-transition-name` 的配对源 —— 那是用户实际点击的元素，且必然
-   * 在视野内；而展厅里对应的那张卡片可能远在首屏之外（实测桌面溢出 284px、移动 236px）。
-   *
-   * 必须是**函数**而非元素快照：灯箱在 open 与 close 各调用一次，序厅在此期间可能已
-   * 轮播（见 setHeroModalPaused），转走后须返回 null，宁可不配对也不给错动画。
-   */
-  function heroSourceFor(photoId) {
-    if (!photoId) return null;
-    const i = heroList.findIndex((p) => p.id === photoId);
-    if (i < 0) return null;
-    const slide = heroSlides[i];
-    if (!slide || !slide.classList.contains("is-active")) return null;
-    return slide.querySelector(".hero-art img");
-  }
-
-  function setHeroIndex(next) {
-    if (!heroSlides.length) return;
-    heroPos = (next + heroSlides.length) % heroSlides.length;
-    heroSlides.forEach((el, i) => {
-      el.classList.toggle("is-active", i === heroPos);
-    });
-    if (heroDots) {
-      [...heroDots.children].forEach((dot, i) => {
-        dot.classList.toggle("is-active", i === heroPos);
-        if (i === heroPos) dot.setAttribute("aria-current", "true");
-        else dot.removeAttribute("aria-current");
-      });
-    }
-    applyHeroSources();
-  }
-
-  function renderHeroCarousel() {
-    if (!heroTrack || !heroCarousel) return;
-    stopHeroAuto();
-    heroSlides = [];
-    heroList = [];
-    heroPos = 0;
-    heroTempPaused = false;
-    heroTrack.innerHTML = "";
-    if (heroDots) heroDots.innerHTML = "";
-
-    const list = selectHeroPhotos(photos, HERO_MAX);
-    if (!list.length) {
-      heroCarousel.classList.add("is-empty");
-      syncHeroPauseButton();
-      // 序厅塌成 display:none 后必须重测：heroEnd 原本量的是整屏高，
-      // 而 onScrollNav 只在启动期与 resize 时跑 —— scrollY(0) < 整屏高 恒真，
-      // is-at-hero 常驻、顶栏馆名在首屏被隐去，而序厅大字并不在场（两者同时消失）。
-      syncNavToHero();
-      return;
-    }
-    heroCarousel.classList.remove("is-empty");
-    // 首屏入场动画：首次渲染时添加 is-initial，动画完成后移除
-    if (!heroCarousel.dataset.initialized) {
-      heroCarousel.dataset.initialized = "1";
-      heroCarousel.classList.add("is-initial");
-      setTimeout(() => heroCarousel.classList.remove("is-initial"), 1500);
-    }
-    heroList = list;
-
-    list.forEach((photo, i) => {
-      const slide = document.createElement("div");
-      slide.className = "hero-carousel-slide" + (i === 0 ? " is-active" : "");
-      slide.setAttribute("role", "group");
-      slide.setAttribute("aria-roledescription", "slide");
-      slide.setAttribute("aria-label", `${i + 1} / ${list.length}`);
-      slide.tabIndex = -1;
-
-      const img = document.createElement("img");
-      img.alt = displayTitle(photo, i);
-      img.decoding = "async";
-      img.loading = "lazy";
-      img.fetchPriority = "low";
-      // 响应式候选的布局宽度（与 .hero-art img max-width 对应），随 near/far 挂摘 srcset
-      img.sizes = HERO_SIZES;
-      if (photo.width && photo.height) {
-        img.width = photo.width;
-        img.height = photo.height;
-      }
-      // AVIF 候选：applyHeroSources 随 near/far 一起挂摘
-      const heroSource = document.createElement("source");
-      heroSource.type = "image/avif";
-      heroSource.sizes = HERO_SIZES;
-      const picture = document.createElement("picture");
-      picture.appendChild(heroSource);
-      picture.appendChild(img);
-      // 序厅画作用 <button> 承载：原生可聚焦、Enter/Space 原生派发 click，
-      // 事件冒泡到 slide 上既有的 click 处理器，无需另写 keydown。
-      // slide 自身仍是 role="group" + aria-roledescription="slide"（APG 轮播结构），
-      // tabIndex 保持 -1：它是可编程聚焦的容器，不是 Tab 站点。
-      const art = document.createElement("button");
-      art.type = "button";
-      art.className = "hero-art";
-      art.appendChild(picture);
-      slide.appendChild(art);
-
-      slide.addEventListener("click", () => {
-        if (heroSwiped) {
-          heroSwiped = false;
-          return;
-        }
-        const inFilter = visible.findIndex((p) => p.id === photo.id);
-        if (inFilter >= 0) {
-          // 第 4 参数：以**序厅这幅画面**作过渡源，而不是展厅里那张可能在屏外的卡片
-          lb.open(inFilter, slide, null, heroSourceFor);
-          return;
-        }
-        // 筛选不含该画时，按全量馆藏打开，避免静默无响应
-        const allIdx = photos.findIndex((p) => p.id === photo.id);
-        if (allIdx >= 0) lb.open(allIdx, slide, photos, heroSourceFor);
-      });
-
-      heroTrack.appendChild(slide);
-      heroSlides.push(slide);
-
-      if (heroDots) {
-        const dot = document.createElement("button");
-        dot.type = "button";
-        dot.className = "hero-carousel-dot" + (i === 0 ? " is-active" : "");
-        dot.setAttribute("aria-label", `第 ${i + 1} 张`);
-        if (i === 0) dot.setAttribute("aria-current", "true");
-        dot.addEventListener("click", (e) => {
-          e.stopPropagation();
-          setHeroIndex(i);
-          startHeroAuto();
-        });
-        heroDots.appendChild(dot);
-      }
-    });
-
-    syncHeroPauseButton();
-    applyHeroSources();
-    startHeroAuto();
-    // slides 建完后 hero 高度才定：与启动期那次测量对齐（最小高度 100vh，通常是同值）
-    syncNavToHero();
-  }
-
-  if (heroPauseBtn) {
-    heroPauseBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      heroUserPaused = !heroUserPaused;
-      syncHeroPauseButton();
-      startHeroAuto();
-    });
-  }
-
-  if (heroPrev) {
-    heroPrev.addEventListener("click", (e) => {
-      e.stopPropagation();
-      setHeroIndex(heroPos - 1);
-      startHeroAuto();
-    });
-  }
-  if (heroNext) {
-    heroNext.addEventListener("click", (e) => {
-      e.stopPropagation();
-      setHeroIndex(heroPos + 1);
-      startHeroAuto();
-    });
-  }
-
-  if (heroCarousel) {
-    let hx = 0;
-    let hy = 0;
-    let heroPointer = null;
-
-    // 只有键盘焦点（:focus-visible）才算「用户在用键盘看轮播」：
-    // 触屏/鼠标点按产生的焦点不该长期压住自动轮播，否则触屏点开灯箱、
-    // 关闭后焦点还给 slide 时没有可见的移出方式，轮播会一直停着
-    const keyboardFocusInHero = () => {
-      const el = document.activeElement;
-      return Boolean(el) && heroCarousel.contains(el) && el.matches(":focus-visible");
-    };
-
-    // 按压结束后的恢复：键盘焦点在内→保持焦点暂停；鼠标仍悬停→保持悬停暂停；
-    // 触屏/笔没有持续悬停状态，抬起即恢复，不依赖可能缺失的 pointerleave
-    const resumeAfterPress = (e) => {
-      if (keyboardFocusInHero() || (e.pointerType === "mouse" && heroCarousel.matches(":hover"))) {
-        startHeroAuto();
-      } else {
-        setHeroTempPaused(false);
-      }
-    };
-
-    heroCarousel.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "mouse" && e.button !== 0) return;
-      if (e.isPrimary === false) return;
-      heroPointer = e.pointerId;
-      hx = e.clientX;
-      hy = e.clientY;
-      heroSwiped = false;
-      setHeroTempPaused(true);
-    });
-    heroCarousel.addEventListener("pointerup", (e) => {
-      if (heroPointer !== e.pointerId) return;
-      heroPointer = null;
-      const dx = e.clientX - hx;
-      const dy = e.clientY - hy;
-      if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
-        heroSwiped = true;
-        setHeroIndex(heroPos + (dx < 0 ? 1 : -1));
-      }
-      resumeAfterPress(e);
-    });
-    heroCarousel.addEventListener("pointercancel", (e) => {
-      heroPointer = null;
-      resumeAfterPress(e);
-    });
-    heroCarousel.addEventListener("pointerenter", () => setHeroTempPaused(true));
-    heroCarousel.addEventListener("pointerleave", () => {
-      if (heroPointer != null) return;
-      if (keyboardFocusInHero()) {
-        startHeroAuto();
-        return;
-      }
-      setHeroTempPaused(false);
-    });
-    heroCarousel.addEventListener("focusin", () => {
-      if (keyboardFocusInHero()) setHeroTempPaused(true);
-    });
-    heroCarousel.addEventListener("focusout", (e) => {
-      if (heroCarousel.contains(e.relatedTarget)) return;
-      if (heroPointer != null || heroCarousel.matches(":hover")) {
-        startHeroAuto();
-        return;
-      }
-      setHeroTempPaused(false);
-    });
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    startHeroAuto();
-  });
-
+  // 动效偏好变化：展厅侧只负责重绘；序厅侧的暂停按钮与自动轮播归 hero.js 自己的监听
   window
     .matchMedia("(prefers-reduced-motion: reduce)")
     .addEventListener("change", (e) => {
       reduceMotion = e.matches;
       renderGallery();
-      syncHeroPauseButton();
-      startHeroAuto();
     });
 
   function renderFilters() {
@@ -1843,7 +1427,7 @@ import { createInstallPrompt } from "./src/install.js";
    * 序厅高度变化后的一次「重量 + 同步」。
    *
    * 为什么必须有：heroEnd 只在启动期与 resize 时被测，但序厅高度是**会变的**——
-   * 空馆藏/清单失败时 renderHeroCarousel 给它挂上 `is-empty` 塌成 display:none。
+   * 空馆藏/清单失败时 hero.render()（src/hero.js）给它挂上 `is-empty` 塌成 display:none。
    * 不重测的话 scrollY(0) < 旧值（整屏高）恒真，`is-at-hero` 常驻，
    * 顶栏馆名被隐去而序厅大字并不在场——两者同时从首屏消失（e2e 红态实证）。
    */
